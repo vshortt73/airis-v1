@@ -1,6 +1,6 @@
 """
 Vision Service for Iris v3
-Manages vision model (llava) via Ollama on GPU 1
+Manages llama.cpp-based vision model (llava) on GPU 1
 """
 
 import os
@@ -9,7 +9,6 @@ import base64
 from typing import Optional, Dict
 from pathlib import Path
 import time
-import httpx
 
 # Path setup
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -20,73 +19,156 @@ from app import config
 
 class VisionService:
     """
-    Manages llava vision model via Ollama on GPU 1
+    Manages llava vision model lifecycle on GPU 1
 
     Responsibilities:
+    - Load/unload llava model to GPU 1 (RTX 4080 Super)
     - Process vision requests (image + prompt -> text description)
-    - Use Ollama's llava model for better compatibility
     - Handle errors and fallbacks
+    - Monitor GPU memory usage
     """
 
     def __init__(self):
-        self.ollama_url = config.OLLAMA_BASE_URL  # Use same Ollama instance
-        self.model_name = config.VISION_MODEL  # From config
+        self.model = None
+        self.chat_handler = None
         self.is_model_loaded = False
+        self.model_path = config.VISION_MODEL_PATH
+        self.clip_path = config.VISION_CLIP_PATH
+        self.gpu_id = config.VISION_GPU_ID
         self.load_time = None
         self.request_count = 0
         self.total_inference_time = 0
 
-        print(f"[vision_service.py][__init__] Vision service initialized")
-        print(f"[vision_service.py][__init__] Using Ollama model: {self.model_name}")
-        print(f"[vision_service.py][__init__] Ollama URL: {self.ollama_url}")
+        print(f"[vision_service.py][__init__] Vision service initialized (GPU {self.gpu_id})")
+        print(f"[vision_service.py][__init__] Model path: {self.model_path}")
+        print(f"[vision_service.py][__init__] CLIP path: {self.clip_path}")
+
+    def _set_gpu_visibility(self):
+        """Force GPU 1 visibility for this process"""
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(self.gpu_id)
+        if config.VISION_DEBUG:
+            print(f"[vision_service.py][_set_gpu_visibility] Set CUDA_VISIBLE_DEVICES={self.gpu_id}")
 
     def load_model(self) -> bool:
         """
-        Ensure vision model is available in Ollama
+        Load llava model to GPU 1
 
         Returns:
             True if successful, False otherwise
         """
+        if self.is_model_loaded:
+            print("[vision_service.py][load_model] Model already loaded")
+            return True
+
         if not config.VISION_ENABLED:
             print("[vision_service.py][load_model] Vision system disabled in config")
             return False
 
         try:
-            print(f"[vision_service.py][load_model] Checking if {self.model_name} is available...")
+            # Set GPU visibility
+            self._set_gpu_visibility()
 
-            # Check if model exists in Ollama
-            response = httpx.get(f"{self.ollama_url}/api/tags", timeout=10.0)
-            response.raise_for_status()
-
-            models = response.json().get('models', [])
-            model_names = [m['name'] for m in models]
-
-            if self.model_name not in model_names and not any(self.model_name in name for name in model_names):
-                print(f"[vision_service.py][load_model] ✗ Model {self.model_name} not found in Ollama")
-                print(f"[vision_service.py][load_model] Available models: {model_names}")
-                print(f"[vision_service.py][load_model] Run: ollama pull {self.model_name}")
+            # Check if model files exist
+            if not Path(self.model_path).exists():
+                print(f"[vision_service.py][load_model] ✗ Model file not found: {self.model_path}")
                 return False
+
+            if not Path(self.clip_path).exists():
+                print(f"[vision_service.py][load_model] ✗ CLIP file not found: {self.clip_path}")
+                return False
+
+            print(f"[vision_service.py][load_model] Loading llava model to GPU {self.gpu_id}...")
+            start_time = time.time()
+
+            # Import llama-cpp-python (only when needed)
+            try:
+                from llama_cpp import Llama
+                from llama_cpp.llama_chat_format import Llava15ChatHandler, MoondreamChatHandler
+            except ImportError:
+                print("[vision_service.py][load_model] ✗ llama-cpp-python not installed")
+                print("[vision_service.py][load_model] Install: CMAKE_ARGS='-DGGML_CUDA=on' pip install llama-cpp-python")
+                return False
+
+            # Initialize chat handler for vision
+            # LLaVA 1.6 uses Mistral/Vicuna architecture - try with Llava15ChatHandler
+            # Note: LLaVA 1.6 may need special handling
+            try:
+                self.chat_handler = Llava15ChatHandler(clip_model_path=self.clip_path)
+                print(f"[vision_service.py][load_model] Using Llava15ChatHandler")
+            except Exception as e:
+                print(f"[vision_service.py][load_model] Warning: Chat handler init failed: {e}")
+                self.chat_handler = None
+
+            # Load model - without chat handler to avoid format issues
+            # We'll handle the vision format manually
+            self.model = Llama(
+                model_path=self.model_path,
+                n_gpu_layers=-1,  # Offload all layers to GPU
+                n_ctx=config.VISION_CONTEXT_WINDOW,
+                n_batch=512,
+                verbose=config.VISION_DEBUG
+            )
 
             self.is_model_loaded = True
             self.load_time = time.time()
-            print(f"[vision_service.py][load_model] ✓ Model {self.model_name} available")
+            load_duration = time.time() - start_time
+
+            print(f"[vision_service.py][load_model] ✓ Model loaded successfully ({load_duration:.2f}s)")
             return True
 
         except Exception as e:
-            print(f"[vision_service.py][load_model] ✗ Error checking model: {e}")
+            print(f"[vision_service.py][load_model] ✗ Error loading model: {e}")
+            self.model = None
+            self.chat_handler = None
+            self.is_model_loaded = False
             return False
 
     def unload_model(self) -> bool:
         """
-        Unload model (Ollama manages this automatically)
+        Unload model and free GPU memory
 
         Returns:
-            True
+            True if successful, False otherwise
         """
-        self.is_model_loaded = False
-        self.load_time = None
-        print("[vision_service.py][unload_model] ✓ Model marked as unloaded")
-        return True
+        if not self.is_model_loaded:
+            print("[vision_service.py][unload_model] Model not loaded")
+            return True
+
+        try:
+            print(f"[vision_service.py][unload_model] Unloading model from GPU {self.gpu_id}...")
+
+            # Delete model objects
+            if self.model:
+                del self.model
+                self.model = None
+
+            if self.chat_handler:
+                del self.chat_handler
+                self.chat_handler = None
+
+            # Force garbage collection
+            import gc
+            gc.collect()
+
+            # Try to free CUDA memory
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    if config.VISION_DEBUG:
+                        print("[vision_service.py][unload_model] CUDA cache cleared")
+            except ImportError:
+                pass
+
+            self.is_model_loaded = False
+            self.load_time = None
+
+            print("[vision_service.py][unload_model] ✓ Model unloaded successfully")
+            return True
+
+        except Exception as e:
+            print(f"[vision_service.py][unload_model] ✗ Error unloading model: {e}")
+            return False
 
     def analyze_image(
         self,
@@ -95,7 +177,7 @@ class VisionService:
         max_tokens: Optional[int] = None
     ) -> Dict[str, any]:
         """
-        Analyze an image using Ollama's vision model
+        Analyze an image using the vision model
 
         Args:
             image_base64: Base64 encoded image (with or without data URI)
@@ -110,6 +192,13 @@ class VisionService:
                 - inference_time: float (seconds)
                 - error: str (if failed)
         """
+        if not self.is_model_loaded:
+            return {
+                "success": False,
+                "error": "Vision model not loaded. Call load_model() first.",
+                "result": None
+            }
+
         try:
             start_time = time.time()
 
@@ -117,7 +206,7 @@ class VisionService:
             if image_base64.startswith('data:'):
                 image_base64 = image_base64.split(',', 1)[1]
 
-            # Validate image
+            # Decode to validate
             try:
                 image_bytes = base64.b64decode(image_base64)
                 image_size_mb = len(image_bytes) / (1024 * 1024)
@@ -139,37 +228,35 @@ class VisionService:
                 print(f"[vision_service.py][analyze_image] Processing image ({image_size_mb:.2f}MB)")
                 print(f"[vision_service.py][analyze_image] Prompt: {prompt}")
 
-            # Call Ollama API
-            payload = {
-                "model": self.model_name,
-                "prompt": prompt,
-                "images": [image_base64],
-                "stream": False,
-                "options": {
-                    "num_predict": max_tokens or config.VISION_MAX_TOKENS,
-                    "temperature": 0.7
+            # Create chat message with image
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
+                        {"type": "text", "text": prompt}
+                    ]
                 }
-            }
+            ]
 
-            response = httpx.post(
-                f"{self.ollama_url}/api/generate",
-                json=payload,
-                timeout=config.VISION_TIMEOUT_SECONDS
+            # Generate response
+            max_tokens = max_tokens or config.VISION_MAX_TOKENS
+            response = self.model.create_chat_completion(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.7
             )
-            response.raise_for_status()
 
-            result_data = response.json()
-            result_text = result_data.get('response', '')
+            # Extract result
+            result_text = response['choices'][0]['message']['content']
+            tokens_used = response.get('usage', {}).get('total_tokens', 0)
             inference_time = time.time() - start_time
 
             # Update stats
             self.request_count += 1
             self.total_inference_time += inference_time
 
-            # Estimate tokens (Ollama doesn't always return exact count)
-            tokens_used = len(result_text.split())  # Rough estimate
-
-            print(f"[vision_service.py][analyze_image] ✓ Analysis complete ({inference_time:.2f}s, ~{tokens_used} tokens)")
+            print(f"[vision_service.py][analyze_image] ✓ Analysis complete ({inference_time:.2f}s, {tokens_used} tokens)")
 
             return {
                 "success": True,
@@ -179,14 +266,6 @@ class VisionService:
                 "error": None
             }
 
-        except httpx.TimeoutException:
-            error_msg = f"Vision analysis timed out after {config.VISION_TIMEOUT_SECONDS}s"
-            print(f"[vision_service.py][analyze_image] ✗ {error_msg}")
-            return {
-                "success": False,
-                "error": error_msg,
-                "result": None
-            }
         except Exception as e:
             error_msg = f"Vision analysis error: {e}"
             print(f"[vision_service.py][analyze_image] ✗ {error_msg}")
@@ -214,15 +293,15 @@ class VisionService:
         return {
             "enabled": config.VISION_ENABLED,
             "model_loaded": self.is_model_loaded,
-            "model_name": self.model_name,
-            "ollama_url": self.ollama_url,
+            "gpu_id": self.gpu_id,
+            "model_path": self.model_path,
             "uptime_seconds": uptime,
             "request_count": self.request_count,
             "avg_inference_time": avg_inference_time,
             "config": {
                 "max_tokens": config.VISION_MAX_TOKENS,
+                "context_window": config.VISION_CONTEXT_WINDOW,
                 "max_image_size_mb": config.VISION_MAX_IMAGE_SIZE_MB,
-                "timeout_seconds": config.VISION_TIMEOUT_SECONDS,
                 "auto_unload_minutes": config.VISION_AUTO_UNLOAD_MINUTES
             }
         }
@@ -297,10 +376,15 @@ if __name__ == "__main__":
     print(f"Status: {service.get_status()}\n")
 
     # Test load
-    print("Checking model availability...")
+    print("Loading model...")
     if service.load_model():
-        print("✓ Model available\n")
+        print("✓ Model loaded\n")
         print(f"Status: {service.get_status()}\n")
+
+        # Test unload
+        print("Unloading model...")
+        if service.unload_model():
+            print("✓ Model unloaded\n")
+            print(f"Status: {service.get_status()}\n")
     else:
-        print("✗ Model not available")
-        print("Run: ollama pull llava:13b")
+        print("✗ Failed to load model")
