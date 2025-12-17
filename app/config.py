@@ -105,3 +105,18 @@ DB_USER = "irisuser"
 # IMPORTANT: Use IRIS_DB_PASSWORD environment variable instead of hardcoding
 # DB_PASSWORD is a fallback only - DO NOT commit real credentials
 DB_PASSWORD = None  # Always use IRIS_DB_PASSWORD environment variable
+
+# ============================================
+# VISION SYSTEM CONFIGURATION
+# ============================================
+VISION_ENABLED = True
+VISION_MODEL_PATH = "/models/vision/llava-v1.6-mistral-7b.Q4_K_M.gguf"
+VISION_CLIP_PATH = "/models/vision/mmproj-model-f16.gguf"
+VISION_GPU_ID = 1  # RTX 4080 Super (GPU 1)
+VISION_AUTO_UNLOAD_MINUTES = 5  # Unload after idle time
+VISION_MAX_TOKENS = 1000  # Max tokens per image analysis
+VISION_CONTEXT_WINDOW = 2048  # Vision model context window
+VISION_MAX_IMAGE_SIZE_MB = 10  # Max image size for processing
+VISION_MAX_IMAGES_PER_REQUEST = 5  # Batch limit
+VISION_TIMEOUT_SECONDS = 30  # Per-image timeout
+VISION_DEBUG = False  # Verbose logging

@@ -15,7 +15,7 @@ import os; PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__)
 
 from app import config
 from core.conversation import ConversationHistory
-from app.api import routes_chat, routes_session, routes_context, routes_tts
+from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision
 from database.character_traits import get_trait_list
 from core.system_prompt import build_system_message
 
@@ -40,6 +40,7 @@ app.include_router(routes_chat.router)
 app.include_router(routes_session.router)
 app.include_router(routes_context.router)
 app.include_router(routes_tts.router)
+app.include_router(routes_vision.router, prefix="/api/vision", tags=["vision"])
 
 @app.get("/prompt")
 def show_prompt():
@@ -62,7 +63,8 @@ async def health():
         "context_window": config.OLLAMA_CONTEXT_WINDOW,
         "session_timeout_minutes": config.SESSION_TIMEOUT_MINUTES,
         "max_conversation_turns": config.MAX_CONVERSATION_TURNS,
-        "max_context_tokens": config.MAX_CONTEXT_TOKENS
+        "max_context_tokens": config.MAX_CONTEXT_TOKENS,
+        "vision_enabled": config.VISION_ENABLED
     }
 
 if __name__ == "__main__":

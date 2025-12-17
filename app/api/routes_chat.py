@@ -12,6 +12,8 @@ from core.system_prompt import assemble_full_context
 from ollama.client import chat_completion_stream, chat_completion_with_tools
 from mcp_servers.tool_manager import get_tool_manager
 from database.persistence import get_db_connection
+from core.vision_manager import analyze_images_for_conversation
+from app import config
 
 router = APIRouter(tags=["chat"])
 
@@ -94,7 +96,59 @@ async def websocket_chat(websocket: WebSocket):
                 user_message,
                 images=user_images if user_images else None
             )
-            
+
+            # ============================================
+            # VISION PROCESSING (if images present)
+            # ============================================
+            # Process images through dedicated vision model (llava on GPU 1)
+            # Add vision analysis as context before main chat model
+            # ============================================
+            if user_images and config.VISION_ENABLED:
+                print(f"[routes_chat.py][websocket_chat] ├─ VISION PROCESSING: {len(user_images)} image(s) ─┤")
+
+                # Notify client
+                await websocket.send_json({
+                    "type": "vision_start",
+                    "image_count": len(user_images)
+                })
+
+                try:
+                    # Analyze images with vision model
+                    vision_analysis = await analyze_images_for_conversation(
+                        images=user_images,
+                        user_message=user_message if user_message else None
+                    )
+
+                    if vision_analysis:
+                        print(f"[routes_chat.py][websocket_chat] │  ✓ Vision analysis complete ({len(vision_analysis)} chars)")
+
+                        # Add vision analysis to conversation as tool message
+                        active_conversation.add_tool_message(
+                            content=f"[Vision Analysis]\n{vision_analysis}",
+                            tool_name="vision_analysis"
+                        )
+
+                        # Notify client
+                        await websocket.send_json({
+                            "type": "vision_complete",
+                            "success": True
+                        })
+                    else:
+                        print(f"[routes_chat.py][websocket_chat] │  ✗ Vision analysis failed")
+                        await websocket.send_json({
+                            "type": "vision_complete",
+                            "success": False,
+                            "error": "Vision analysis returned no results"
+                        })
+
+                except Exception as e:
+                    print(f"[routes_chat.py][websocket_chat] │  ✗ Vision error: {e}")
+                    await websocket.send_json({
+                        "type": "vision_complete",
+                        "success": False,
+                        "error": str(e)
+                    })
+
             # Assemble full context with image loading
             all_messages, budget = assemble_full_context(active_conversation)
             
