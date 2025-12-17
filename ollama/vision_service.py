@@ -1,6 +1,12 @@
 """
 Vision Service for Iris v3
-Manages vision model (llava) via Ollama on GPU 1
+Manages vision model (llava) via separate Ollama instance on GPU 1
+
+Dual Ollama Architecture:
+- Main Ollama (GPU 0, port 11434): qwen3:32b for text/tool calling
+- Vision Ollama (GPU 1, port 11435): llava:7b for image analysis
+
+This ensures the 32B model has full access to the 5090's 32GB VRAM.
 """
 
 import os
@@ -20,16 +26,21 @@ from app import config
 
 class VisionService:
     """
-    Manages llava vision model via Ollama on GPU 1
+    Manages llava vision model via separate Ollama instance on GPU 1
+
+    Architecture:
+    - Main Ollama (GPU 0, port 11434): qwen3:32b for text/tool calling
+    - Vision Ollama (GPU 1, port 11435): llava:7b for image analysis
+    - GPU isolation ensures 32B model has full 5090 VRAM
 
     Responsibilities:
     - Process vision requests (image + prompt -> text description)
-    - Use Ollama's llava model for better compatibility
+    - Connect to dedicated vision Ollama instance
     - Handle errors and fallbacks
     """
 
     def __init__(self):
-        self.ollama_url = config.OLLAMA_BASE_URL  # Use same Ollama instance
+        self.ollama_url = config.VISION_OLLAMA_URL  # Separate Ollama instance on GPU 1
         self.model_name = config.VISION_MODEL  # From config
         self.is_model_loaded = False
         self.load_time = None
@@ -38,7 +49,7 @@ class VisionService:
 
         print(f"[vision_service.py][__init__] Vision service initialized")
         print(f"[vision_service.py][__init__] Using Ollama model: {self.model_name}")
-        print(f"[vision_service.py][__init__] Ollama URL: {self.ollama_url}")
+        print(f"[vision_service.py][__init__] Vision Ollama URL: {self.ollama_url} (GPU 1)")
 
     def load_model(self) -> bool:
         """

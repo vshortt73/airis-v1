@@ -1,0 +1,18 @@
+[Unit]
+Description=Ollama Vision Service (GPU 1)
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/ollama serve
+Environment="OLLAMA_HOST=127.0.0.1:11435"
+Environment="CUDA_VISIBLE_DEVICES=1"
+Environment="OLLAMA_MODELS=/usr/share/ollama/.ollama/models"
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+WorkingDirectory=/usr/share/ollama
+
+[Install]
+WantedBy=default.target

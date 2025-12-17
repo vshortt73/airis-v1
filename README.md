@@ -36,6 +36,7 @@ Open browser: `http://localhost:8000`
 ✅ **Context Inspection** - API endpoints to view what's sent to Ollama
 ✅ **Ollama Compliance** - Proper tool message formatting
 ✅ **Clean Architecture** - Organized modules, proper separation
+✅ **Vision System** - Dual Ollama setup with GPU isolation (llava on GPU 1)
 
 ## Architecture
 

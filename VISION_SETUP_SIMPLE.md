@@ -123,25 +123,45 @@ The original plan was to use llama.cpp with manual GPU targeting, but:
 
 The only trade-off is you can't explicitly control which GPU it uses, but Ollama's automatic scheduling works fine for most setups.
 
-## Advanced: Multiple Ollama Instances (GPU Control)
+## Dual Ollama Setup (GPU Isolation)
 
-If you really need llava on a specific GPU:
+Iris uses TWO Ollama instances for GPU isolation:
+- **Main Ollama** (GPU 0, RTX 5090): qwen3:32b on port 11434
+- **Vision Ollama** (GPU 1, RTX 4080 Super): llava:7b on port 11435
 
-1. Run a second Ollama instance:
+This ensures the 32B model has full access to the 5090's 32GB VRAM.
+
+### Setup Systemd Service
+
+1. **Install the systemd service:**
    ```bash
-   # Terminal 1: Main Ollama (GPU 0)
-   OLLAMA_HOST=127.0.0.1:11434 ollama serve
-
-   # Terminal 2: Vision Ollama (GPU 1)
-   CUDA_VISIBLE_DEVICES=1 OLLAMA_HOST=127.0.0.1:11435 ollama serve
+   sudo cp systemd/ollama-vision.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable ollama-vision
+   sudo systemctl start ollama-vision
    ```
 
-2. Update config:
-   ```python
-   OLLAMA_BASE_URL = "http://localhost:11434"  # Main model
-   VISION_OLLAMA_URL = "http://localhost:11435"  # Vision model
+2. **Verify both services:**
+   ```bash
+   # Check main Ollama (GPU 0)
+   systemctl status ollama
+   curl http://localhost:11434/api/tags
+
+   # Check vision Ollama (GPU 1)
+   systemctl status ollama-vision
+   curl http://localhost:11435/api/tags
    ```
 
-3. Update `vision_service.py` to use `VISION_OLLAMA_URL` instead of `OLLAMA_BASE_URL`
+3. **Pull llava model on vision instance:**
+   ```bash
+   # Target the vision Ollama instance (port 11435)
+   OLLAMA_HOST=http://localhost:11435 ollama pull llava:7b
+   ```
 
-But for most cases, single Ollama instance works great!
+4. **Start Iris** (preflight checks run automatically):
+   ```bash
+   export IRIS_DB_PASSWORD='your_password'
+   ./scripts/start.sh
+   ```
+
+The start.sh script now includes preflight checks that verify both Ollama services are running and will attempt to start them if needed.

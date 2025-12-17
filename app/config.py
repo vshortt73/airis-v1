@@ -6,9 +6,13 @@ All settings explicitly defined
 # ============================================
 # OLLAMA CONFIGURATION
 # ============================================
+# Main Ollama instance (GPU 0 - RTX 5090)
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL = "qwen3:32b"
 OLLAMA_CONTEXT_WINDOW = 32768  # CRITICAL: Never use default 4096
+
+# Vision Ollama instance (GPU 1 - RTX 4080 Super)
+VISION_OLLAMA_URL = "http://localhost:11435"
 
 # ============================================
 # SERVER CONFIGURATION
@@ -109,10 +113,10 @@ DB_PASSWORD = None  # Always use IRIS_DB_PASSWORD environment variable
 # ============================================
 # VISION SYSTEM CONFIGURATION
 # ============================================
-# Vision uses Ollama's llava model for simplicity and reliability
+# Vision runs on separate Ollama instance (GPU 1) for GPU isolation
 VISION_ENABLED = True
-VISION_MODEL = "llava:13b"  # Ollama model (or llava:7b for faster)
-VISION_AUTO_UNLOAD_MINUTES = 5  # Unload after idle time
+VISION_MODEL = "llava:7b"  # Running on GPU 1 via VISION_OLLAMA_URL
+VISION_AUTO_UNLOAD_MINUTES = 5  # Unload after idle time (shares GPU 1 with ComfyUI/XTTS)
 VISION_MAX_TOKENS = 1000  # Max tokens per image analysis
 VISION_MAX_IMAGE_SIZE_MB = 10  # Max image size for processing
 VISION_MAX_IMAGES_PER_REQUEST = 5  # Batch limit
