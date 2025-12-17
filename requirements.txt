@@ -20,5 +20,5 @@ websockets>=12.0
 
 # Vision (llama.cpp Python bindings)
 # NOTE: Must be installed with CUDA support for GPU acceleration
-# Installation command: CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+# Installation command: CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 llama-cpp-python>=0.2.0

@@ -137,7 +137,7 @@ Schedule vision model unload (5 min timer)
 **Installation**:
 ```bash
 # Install with CUDA support for GPU 1
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 ```
 
 **GPU Targeting**:

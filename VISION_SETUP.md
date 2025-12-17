@@ -28,7 +28,7 @@ The vision system requires `llama-cpp-python` compiled with CUDA support for GPU
 
 ```bash
 # Install with CUDA support (GPU acceleration)
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 ```
 
 **Verify installation:**
@@ -242,7 +242,7 @@ ls -lh /models/vision/
 Reinstall with CUDA support:
 ```bash
 pip uninstall llama-cpp-python
-CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python --no-cache-dir
+CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --no-cache-dir
 ```
 
 ### "CUDA out of memory"

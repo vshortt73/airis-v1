@@ -86,7 +86,7 @@ class VisionService:
                 from llama_cpp.llama_chat_format import Llava15ChatHandler
             except ImportError:
                 print("[vision_service.py][load_model] ✗ llama-cpp-python not installed")
-                print("[vision_service.py][load_model] Install: CMAKE_ARGS='-DLLAMA_CUBLAS=on' pip install llama-cpp-python")
+                print("[vision_service.py][load_model] Install: CMAKE_ARGS='-DGGML_CUDA=on' pip install llama-cpp-python")
                 return False
 
             # Initialize chat handler for vision
