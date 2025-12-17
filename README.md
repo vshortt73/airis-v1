@@ -4,14 +4,23 @@ AI Assistant with time-based session management, token governance, and proper co
 
 ## Quick Start
 
+### 1. Set Database Password (Required First!)
+
 ```bash
-cd iris-v3-organized
+# REQUIRED: Set your PostgreSQL password
+export IRIS_DB_PASSWORD='your_actual_password'
 
-# Set database password
-export IRIS_DB_PASSWORD='your_password'
+# Make it permanent (add to ~/.bashrc or ~/.zshrc):
+echo "export IRIS_DB_PASSWORD='your_actual_password'" >> ~/.bashrc
+source ~/.bashrc
+```
 
-# Install dependencies
-source /venv/iris-venv/bin/activate
+### 2. Install and Run
+
+```bash
+cd /home/user/iris-v3
+
+# Install dependencies (if not already done)
 pip install -r requirements.txt
 
 # Start server

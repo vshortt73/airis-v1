@@ -22,7 +22,24 @@ This guide walks through setting up the vision system.
 
 ## Installation Steps
 
-### 1. Install llama-cpp-python with CUDA Support
+### 1. Set Database Password (Required)
+
+Iris requires a PostgreSQL database password to be set as an environment variable:
+
+```bash
+# Set permanently in your shell profile (~/.bashrc or ~/.zshrc)
+export IRIS_DB_PASSWORD='your_actual_password_here'
+
+# Or set for current session only
+export IRIS_DB_PASSWORD='your_actual_password_here'
+```
+
+**Verify database connection:**
+```bash
+python3 tests/test_database.py
+```
+
+### 2. Install llama-cpp-python with CUDA Support
 
 The vision system requires `llama-cpp-python` compiled with CUDA support for GPU acceleration.
 
@@ -36,7 +53,7 @@ CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 python3 -c "from llama_cpp import Llama; print('✓ llama-cpp-python installed successfully')"
 ```
 
-### 2. Download Vision Model Files
+### 3. Download Vision Model Files
 
 You need two files for the llava vision model:
 1. **Main model** (llava-v1.6-mistral-7b quantized)
@@ -59,7 +76,7 @@ wget https://huggingface.co/cjpais/llava-v1.6-mistral-7b-gguf/resolve/main/mmpro
 - **Smaller size**: `llava-v1.6-mistral-7b.Q4_0.gguf` (~3.8GB, faster but lower quality)
 - **Larger model**: `llava-v1.6-34b.Q4_K_M.gguf` (~19GB, best quality but slower)
 
-### 3. Configure Iris
+### 4. Configure Iris
 
 Edit `app/config.py` to set your model paths:
 
@@ -79,7 +96,7 @@ VISION_CONTEXT_WINDOW = 2048  # Vision model context
 VISION_DEBUG = False  # Set to True for verbose logging
 ```
 
-### 4. Verify GPU Setup
+### 5. Verify GPU Setup
 
 Check that CUDA can see both GPUs:
 
@@ -96,7 +113,7 @@ GPU 0: NVIDIA GeForce RTX 5090
 GPU 1: NVIDIA GeForce RTX 4080 SUPER
 ```
 
-### 5. Test Vision Service
+### 6. Test Vision Service
 
 Test the vision service independently before using in chat:
 
@@ -120,7 +137,7 @@ Unloading model...
 ✓ Model unloaded
 ```
 
-### 6. Test Vision Manager
+### 7. Test Vision Manager
 
 Test the high-level vision manager:
 
@@ -128,7 +145,7 @@ Test the high-level vision manager:
 python3 core/vision_manager.py
 ```
 
-### 7. Start Iris and Test Integration
+### 8. Start Iris and Test Integration
 
 ```bash
 # Start Iris
