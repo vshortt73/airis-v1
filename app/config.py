@@ -102,4 +102,6 @@ DB_HOST = "localhost"
 DB_PORT = 5432
 DB_NAME = "irisdb"
 DB_USER = "irisuser"
-DB_PASSWORD = "yourpassword"  # Set this or use IRIS_DB_PASSWORD environment variable
+# IMPORTANT: Use IRIS_DB_PASSWORD environment variable instead of hardcoding
+# DB_PASSWORD is a fallback only - DO NOT commit real credentials
+DB_PASSWORD = None  # Always use IRIS_DB_PASSWORD environment variable
