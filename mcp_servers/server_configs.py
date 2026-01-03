@@ -92,6 +92,20 @@ def get_server_configs() -> List[Dict[str, Any]]:
         },
         
         # ====================================================================
+        # MEMORY SERVER - Short-term memory management
+        # ====================================================================
+        {
+            "name": "memory",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "memory" / "memory_server.py")],
+            "tools": [
+                "short_term_memory_insert",
+                "short_term_memory_retrieve",
+                "short_term_memory_archive_old"
+            ]
+        },
+
+        # ====================================================================
         # CREATIVE SERVER - Image generation and creative tools
         # ====================================================================
          # {
@@ -124,7 +138,22 @@ def get_server_configs() -> List[Dict[str, Any]]:
                #  "format_system_health_summary",
 
              ]
-         }
+         },
+
+        # ====================================================================
+        # PROTOCOL SERVER - Protocol activation and management
+        # ====================================================================
+        {
+            "name": "protocols",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "protocols" / "protocol_server.py")],
+            "tools": [
+                "protocol_activate",
+                "protocol_deactivate",
+                "protocol_status",
+                "protocol_list"
+            ]
+        }
     ]
     
     return configs
@@ -160,7 +189,7 @@ def get_server_for_tool(tool_name: str) -> str:
 def get_autonomous_tools() -> List[str]:
     """
     Get list of tools that can be called autonomously without confirmation
-    
+
     Returns:
         List of tool names that are safe for autonomous use
     """
@@ -171,32 +200,41 @@ def get_autonomous_tools() -> List[str]:
         "news_headlines",
         "web_fetch",
         "webcam",
-        
+
         # System tools - read-only operations
         "system_status",
         "system_status_summary",
         "system_logs",
         "service_status",
         "linux_shell",
-        
+
         # Knowledge tools - all safe
         "document_search",
         "knowledge_search",
         "knowledge_stats",
-        
+
         # Traits tools - read-only
         "trait_get",
         "trait_list",
 
+        # Memory tools - all safe for autonomous use
+        "short_term_memory_insert",
+        "short_term_memory_retrieve",
+        "short_term_memory_archive_old",
+
         # System tools - all safe
-        "system_status"
+        "system_status",
+
+        # Protocol tools - read-only
+        "protocol_status",
+        "protocol_list"
     ]
 
 
 def get_confirmation_required_tools() -> List[str]:
     """
     Get list of tools that require user confirmation before execution
-    
+
     Returns:
         List of tool names that need confirmation
     """
@@ -207,17 +245,21 @@ def get_confirmation_required_tools() -> List[str]:
         "service_restart",
         "monitor_add",
         "monitor_remove",
-        
+
         # Traits tools - modify personality
         "trait_modify",
-        
+
         # Creative tools - can be autonomous or require confirmation
       #  "image_generate",
       #  "image_generate_iris",
-        
+
         # RTSP tools - display operations
         "rtsp_show_named",
-        "rtsp_popup_show"
+        "rtsp_popup_show",
+
+        # Protocol tools - modify system behavior
+        "protocol_activate",
+        "protocol_deactivate"
     ]
 
 

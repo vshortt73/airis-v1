@@ -1,0 +1,29 @@
+# Additional requirements for psychological_scoring_transformers.py
+# These are beyond the base Iris v3 requirements
+
+# Core transformer libraries
+torch>=2.0.0
+transformers>=4.35.0
+sentence-transformers>=2.2.0
+
+# For efficient model loading
+accelerate>=0.24.0
+
+# Already in base requirements but listed for reference:
+# numpy
+# psycopg2-binary
+
+# Optional: For GPU support (if using CUDA)
+# Install appropriate version from: https://pytorch.org/get-started/locally/
+# Example for CUDA 11.8:
+# torch>=2.0.0+cu118
+
+# Model sizes (approximate download sizes on first run):
+# - cardiffnlp/twitter-roberta-base-sentiment-latest: ~500MB
+# - SamLowe/roberta-base-go_emotions: ~500MB
+# - sentence-transformers/all-mpnet-base-v2: ~420MB
+# - dslim/bert-base-NER: ~420MB
+# Total: ~1.8GB for all models
+
+# Installation:
+# pip install -r requirements_transformers.txt

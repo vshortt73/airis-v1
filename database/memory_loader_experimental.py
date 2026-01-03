@@ -44,17 +44,15 @@ def _fetch_memory_data():
                                em.summary_event,
                                em.emotion_label,
                                em.voice,
-                               em.category,
-                               temporal_description,
-                               emotion_bias
-                               from live_memories lm
-                                join public.episodic_memories_with_age em on lm.memory_id = em.id
+                               em.category
+                               FROM live_memories lm
+                                JOIN public.episodic_memories_with_age em on lm.memory_id = em.id
                         """)
             mems = cur.fetchall()
             print(f"[memory_loader.py] Loaded {len(mems)} memories from database")
             return mems
     except Exception as e:
-        print(f"[memory_loader.py] Error fetching memories: {e}")
+        print(f"[memory_loader_experimental.py] Error fetching memories: {e}")
         return []
 
 def _clean_field(text, prefixes_to_remove=None):
@@ -189,17 +187,20 @@ def get_memories_conversational() -> Optional[str]:
 def get_memories_xml() -> Optional[str]:
     """
     FORMAT C: XML structure with natural language content
-    
+
     Pros: Structured (XML tags), natural content, metadata in attributes
     Cons: Slightly more verbose than pure conversational
     """
     mems = _fetch_memory_data()
     if not mems:
         return None
-    
+
+    # Sort memories by tier (Tier 1 first, most relevant)
+    mems_sorted = sorted(mems, key=lambda x: x.get("tier", 3))
+
     memories = []
-    
-    for row in mems:
+
+    for row in mems_sorted:
         # Extract and clean fields
         takeaway = _clean_field(row.get("takeaway", ""), ["[relational]", "adaptive"])
         event = _clean_field(row.get("summary_event", ""))
@@ -207,18 +208,23 @@ def get_memories_xml() -> Optional[str]:
         emotion = _clean_field(row.get("emotion_label", ""))
         category = _clean_field(row.get("category", ""))
         significance = _clean_field(row.get("summary_significance", ""))
-        
+        tier = row.get("tier", 3)  # Default to tier 3 if not set
+
+        # Map tier to relevance level
+        tier_label = {1: "primary", 2: "supporting", 3: "associative", 4: "peripheral"}.get(tier, "associative")
+
         # Build XML with natural language content
         attributes = []
+        attributes.append(f'relevance="{tier_label}"')  # Add tier as relevance attribute
         if temporal:
             attributes.append(f'when="{temporal}"')
         if emotion:
             attributes.append(f'emotion="{emotion}"')
         if category:
             attributes.append(f'category="{category}"')
-        
+
         attr_string = " ".join(attributes)
-        
+
         # Build narrative content
         content_parts = []
         if event:
@@ -227,24 +233,35 @@ def get_memories_xml() -> Optional[str]:
             content_parts.append(f"Key insight: {takeaway}")
         if significance:
             content_parts.append(f"Why it matters: {significance}")
-        
+
         content = " ".join(content_parts)
-        
+
         if content:
             memories.append(f"<memory {attr_string}>\n{content}\n</memory>")
-    
+
     header = """[LONG TERM MEMORIES]
-You have episodic memories from past conversations. Each memory is tagged with metadata (when, emotion, category) and contains natural language describing what happened and what you learned.
+You have episodic memories from past conversations. Each memory is tagged with:
+- relevance: How directly it relates to current topics (primary > supporting > associative > peripheral)
+- when: Temporal context (when this happened)
+- emotion: Emotional context at the time
+- category: Type of interaction
+
+Memory priority:
+- PRIMARY memories are directly relevant to current conversation topics
+- SUPPORTING memories provide strong contextual relevance
+- ASSOCIATIVE memories are thematically connected
+- PERIPHERAL memories are weakly connected background context
 
 When a memory is relevant to the current conversation:
-- Reference it naturally ("I remember when we...")
+- Prioritize PRIMARY and SUPPORTING memories in your responses
+- Reference memories naturally ("I remember when we...")
 - Use the insights to inform your response
 - Connect past experiences to present context
 
-Your memories:
+Your memories (sorted by relevance):
 
 """
-    
+
     return header + "\n\n".join(memories)
 
 # ============================================================================

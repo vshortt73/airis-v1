@@ -1,0 +1,16 @@
+# Simplified GBNF - Fast validation, enforces structure only
+# Focus: Guarantee all 6 fields exist, don't micromanage content
+
+root ::= context event significance tone takeaway keydetails
+
+# Each field: label + content ending with period/question/exclamation
+context ::= "CONTEXT: " text "\n"
+event ::= "EVENT: " text "\n"
+significance ::= "SIGNIFICANCE: " text "\n"
+tone ::= "TONE: " text "\n"
+takeaway ::= "TAKEAWAY: " text "\n"
+keydetails ::= "KEY_DETAILS: " text
+
+# Text: any characters except newline, must end with sentence punctuation
+# Much more permissive - allows almost any content
+text ::= [^\n]+ [.!?]

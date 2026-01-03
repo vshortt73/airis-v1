@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iris Protocol Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --border: #475569;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            padding-bottom: 80px; /* Space for fixed status bar */
+        }
+
+        header {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border);
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .toolbar {
+            background: var(--bg-secondary);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border: 1px solid var(--border);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .editor-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .panel-header {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            transition: .3s;
+            border-radius: 28px;
+            border: 1px solid var(--border);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 3px;
+            background-color: var(--text-secondary);
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+            background-color: white;
+        }
+
+        .toggle-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .toggle-item-label {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .toggle-item-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .scrollable-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .scrollable-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollable-list::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .scrollable-list::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        .scrollable-list::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        .trait-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .trait-name {
+            font-size: 14px;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .trait-input {
+            width: 60px;
+            max-width: 60px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-message {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .status-success {
+            color: var(--success);
+        }
+
+        .status-error {
+            color: var(--danger);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-active {
+            background: var(--success);
+            color: white;
+        }
+
+        .badge-inactive {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--bg-tertiary);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            animation: fadeIn 0.2s;
+        }
+
+        .modal-content {
+            background-color: var(--bg-secondary);
+            margin: 10% auto;
+            padding: 30px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Iris Protocol Editor</h1>
+            <p class="subtitle">Configure personality profiles and operational modes</p>
+        </header>
+
+        <div class="toolbar">
+            <select id="protocol-selector">
+                <option value="">Select a protocol...</option>
+            </select>
+            <button class="btn btn-primary" onclick="createNewProtocol()">
+                ➕ New Protocol
+            </button>
+            <button class="btn btn-secondary" onclick="duplicateProtocol()" id="btn-duplicate">
+                📋 Duplicate
+            </button>
+            <button class="btn btn-success" onclick="saveProtocol()" id="btn-save">
+                💾 Save Changes
+            </button>
+            <button class="btn btn-danger" onclick="deleteProtocol()" id="btn-delete">
+                🗑️ Delete
+            </button>
+        </div>
+
+        <div id="editor-content" class="editor-layout" style="display: none;">
+            <!-- Basic Info Panel -->
+            <div class="panel full-width">
+                <div class="panel-header">Basic Information</div>
+                <div class="form-group">
+                    <label>Protocol Name</label>
+                    <input type="text" id="protocol-name" placeholder="e.g., Theta, Professional, Social">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="protocol-description" placeholder="Describe the purpose and behavior of this protocol..." rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Custom Instructions (optional)</label>
+                    <textarea id="protocol-instructions" placeholder="Additional instructions specific to this protocol..." rows="4"></textarea>
+                </div>
+            </div>
+
+            <!-- System Settings Panel -->
+            <div class="panel">
+                <div class="panel-header">System Settings</div>
+                <div class="toggle-item">
+                    <div>
+                        <div class="toggle-item-label">Chat History</div>
+                        <div class="toggle-item-description">Show previous conversation context</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="show-chat-history">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-item">
+                    <div>
+                        <div class="toggle-item-label">Memory Injection</div>
+                        <div class="toggle-item-description">Include episodic memories in context</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="show-memories">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- System Instructions Panel -->
+            <div class="panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>System Instructions</span>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openNewInstructionModal()">
+                        ➕ New Rule
+                    </button>
+                </div>
+                <div class="scrollable-list" id="instructions-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Character Traits Panel -->
+            <div class="panel full-width">
+                <div class="panel-header">Character Traits</div>
+                <div class="scrollable-list" id="traits-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Tools Panel -->
+            <div class="panel full-width">
+                <div class="panel-header">Available Tools</div>
+                <div class="scrollable-list" id="tools-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <div id="empty-state" class="panel empty-state">
+            <h2>👈 Select or create a protocol to begin</h2>
+            <p>Protocols allow you to configure Iris's personality and capabilities for different contexts</p>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div id="status-message" class="status-message">Ready</div>
+        <div id="status-info"></div>
+    </div>
+
+    <!-- New Protocol Modal -->
+    <div id="new-protocol-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Create New Protocol</div>
+            <div class="form-group">
+                <label>Protocol Name</label>
+                <input type="text" id="new-protocol-name" placeholder="e.g., Theta">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeNewProtocolModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmNewProtocol()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Instruction Modal -->
+    <div id="new-instruction-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Create New System Instruction</div>
+            <div class="form-group">
+                <label>Instruction Key</label>
+                <input type="text" id="new-instruction-key" placeholder="e.g., privacy_mode">
+            </div>
+            <div class="form-group">
+                <label>Instruction Text</label>
+                <textarea id="new-instruction-text" placeholder="Enter the instruction text..." rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Order (position in system prompt)</label>
+                <input type="number" id="new-instruction-order" value="100" min="0">
+            </div>
+            <div class="toggle-item">
+                <div>
+                    <div class="toggle-item-label">Active by Default</div>
+                    <div class="toggle-item-description">Enable this instruction by default</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="new-instruction-active" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeNewInstructionModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmNewInstruction()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Instruction Modal -->
+    <div id="view-instruction-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header" id="view-instruction-title">Instruction Details</div>
+            <div class="form-group">
+                <label>Instruction Key</label>
+                <div style="padding: 10px; background: var(--bg-tertiary); border-radius: 6px; color: var(--text-primary); font-family: monospace;" id="view-instruction-key"></div>
+            </div>
+            <div class="form-group">
+                <label>Instruction Text</label>
+                <div style="padding: 10px; background: var(--bg-tertiary); border-radius: 6px; color: var(--text-primary); white-space: pre-wrap; max-height: 300px; overflow-y: auto;" id="view-instruction-text"></div>
+            </div>
+            <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Order</label>
+                    <div style="padding: 10px; background: var(--bg-tertiary); border-radius: 6px; color: var(--text-primary);" id="view-instruction-order"></div>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Default State</label>
+                    <div style="padding: 10px; background: var(--bg-tertiary); border-radius: 6px;" id="view-instruction-active"></div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="closeViewInstructionModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentProtocol = null;
+        let availableInstructions = [];
+        let availableTraits = [];
+        let availableTools = [];
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadOptions();
+            await loadProtocolList();
+        });
+
+        // API calls
+        async function apiGet(endpoint) {
+            const response = await fetch(`/api/${endpoint}`);
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiPost(endpoint, data) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiPut(endpoint, data) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiDelete(endpoint) {
+            const response = await fetch(`/api/${endpoint}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        // Load available options from database
+        async function loadOptions() {
+            showStatus('Loading options...', false);
+            try {
+                const [instructions, traits, tools] = await Promise.all([
+                    apiGet('protocols/options/instructions'),
+                    apiGet('protocols/options/traits'),
+                    apiGet('protocols/options/tools')
+                ]);
+
+                availableInstructions = instructions.instructions;
+                availableTraits = traits.traits;
+                availableTools = tools.tools;
+
+                showStatus('Options loaded', true);
+            } catch (error) {
+                showStatus(`Error loading options: ${error.message}`, false);
+            }
+        }
+
+        // Load protocol list
+        async function loadProtocolList() {
+            try {
+                const data = await apiGet('protocols');
+                const selector = document.getElementById('protocol-selector');
+                selector.innerHTML = '<option value="">Select a protocol...</option>';
+
+                data.protocols.forEach(protocol => {
+                    const option = document.createElement('option');
+                    option.value = protocol.id;
+                    option.textContent = protocol.name;
+                    selector.appendChild(option);
+                });
+            } catch (error) {
+                showStatus(`Error loading protocols: ${error.message}`, false);
+            }
+        }
+
+        // Load specific protocol
+        document.getElementById('protocol-selector').addEventListener('change', async (e) => {
+            const protocolId = e.target.value;
+            if (!protocolId) {
+                showEmptyState();
+                return;
+            }
+
+            showStatus('Loading protocol...', false);
+            try {
+                const protocol = await apiGet(`protocols/${protocolId}`);
+                loadProtocolIntoEditor(protocol);
+                showStatus(`Loaded: ${protocol.name}`, true);
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, false);
+            }
+        });
+
+        // Load protocol data into editor
+        function loadProtocolIntoEditor(protocol) {
+            currentProtocol = protocol;
+
+            // Show editor
+            document.getElementById('editor-content').style.display = 'grid';
+            document.getElementById('empty-state').style.display = 'none';
+
+            // Load basic info
+            document.getElementById('protocol-name').value = protocol.name || '';
+            document.getElementById('protocol-description').value = protocol.description || '';
+            document.getElementById('protocol-instructions').value = protocol.instructions || '';
+            document.getElementById('show-chat-history').checked = protocol.show_chat_history !== false;
+            document.getElementById('show-memories').checked = protocol.show_memories !== false;
+
+            // Load instructions
+            renderInstructions(protocol);
+
+            // Load traits
+            renderTraits(protocol);
+
+            // Load tools
+            renderTools(protocol);
+        }
+
+        // Render instructions
+        function renderInstructions(protocol) {
+            const container = document.getElementById('instructions-list');
+            container.innerHTML = '';
+
+            const rulesInclude = protocol.rules_include || [];
+            const rulesExclude = protocol.rules_exclude || [];
+
+            availableInstructions.forEach((inst, index) => {
+                const div = document.createElement('div');
+                div.className = 'toggle-item';
+
+                // Determine state: explicitly included, explicitly excluded, or default
+                let isChecked = inst.active; // Default state
+                if (rulesInclude.includes(String(inst.id))) {
+                    isChecked = true;
+                } else if (rulesExclude.includes(String(inst.id))) {
+                    isChecked = false;
+                }
+
+                // Create clickable label div
+                const labelDiv = document.createElement('div');
+                labelDiv.style.flex = '1';
+                labelDiv.style.cursor = 'pointer';
+                labelDiv.innerHTML = `
+                    <div class="toggle-item-label" style="color: var(--primary); text-decoration: underline; text-decoration-style: dotted;">
+                        ${inst.instruction_key}
+                    </div>
+                    <div class="toggle-item-description">ID: ${inst.id} | Default: ${inst.active ? 'Active' : 'Inactive'} | Click to view</div>
+                `;
+                labelDiv.addEventListener('click', () => viewInstructionDetails(inst));
+
+                // Create toggle switch
+                const toggleLabel = document.createElement('label');
+                toggleLabel.className = 'toggle-switch';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = isChecked;
+                checkbox.addEventListener('change', (e) => updateInstruction(inst.id, e.target.checked, inst.active));
+                const slider = document.createElement('span');
+                slider.className = 'slider';
+                toggleLabel.appendChild(checkbox);
+                toggleLabel.appendChild(slider);
+
+                // Assemble the div
+                div.appendChild(labelDiv);
+                div.appendChild(toggleLabel);
+                container.appendChild(div);
+            });
+        }
+
+        // Render traits
+        function renderTraits(protocol) {
+            const container = document.getElementById('traits-list');
+            container.innerHTML = '';
+
+            const traitsAdjust = protocol.traits_adjust || {};
+
+            availableTraits.forEach(trait => {
+                const div = document.createElement('div');
+                div.className = 'trait-item';
+
+                const currentValue = traitsAdjust[trait.name] !== undefined ? traitsAdjust[trait.name] : trait.value;
+
+                div.innerHTML = `
+                    <div class="trait-name">${trait.name}</div>
+                    <input type="text" class="trait-input" value="${currentValue}"
+                           onchange="updateTrait('${trait.name}', this.value)">
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Render tools
+        function renderTools(protocol) {
+            const container = document.getElementById('tools-list');
+            container.innerHTML = '';
+
+            const toolUsage = protocol.tool_usage || {};
+
+            availableTools.forEach(tool => {
+                const div = document.createElement('div');
+                div.className = 'toggle-item';
+
+                const isEnabled = toolUsage[tool.tool_name] !== undefined ? toolUsage[tool.tool_name] : tool.enabled;
+
+                div.innerHTML = `
+                    <div>
+                        <div class="toggle-item-label">${tool.icon || '🔧'} ${tool.tool_name}</div>
+                        <div class="toggle-item-description">${tool.description || 'No description'}</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${isEnabled ? 'checked' : ''}
+                               onchange="updateTool('${tool.tool_name}', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Update instruction state
+        function updateInstruction(instId, isEnabled, defaultState) {
+            if (!currentProtocol.rules_include) currentProtocol.rules_include = [];
+            if (!currentProtocol.rules_exclude) currentProtocol.rules_exclude = [];
+
+            const idStr = String(instId);
+
+            // Remove from both lists first
+            currentProtocol.rules_include = currentProtocol.rules_include.filter(id => id !== idStr);
+            currentProtocol.rules_exclude = currentProtocol.rules_exclude.filter(id => id !== idStr);
+
+            // Add to appropriate list if different from default
+            if (isEnabled && !defaultState) {
+                currentProtocol.rules_include.push(idStr);
+            } else if (!isEnabled && defaultState) {
+                currentProtocol.rules_exclude.push(idStr);
+            }
+        }
+
+        // Update trait value
+        function updateTrait(traitName, value) {
+            if (!currentProtocol.traits_adjust) currentProtocol.traits_adjust = {};
+            currentProtocol.traits_adjust[traitName] = value;
+        }
+
+        // Update tool state
+        function updateTool(toolName, isEnabled) {
+            if (!currentProtocol.tool_usage) currentProtocol.tool_usage = {};
+            currentProtocol.tool_usage[toolName] = isEnabled;
+        }
+
+        // Save protocol
+        async function saveProtocol() {
+            if (!currentProtocol) {
+                showStatus('No protocol loaded', false);
+                return;
+            }
+
+            showStatus('Saving...', false);
+
+            // Gather current values
+            const data = {
+                name: document.getElementById('protocol-name').value,
+                description: document.getElementById('protocol-description').value,
+                instructions: document.getElementById('protocol-instructions').value,
+                rules_include: currentProtocol.rules_include || [],
+                rules_exclude: currentProtocol.rules_exclude || [],
+                show_chat_history: document.getElementById('show-chat-history').checked,
+                show_memories: document.getElementById('show-memories').checked,
+                traits_adjust: currentProtocol.traits_adjust || {},
+                tool_usage: currentProtocol.tool_usage || {}
+            };
+
+            try {
+                if (currentProtocol.id) {
+                    // Update existing
+                    await apiPut(`protocols/${currentProtocol.id}`, data);
+                    showStatus('✓ Protocol saved successfully', true);
+                } else {
+                    // Create new
+                    const result = await apiPost('protocols', data);
+                    currentProtocol.id = result.id;
+                    await loadProtocolList();
+                    document.getElementById('protocol-selector').value = result.id;
+                    showStatus('✓ Protocol created successfully', true);
+                }
+            } catch (error) {
+                showStatus(`✗ Error saving: ${error.message}`, false);
+            }
+        }
+
+        // Delete protocol
+        async function deleteProtocol() {
+            if (!currentProtocol || !currentProtocol.id) {
+                showStatus('No protocol to delete', false);
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete "${currentProtocol.name}"?`)) {
+                return;
+            }
+
+            showStatus('Deleting...', false);
+
+            try {
+                await apiDelete(`protocols/${currentProtocol.id}`);
+                showStatus('✓ Protocol deleted', true);
+                await loadProtocolList();
+                showEmptyState();
+                document.getElementById('protocol-selector').value = '';
+            } catch (error) {
+                showStatus(`✗ Error deleting: ${error.message}`, false);
+            }
+        }
+
+        // Duplicate protocol
+        async function duplicateProtocol() {
+            if (!currentProtocol || !currentProtocol.id) {
+                showStatus('No protocol to duplicate', false);
+                return;
+            }
+
+            const newName = prompt(`Enter name for duplicated protocol:`, `${currentProtocol.name} (Copy)`);
+            if (!newName) return;
+
+            showStatus('Duplicating...', false);
+
+            try {
+                // Send new_name as query parameter, not in body
+                const encodedName = encodeURIComponent(newName);
+                const result = await apiPost(`protocols/${currentProtocol.id}/duplicate?new_name=${encodedName}`, {});
+                showStatus('✓ Protocol duplicated', true);
+                await loadProtocolList();
+                // Select the newly created protocol
+                if (result.id) {
+                    document.getElementById('protocol-selector').value = result.id;
+                    document.getElementById('protocol-selector').dispatchEvent(new Event('change'));
+                }
+            } catch (error) {
+                showStatus(`✗ Error duplicating: ${error.message}`, false);
+            }
+        }
+
+        // Create new protocol
+        function createNewProtocol() {
+            document.getElementById('new-protocol-modal').style.display = 'block';
+            document.getElementById('new-protocol-name').value = '';
+            document.getElementById('new-protocol-name').focus();
+        }
+
+        function closeNewProtocolModal() {
+            document.getElementById('new-protocol-modal').style.display = 'none';
+        }
+
+        async function confirmNewProtocol() {
+            const name = document.getElementById('new-protocol-name').value.trim();
+            if (!name) {
+                alert('Please enter a protocol name');
+                return;
+            }
+
+            closeNewProtocolModal();
+
+            // Create empty protocol
+            currentProtocol = {
+                name: name,
+                description: '',
+                instructions: '',
+                rules_include: [],
+                rules_exclude: [],
+                show_chat_history: true,
+                show_memories: true,
+                traits_adjust: {},
+                tool_usage: {}
+            };
+
+            loadProtocolIntoEditor(currentProtocol);
+            showStatus(`New protocol: ${name}`, true);
+        }
+
+        // Show empty state
+        function showEmptyState() {
+            document.getElementById('editor-content').style.display = 'none';
+            document.getElementById('empty-state').style.display = 'block';
+            currentProtocol = null;
+        }
+
+        // Status message
+        function showStatus(message, isSuccess) {
+            const el = document.getElementById('status-message');
+            el.textContent = message;
+            el.className = 'status-message ' + (isSuccess ? 'status-success' : 'status-error');
+        }
+
+        // View Instruction Details
+        function viewInstructionDetails(instruction) {
+            document.getElementById('view-instruction-title').textContent = `Instruction: ${instruction.instruction_key}`;
+            document.getElementById('view-instruction-key').textContent = instruction.instruction_key;
+            document.getElementById('view-instruction-text').textContent = instruction.instruction_text;
+            document.getElementById('view-instruction-order').textContent = instruction.instruction_order;
+
+            const activeEl = document.getElementById('view-instruction-active');
+            if (instruction.active) {
+                activeEl.innerHTML = '<span class="badge badge-active">Active</span>';
+            } else {
+                activeEl.innerHTML = '<span class="badge badge-inactive">Inactive</span>';
+            }
+
+            document.getElementById('view-instruction-modal').style.display = 'block';
+        }
+
+        function closeViewInstructionModal() {
+            document.getElementById('view-instruction-modal').style.display = 'none';
+        }
+
+        // New Instruction Modal Functions
+        function openNewInstructionModal() {
+            document.getElementById('new-instruction-modal').style.display = 'block';
+            document.getElementById('new-instruction-key').value = '';
+            document.getElementById('new-instruction-text').value = '';
+            document.getElementById('new-instruction-order').value = '100';
+            document.getElementById('new-instruction-active').checked = false;
+            document.getElementById('new-instruction-key').focus();
+        }
+
+        function closeNewInstructionModal() {
+            document.getElementById('new-instruction-modal').style.display = 'none';
+        }
+
+        async function confirmNewInstruction() {
+            const key = document.getElementById('new-instruction-key').value.trim();
+            const text = document.getElementById('new-instruction-text').value.trim();
+            const order = parseInt(document.getElementById('new-instruction-order').value);
+            const active = document.getElementById('new-instruction-active').checked;
+
+            if (!key || !text) {
+                alert('Please enter both instruction key and text');
+                return;
+            }
+
+            closeNewInstructionModal();
+            showStatus('Creating instruction...', false);
+
+            try {
+                const response = await fetch('/api/protocols/instructions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instruction_key: key,
+                        instruction_text: text,
+                        instruction_order: order,
+                        active: active
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to create instruction: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                showStatus(`✓ Instruction "${key}" created successfully`, true);
+
+                // Reload instructions and refresh the display
+                await loadOptions();
+                if (currentProtocol) {
+                    renderInstructions(currentProtocol);
+                }
+            } catch (error) {
+                showStatus(`✗ Error creating instruction: ${error.message}`, false);
+            }
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const protocolModal = document.getElementById('new-protocol-modal');
+            const instructionModal = document.getElementById('new-instruction-modal');
+            const viewInstructionModal = document.getElementById('view-instruction-modal');
+
+            if (event.target == protocolModal) {
+                closeNewProtocolModal();
+            }
+            if (event.target == instructionModal) {
+                closeNewInstructionModal();
+            }
+            if (event.target == viewInstructionModal) {
+                closeViewInstructionModal();
+            }
+        }
+    </script>
+</body>
+</html>

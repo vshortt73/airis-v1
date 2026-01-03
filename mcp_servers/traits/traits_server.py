@@ -42,7 +42,9 @@ def get_db_connection():
             'host': config.DB_HOST,
             'port': config.DB_PORT,
             'database': config.DB_NAME,
-            'user': config.DB_USER
+            'user': config.DB_USER,
+            'password': "yourpassword"
+
         }
         
         if password:
@@ -105,23 +107,26 @@ def trait_list() -> Dict[str, Any]:
 
 ##
 @server.register_tool
-def trait_modify(trait_name: str, value: float, reason: str):
+def trait_modify(trait_name: str, value: float, reason: str = "no reason given"):
+    print("trait modify...")
     if float(value) > 10 or float(value) < 0:
         return {
         "success": False,
         "error": "Value must be between 0 and 10 in increments of .1"
         }
     else:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT value 
-            FROM fulltraits 
-            where name like %s
-            LIMIT 1""", (trait_name,))
-        
-        row = cursor.fetchone()
-
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT value 
+                FROM fulltraits 
+                where name like %s
+                LIMIT 1""", (trait_name,))
+            
+            row = cursor.fetchone()
+        except Exception as e:
+            print(">>>>>>>>>>>>>exception! ",e)
         # Check if a row was actually returned (i.e., not None)
         if row is not None:
         # If a row exists, unpack the value from the tuple
@@ -203,4 +208,6 @@ if __name__ == "__main__":
     print(f"Starting server...")
     print("="*60)
     #trait_list()
+    #myresult = trait_modify("Curiosity", "5", "test")
+    #print (myresult)
     server.run()

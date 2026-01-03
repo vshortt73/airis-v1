@@ -1,0 +1,6 @@
+ERROR:  column "transcript" does not exist
+LINE 3:     LENGTH(COALESCE(transcript,'')) + 
+                            ^
+Estimated 0 tokens for 10 rows
+Safe limit: 10 rows
+SELECT * FROM chat_history_readable LIMIT 10;

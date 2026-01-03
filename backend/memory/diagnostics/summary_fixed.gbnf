@@ -1,0 +1,18 @@
+root ::= object
+
+object ::= "{" ws "\"MemoryRecall\":" ws "{" ws fields ws "}" ws "}"
+
+fields ::= takeaway ws "," context ws "," ws event ws "," ws significance ws "," ws tone
+
+takeaway ::= "\"Takeaway\":" ws string
+context ::= "\"Context\":" ws string
+event ::= "\"Event\":" ws string
+significance ::= "\"Significance\":" ws string
+tone ::= "\"Tone\":" ws string
+
+string ::= "\"" content "\""
+content ::= (char | space)*
+char ::= [a-zA-Z0-9.!?',_:;()/\[\]&@#$%*+=<>~ \\-]
+space ::= " "
+
+ws ::= (" " | "\n" | "\t")*

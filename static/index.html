@@ -277,6 +277,12 @@
             border-radius: 0.5rem;
             color: #e0e0e0;
             font-size: 1rem;
+            font-family: inherit;
+            min-height: 2.5rem;
+            max-height: 12rem;
+            resize: none;
+            overflow-y: auto;
+            line-height: 1.5;
         }
         #messageInput:focus { outline: none; border-color: #bb86fc; }
         button {
@@ -290,6 +296,19 @@
         }
         button:hover { background: #d4b3ff; }
         button:disabled { background: #555; cursor: not-allowed; }
+
+        /* Stop button styling */
+        #stopButton {
+            background: #ff4444;
+            color: #fff;
+            display: none; /* Hidden by default */
+            animation: pulseStop 1.5s ease-in-out infinite;
+        }
+        #stopButton:hover { background: #ff6666; }
+        @keyframes pulseStop {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
         .status {
             text-align: center;
             padding: 0.5rem;
@@ -310,6 +329,8 @@
             </label>
             <div class="info">
                 <span id="messageCount">Messages: 0</span> |
+                <span id="tokenInfo" style="font-weight: bold; color: #03dac6;">Tokens: 0/32,768 (0%)</span> |
+                <span id="protocolInfo" style="font-weight: bold; color: #4CAF50;">Protocol: Default</span> |
                 <span id="sessionInfo">Session: ...</span>
             </div>
         </div>
@@ -323,7 +344,8 @@
         <div class="input-controls">
             <input type="file" id="imageUpload" accept="image/*" style="display: none;" multiple>
             <button id="uploadButton" title="Upload image">📎</button>
-            <input type="text" id="messageInput" placeholder="Type or paste image..." disabled>
+            <textarea id="messageInput" placeholder="Type or paste image..." disabled rows="1"></textarea>
+            <button id="stopButton" title="Stop generation">⏹ Stop</button>
             <button id="sendButton" disabled>Send</button>
         </div>
     </div>
@@ -721,11 +743,14 @@ let pendingToolStatus = null;
         const chatContainer = document.getElementById('chatContainer');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const stopButton = document.getElementById('stopButton');
         const uploadButton = document.getElementById('uploadButton');
         const imageUpload = document.getElementById('imageUpload');
         const imagePreviewContainer = document.getElementById('imagePreviewContainer');
         const statusDiv = document.getElementById('status');
         const messageCount = document.getElementById('messageCount');
+        const tokenInfo = document.getElementById('tokenInfo');
+        const protocolInfo = document.getElementById('protocolInfo');
         const sessionInfo = document.getElementById('sessionInfo');
         const speechToggle = document.getElementById('speechToggle');
         
@@ -851,7 +876,73 @@ let pendingToolStatus = null;
                 statusDiv.className = 'status';
             }
         }
-        
+
+        // Update token counter display
+        function updateTokenDisplay(tokens) {
+            if (!tokens) return;
+
+            const total = tokens.total || 0;
+            const max = tokens.max || 32768;
+            const percentage = tokens.percentage || 0;
+
+            // Format with commas for readability
+            const totalFormatted = total.toLocaleString();
+            const maxFormatted = max.toLocaleString();
+
+            // Color based on usage percentage
+            let color = '#03dac6';  // Cyan for low usage
+            if (percentage > 80) {
+                color = '#ff4444';  // Red for high usage
+            } else if (percentage > 60) {
+                color = '#FF9800';  // Orange for medium-high usage
+            } else if (percentage > 40) {
+                color = '#FFEB3B';  // Yellow for medium usage
+            }
+
+            tokenInfo.textContent = `Tokens: ${totalFormatted}/${maxFormatted} (${percentage}%)`;
+            tokenInfo.style.color = color;
+        }
+
+        // Update protocol status indicator
+        async function updateProtocolStatus() {
+            try {
+                const response = await fetch('/api/protocols/status/active');
+                const protocolStatus = await response.json();
+
+                if (protocolStatus && protocolStatus.success) {
+                    const protocol = protocolStatus.active_protocol;
+                    const isDefault = protocolStatus.is_default;
+                    const protected = protocolStatus.passphrase_protected;
+
+                    // Update display
+                    let display = `Protocol: ${protocol}`;
+                    if (protected) {
+                        display += ' 🔒';
+                    }
+
+                    // Color based on protocol type
+                    if (isDefault) {
+                        protocolInfo.style.color = '#4CAF50';  // Green for default
+                    } else {
+                        protocolInfo.style.color = '#FF9800';  // Orange for non-default
+                    }
+
+                    protocolInfo.textContent = display;
+                    console.log(`[Protocol Status] Updated: ${protocol}${protected ? ' 🔒' : ''}`);
+                } else {
+                    // If API returns error, default to "Default" protocol
+                    console.warn('[Protocol Status] API returned error, defaulting to Default');
+                    protocolInfo.textContent = 'Protocol: Default';
+                    protocolInfo.style.color = '#4CAF50';
+                }
+            } catch (error) {
+                console.error('[Protocol Status] Failed to fetch:', error);
+                // On error, assume Default is active
+                protocolInfo.textContent = 'Protocol: Default';
+                protocolInfo.style.color = '#4CAF50';
+            }
+        }
+
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat`);
@@ -871,43 +962,82 @@ let pendingToolStatus = null;
                     case 'start':
                         isStreaming = true;
                         sendButton.disabled = true;
+                        sendButton.style.display = 'none';  // Hide Send button
+                        stopButton.style.display = 'block';  // Show Stop button
                         currentAssistantText = '';  // Reset accumulated text
                         ttsQueue.reset();  // Reset TTS for new message
                         currentAssistantMessage = createMessage('assistant', 'Iris is thinking...');
                         chatContainer.appendChild(currentAssistantMessage);
                         scrollToBottom();
+
+                        // Update token counter
+                        if (data.tokens) {
+                            updateTokenDisplay(data.tokens);
+                        }
                         break;
                     
                     case 'tool_start':
-                        // Ollama decided to use tools
+                        // Legacy: Ollama decided to use tools (kept for backwards compatibility)
                         console.log(`Using ${data.tool_count} tool(s)`);
                         break;
-                    
+
+                    case 'tool_marker_start':
+                        // NEW: Start of in-bubble tool section
+                        console.log(`Tool marker start: ${data.tool_count} tool(s) in iteration ${data.iteration}`);
+                        break;
+
+                    case 'tool_marker_end':
+                        // NEW: End of in-bubble tool section
+                        console.log('Tool marker end');
+
+                        // Reset text accumulator for next iteration
+                        currentAssistantText = '';
+
+                        // Remove active-text class so next iteration creates new span
+                        if (currentAssistantMessage) {
+                            const activeSpan = currentAssistantMessage.querySelector('span.active-text');
+                            if (activeSpan) {
+                                activeSpan.classList.remove('active-text');
+                            }
+                        }
+
+                        scrollToBottom();
+                        break;
+
                     case 'tool_executing':
-                        // Tool is being executed - show icon and "Working..."
+                        // Tool is being executed - show icon and "Working..." IN BUBBLE
                         const toolIcon = data.tool_icon || '🔧';
                         const toolName = data.tool_name || 'tool';
                         const toolStatus = createToolStatus(toolIcon, toolName);
-                        chatContainer.appendChild(toolStatus);
-                        scrollToBottom();
+
+                        // Add to current assistant message bubble
+                        if (currentAssistantMessage) {
+                            const content = currentAssistantMessage.querySelector('.message-content');
+                            content.appendChild(toolStatus);
+                            scrollToBottom();
+                        }
                         break;
-                    
+
                     case 'tool_result':
-                        // Tool completed - update the status
-                        const lastToolStatus = chatContainer.querySelector('.tool-status:last-of-type');
-                        if (lastToolStatus) {
-                            const statusText = lastToolStatus.querySelector('.tool-status-text');
-                            if (data.success) {
-                                statusText.textContent = `${data.tool_name} ✓`;
-                                statusText.style.color = '#03dac6';
-                                // Stop the pulse animation
+                        // Tool completed - update the status IN BUBBLE
+                        if (currentAssistantMessage) {
+                            // Find the last tool-status element within the current message
+                            const messageContent = currentAssistantMessage.querySelector('.message-content');
+                            const lastToolStatus = messageContent.querySelector('.tool-status:last-of-type');
+
+                            if (lastToolStatus) {
+                                const statusText = lastToolStatus.querySelector('.tool-status-text');
                                 const icon = lastToolStatus.querySelector('.tool-status-icon');
-                                icon.style.animation = 'none';
-                            } else {
-                                statusText.textContent = `${data.tool_name} failed: ${data.error}`;
-                                statusText.style.color = '#ff4444';
-                                const icon = lastToolStatus.querySelector('.tool-status-icon');
-                                icon.style.animation = 'none';
+
+                                if (data.success) {
+                                    statusText.textContent = `${data.tool_name} ✓`;
+                                    statusText.style.color = '#03dac6';
+                                    icon.style.animation = 'none';
+                                } else {
+                                    statusText.textContent = `${data.tool_name} failed: ${data.error}`;
+                                    statusText.style.color = '#ff4444';
+                                    icon.style.animation = 'none';
+                                }
                             }
                         }
                         break;
@@ -922,33 +1052,71 @@ let pendingToolStatus = null;
 
                             // Parse accumulated markdown and render
                             const content = currentAssistantMessage.querySelector('.message-content');
-                            const textSpan = content.querySelector('span');
-                            if (textSpan) {
-                                // Parse markdown to HTML
-                                textSpan.innerHTML = marked.parse(currentAssistantText);
 
-                                // Add copy buttons to any code blocks
-                                addCopyButtonsToCodeBlocks(textSpan);
+                            // Find or create the ACTIVE text span (not all spans, just the one for current iteration)
+                            let textSpan = content.querySelector('span.active-text');
+                            if (!textSpan) {
+                                // First chunk of this iteration - create new span and mark as active
+                                textSpan = document.createElement('span');
+                                textSpan.className = 'active-text';
+                                content.appendChild(textSpan);
                             }
+
+                            // Parse markdown to HTML
+                            textSpan.innerHTML = marked.parse(currentAssistantText);
+
+                            // Add copy buttons to any code blocks
+                            addCopyButtonsToCodeBlocks(textSpan);
+
                             scrollToBottom();
                         }
                         break;
                         
+                    case 'interrupted':
+                        // Generation was stopped by user
+                        isStreaming = false;
+                        sendButton.disabled = false;
+                        sendButton.style.display = 'block';  // Show Send button
+                        stopButton.style.display = 'none';  // Hide Stop button
+                        stopButton.disabled = false;  // Re-enable
+                        stopButton.textContent = '⏹ Stop';  // Reset text
+                        ttsQueue.finalize();  // Ensure final sentence is spoken
+
+                        // Add system message indicating interruption
+                        const interruptMsg = createMessage('system', '⏹ Generation stopped by user');
+                        chatContainer.appendChild(interruptMsg);
+                        scrollToBottom();
+
+                        currentAssistantMessage = null;
+                        currentAssistantText = '';
+                        messageInput.focus();
+                        break;
+
                     case 'done':
                         isStreaming = false;
                         sendButton.disabled = false;
+                        sendButton.style.display = 'block';  // Show Send button
+                        stopButton.style.display = 'none';  // Hide Stop button
                         ttsQueue.finalize();  // Ensure final sentence is spoken
                         currentAssistantMessage = null;
                         currentAssistantText = '';  // Clear accumulated text
                         messageCount.textContent = `Messages: ${data.message_count}`;
+
+                        // Update token counter with final counts
+                        if (data.tokens) {
+                            updateTokenDisplay(data.tokens);
+                        }
+
                         messageInput.focus();
                         break;
-                        
+
                     case 'error':
                         statusDiv.textContent = `Error: ${data.content}`;
                         statusDiv.className = 'status';
                         isStreaming = false;
                         sendButton.disabled = false;
+                        sendButton.style.display = 'block';  // Show Send button
+                        stopButton.style.display = 'none';  // Hide Stop button
                         break;
                 }
             };
@@ -984,10 +1152,43 @@ let pendingToolStatus = null;
             return statusDiv;
         }
         
+        function redactPassphrases(text) {
+            /**
+             * Client-side passphrase redaction for UI display
+             * This is defense-in-depth: server already redacts before storage,
+             * but this ensures nothing slips through to the UI
+             */
+            if (!text) return text;
+
+            // Pattern 1: passphrase in quotes (single or double)
+            text = text.replace(
+                /(passphrase\s+["'])([^"']+)(["'])/gi,
+                '$1***REDACTED***$3'
+            );
+
+            // Pattern 2: "with passphrase" or "using passphrase" in quotes
+            text = text.replace(
+                /(with\s+passphrase\s+["'])([^"']+)(["'])/gi,
+                '$1***REDACTED***$3'
+            );
+            text = text.replace(
+                /(using\s+passphrase\s+["'])([^"']+)(["'])/gi,
+                '$1***REDACTED***$3'
+            );
+
+            // Pattern 3: passphrase: xxx (without quotes)
+            text = text.replace(
+                /(passphrase:\s*)(\S+)/gi,
+                '$1***REDACTED***'
+            );
+
+            return text;
+        }
+
         function createMessage(role, content, images = []) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
-            
+
             const avatar = document.createElement('div');
             avatar.className = 'message-avatar';
             if (role === 'user') {
@@ -997,10 +1198,10 @@ let pendingToolStatus = null;
             } else if (role === 'system') {
                 avatar.textContent = '•';
             }
-            
+
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            
+
             // Add images if present
             if (images && images.length > 0) {
                 const imagesContainer = document.createElement('div');
@@ -1008,7 +1209,7 @@ let pendingToolStatus = null;
                 imagesContainer.style.gap = '0.5rem';
                 imagesContainer.style.marginBottom = content ? '0.5rem' : '0';
                 imagesContainer.style.flexWrap = 'wrap';
-                
+
                 images.forEach(imgData => {
                     const img = document.createElement('img');
                     img.src = imgData;
@@ -1018,22 +1219,26 @@ let pendingToolStatus = null;
                     img.style.objectFit = 'cover';
                     imagesContainer.appendChild(img);
                 });
-                
+
                 contentDiv.appendChild(imagesContainer);
             }
-            
+
             // Add text content if present
             if (content) {
+                // SECURITY: Redact passphrases before displaying (defense in depth)
+                const redactedContent = redactPassphrases(content);
+
                 const textSpan = document.createElement('span');
+                textSpan.className = 'active-text';  // Mark as active for streaming updates
                 // Parse markdown for all messages (including loaded history)
-                textSpan.innerHTML = marked.parse(content);
+                textSpan.innerHTML = marked.parse(redactedContent);
 
                 // Add copy buttons to code blocks
                 addCopyButtonsToCodeBlocks(textSpan);
 
                 contentDiv.appendChild(textSpan);
             }
-            
+
             messageDiv.appendChild(avatar);
             messageDiv.appendChild(contentDiv);
             return messageDiv;
@@ -1053,7 +1258,8 @@ let pendingToolStatus = null;
             // Send to WebSocket with images
             const payload = {
                 message: message || '(attached image)',
-                images: attachedImages.length > 0 ? attachedImages : undefined
+                images: attachedImages.length > 0 ? attachedImages : undefined,
+                sender: 'user'  // Victor using the web interface
             };
             
             console.log(`Sending message with ${attachedImages.length} image(s)`);
@@ -1061,6 +1267,7 @@ let pendingToolStatus = null;
             
             // Clear input and images
             messageInput.value = '';
+            messageInput.style.height = 'auto'; // Reset textarea height
             attachedImages = [];
             imagePreviewContainer.innerHTML = '';
         }
@@ -1115,12 +1322,33 @@ let pendingToolStatus = null;
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
         
+        // Auto-expand textarea as user types
+        function autoExpandTextarea() {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 192) + 'px'; // 192px = 12rem max-height
+        }
+
+        messageInput.addEventListener('input', autoExpandTextarea);
+
+        // Stop button handler
+        stopButton.addEventListener('click', () => {
+            if (isStreaming && ws && ws.readyState === WebSocket.OPEN) {
+                console.log('[Stop] Sending interrupt request');
+                ws.send(JSON.stringify({ type: 'interrupt' }));
+
+                // Immediately update UI
+                stopButton.disabled = true;
+                stopButton.textContent = '⏹ Stopping...';
+            }
+        });
+
         sendButton.addEventListener('click', sendMessage);
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
+            // Shift+Enter allows new lines
         });
 
         // Speech toggle event listener
@@ -1135,6 +1363,10 @@ let pendingToolStatus = null;
         // Initialize: Load history first, then connect WebSocket
         loadConversationHistory().then(() => {
             connectWebSocket();
+            // Update protocol status on load
+            updateProtocolStatus();
+            // Refresh protocol status every 5 seconds
+            setInterval(updateProtocolStatus, 5000);
         });
     </script>
 </body>

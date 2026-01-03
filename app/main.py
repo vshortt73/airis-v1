@@ -15,7 +15,7 @@ import os; PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__)
 
 from app import config
 from core.conversation import ConversationHistory
-from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision
+from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision, routes_protocols, routes_ephemeral
 from database.character_traits import get_trait_list
 from core.system_prompt import build_system_message
 
@@ -25,6 +25,15 @@ app = FastAPI(
     description="AI Assistant",
     version="3.0.0"
 )
+
+# Mount attachments directory as static files
+# This allows serving images via URLs instead of base64 encoding
+attachments_path = os.path.join(os.path.dirname(__file__), "..", "attachments")
+app.mount("/attachments", StaticFiles(directory=attachments_path), name="attachments")
+
+# Mount static directory for HTML/CSS/JS files
+static_path = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # Initialize conversation
 # Persistnace = "store in database" no persistance "use session only"
@@ -41,6 +50,8 @@ app.include_router(routes_session.router)
 app.include_router(routes_context.router)
 app.include_router(routes_tts.router)
 app.include_router(routes_vision.router, prefix="/api/vision", tags=["vision"])
+app.include_router(routes_protocols.router, prefix="/api", tags=["protocols"])
+app.include_router(routes_ephemeral.router, tags=["ephemeral"])
 
 @app.get("/prompt")
 def show_prompt():
@@ -52,6 +63,20 @@ async def root():
     """Serve the chat interface"""
     static_path = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
     with open(static_path, "r") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/protocols")
+async def protocol_editor():
+    """Serve the protocol editor"""
+    editor_path = os.path.join(os.path.dirname(__file__), "..", "static", "protocol_editor.html")
+    with open(editor_path, "r") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/ephemeral")
+async def ephemeral_chat():
+    """Serve the ephemeral chat interface"""
+    chat_path = os.path.join(os.path.dirname(__file__), "..", "static", "ephemeral_chat.html")
+    with open(chat_path, "r") as f:
         return HTMLResponse(content=f.read())
 
 @app.get("/api/health")

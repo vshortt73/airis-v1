@@ -1,0 +1,62 @@
+{
+  "generated_at": "2025-12-23T10:22:02.286292",
+  "total_sessions": 8,
+  "sessions": [
+    {
+      "session_id": "b211f291-4711-4a01-895f-ad7763b49190",
+      "message_count": 10,
+      "days_ago": 0.07982577498842593,
+      "session_start": "2025-12-23 08:20:19.157727",
+      "session_end": "2025-12-23 08:27:05.325315"
+    },
+    {
+      "session_id": "5aa3b0b5-4899-4dbe-83f6-4f1f70a3ac6a",
+      "message_count": 16,
+      "days_ago": 1.6322431841898148,
+      "session_start": "2025-12-21 19:07:33.588527",
+      "session_end": "2025-12-21 19:11:36.461160"
+    },
+    {
+      "session_id": "f87199de-5fa1-42dc-a06a-ae0ca3eabf82",
+      "message_count": 14,
+      "days_ago": 4.957717991736111,
+      "session_start": "2025-12-18 10:43:26.352575",
+      "session_end": "2025-12-18 11:22:55.437788"
+    },
+    {
+      "session_id": "dff42b8e-49f0-4321-962f-e425f3556f09",
+      "message_count": 20,
+      "days_ago": 4.728429619421297,
+      "session_start": "2025-12-18 16:37:10.506942",
+      "session_end": "2025-12-18 16:53:05.953156"
+    },
+    {
+      "session_id": "8f12dcff-8730-40d7-b461-81b732cf0597",
+      "message_count": 12,
+      "days_ago": 6.5053236109953705,
+      "session_start": "2025-12-16 21:44:53.883695",
+      "session_end": "2025-12-16 22:14:22.312284"
+    },
+    {
+      "session_id": "44e8587c-acfa-402c-8e49-6af855d7262b",
+      "message_count": 12,
+      "days_ago": 165.68054144126157,
+      "session_start": "2025-07-10 18:20:39.952000",
+      "session_end": "2025-07-10 19:02:03.491749"
+    },
+    {
+      "session_id": "fda50a7b-f27a-4d0b-9b21-bc827d714a27",
+      "message_count": 18,
+      "days_ago": 54.829489511875,
+      "session_start": "2025-10-29 14:52:14.764928",
+      "session_end": "2025-10-29 15:27:34.378448"
+    },
+    {
+      "session_id": "56582dfc-0e91-4f8c-8ff6-dc92c4209b0c",
+      "message_count": 26,
+      "days_ago": 90.75358621207175,
+      "session_start": "2025-09-23 16:37:53.675784",
+      "session_end": "2025-09-23 17:16:52.423551"
+    }
+  ]
+}

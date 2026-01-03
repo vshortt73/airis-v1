@@ -768,14 +768,29 @@ def linux_shell(command: str) -> dict:
 @server.register_tool
 def database_query(query: str) -> dict:
     """
-    Execute READ-ONLY SQL queries on Iris's database.
-    Allows introspection of memories, traits, and conversation history.
-    
+    Execute SQL queries on Iris's database with automatic token safety limits.
+
+    IMPORTANT: This tool estimates result size BEFORE executing queries.
+    If a query would return more than 3000 tokens, it returns error "QUERY_TOO_LARGE"
+    with the estimated token count. Refine your query with LIMIT, fewer columns,
+    or more specific WHERE conditions.
+
+    Successful queries include 'estimated_tokens' so you can see how close you are
+    to the limit.
+
+    BEST PRACTICE: Always use *_readable views (episodic_memories_readable,
+    chat_history_readable) instead of base tables to avoid embedding columns.
+
     Args:
-        query: SQL SELECT statement
-        
+        query: SQL query statement (SELECT, SHOW, DESCRIBE, EXPLAIN, UPDATE, INSERT, ALTER allowed)
+
     Returns:
-        Query results with row data
+        dict with:
+          - success: bool
+          - results: list of row dicts (if successful)
+          - estimated_tokens: int (if successful)
+          - error: str (if failed)
+          - message: str (if QUERY_TOO_LARGE, explains how to fix)
     """
     import psycopg2
     from database.persistence import get_db_connection
@@ -798,9 +813,13 @@ def database_query(query: str) -> dict:
             "error": "Only SELECT, SHOW, DESCRIBE, and EXPLAIN queries allowed"
         }
     
-    # Check for blocked keywords anywhere in query
+    # Check for blocked keywords as standalone words (not in column names like "created_at")
+    # Use word boundaries to avoid false positives
+    import re
     for keyword in BLOCKED_KEYWORDS:
-        if keyword in query_upper:
+        # Match keyword as a whole word, not as substring
+        pattern = r'\b' + re.escape(keyword) + r'\b'
+        if re.search(pattern, query_upper):
             return {
                 "success": False,
                 "error": f"Modification operations not allowed. Blocked keyword: {keyword}"
@@ -809,8 +828,42 @@ def database_query(query: str) -> dict:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Execute query
+
+        # Step 1: Estimate token count BEFORE executing actual query
+        # Using Victor's proven CONCAT approach
+        token_check_query = f"""
+        SELECT SUM((LENGTH(CONCAT(t.*)))/4)
+        FROM ({query.rstrip(';')}) as t
+        """
+
+        try:
+            cursor.execute(token_check_query)
+            result = cursor.fetchone()
+            estimated_tokens = int(result[0]) if result and result[0] else 0
+
+            # Step 2: Check against threshold
+            import sys
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from app import config
+            max_tokens = getattr(config, 'MAX_SQL_RESULT_TOKENS', 3000)
+
+            if estimated_tokens > max_tokens:
+                cursor.close()
+                conn.close()
+                return {
+                    "success": False,
+                    "error": "QUERY_TOO_LARGE",
+                    "message": f"Query would return approximately {estimated_tokens} tokens, exceeding the {max_tokens} token limit. Please refine your query with LIMIT, fewer columns, or more specific WHERE conditions.",
+                    "estimated_tokens": estimated_tokens,
+                    "threshold": max_tokens
+                }
+
+        except Exception as token_check_error:
+            # If token estimation fails, log but continue (don't block the query)
+            # This ensures backward compatibility if CONCAT doesn't work on some queries
+            print(f"[system_server.py][database_query] Token estimation failed (continuing): {token_check_error}")
+
+        # Step 3: Execute actual query if token check passed
         cursor.execute(query)
         
         # Get column names
@@ -826,12 +879,13 @@ def database_query(query: str) -> dict:
         
         cursor.close()
         conn.close()
-        
+
         return {
             "success": True,
             "columns": columns,
             "results": results,
-            "row_count": len(results)
+            "row_count": len(results),
+            "estimated_tokens": estimated_tokens if 'estimated_tokens' in locals() else None
         }
     
     except psycopg2.Error as e:

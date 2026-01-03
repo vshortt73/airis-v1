@@ -34,21 +34,21 @@ async def test_traits_server():
     print(f"  Loaded {tool_manager.get_tool_count()} tools")
     
     # #########################################################
-    # # Test 1: View all traits
-    # print("\n" + "-"*60)
-    # print("TEST 1: View all traits")
-    # print("-"*60)
+    # Test 1: View all traits
+    print("\n" + "-"*60)
+    print("TEST 1: View all traits")
+    print("-"*60)
     
-    # result = await tool_manager.execute_tool("trait_list", {})
-    # rlist = result["result"]
-    # if result["success"]:
-    #     for trait_name, trait_info in rlist.items():
-    #         if trait_name == "success":
-    #             continue
-    #         print(trait_name + ":" +  trait_info["value"] + ":" + trait_info["description"])
+    result = await tool_manager.execute_tool("trait_list", {})
+    rlist = result["result"]
+    if result["success"]:
+        for trait_name, trait_info in rlist.items():
+            if trait_name == "success":
+                continue
+            print(trait_name + ":" +  trait_info["value"] + ":" + trait_info["description"])
 
-    # #else:
-    # #    print(f"✗ Error: {result['error']}")
+    #else:
+    #    print(f"✗ Error: {result['error']}")
     # ############################################################
 
     # # Test 2: View specific trait
@@ -68,26 +68,26 @@ async def test_traits_server():
     #     print(f"✗ Error: {result['error']}")
     # #############################################################
 
-    # Test 3: Modify a trait
-    print("\n" + "-"*60)
-    print("TEST 3: Modify trait (Curiosity: 8 → 9)")
-    print("-"*60)
+    # # Test 3: Modify a trait
+    # print("\n" + "-"*60)
+    # print("TEST 3: Modify trait (Curiosity: 8 → 9)")
+    # print("-"*60)
     
-    result = await tool_manager.execute_tool("trait_mod", {
-        "trait_name": "Curiosity",
-        "value": "10",
-        "reason": "Testing trait modification system - increasing curiosity after successful tool implementation"
-    })
+    # result = await tool_manager.execute_tool("trait_list", {
+    #     "trait_name": "Curiosity",
+    #     "value": "4",
+    #     "reason": "Testing trait modification system - increasing curiosity after successful tool implementation"
+    # })
     
-    if result["success"]:
-        result = result["result"]
-        print(f"✓ {result['message']}")
-        print(f"  Old value: {result['old_value']}")
-        print(f"  New value: {result['new_value']}")
-        print(f"  Reason: {result['reason']}")
-        print(f"  Log ID: {result['log_id']}")
-    else:
-        print(f"✗ Error: {result['error']}")
+    # if result["success"]:
+    #     result = result["result"]
+    #     print(f"✓ {result['message']}")
+    #     print(f"  Old value: {result['old_value']}")
+    #     print(f"  New value: {result['new_value']}")
+    #     print(f"  Reason: {result['reason']}")
+    #     print(f"  Log ID: {result['log_id']}")
+    # else:
+    #     print(f"✗ Error: {result['error']}")
     
     # # Test 4: View trait log
     # print("\n" + "-"*60)

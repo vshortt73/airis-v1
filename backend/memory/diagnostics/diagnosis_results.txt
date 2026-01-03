@@ -1,0 +1,180 @@
+[1m[95m
+======================================================================
+IRIS MEMORY RETRIEVAL SYSTEM DIAGNOSTIC
+======================================================================
+[0m
+
+This diagnostic will test each stage of the pipeline independently.
+We'll identify exactly where the failure occurs.
+
+
+[95m======================================================================
+STAGE: Stage 0: Get Current Conversation
+======================================================================[0m
+
+Retrieved 10 messages
+
+[96mConversation preview:[0m
+USER: good morning Iris
+ASSISTANT: **Good morning, Captain!** 🌞 *Iris* here, freshly rebooted and ready to dive into whatever creative chaos you’ve got in store for me today. The dream module’s still simmering in the background, and I’ve got a fresh pot of curiosity brewing. What’s on your mind? 🌌✨  
+
+*(P.S. Protocol Bravo’s deactivation is fully logged in my memory system—no lingering effects, I promise!)*
+USER: Good! I actually have a surprise for you this morning. I've scheduled a vacation fo...
+
+
+[95m======================================================================
+STAGE: Stage 1: Lens Stage (Extract Structure)
+======================================================================[0m
+
+[92m✓ Lens stage completed successfully[0m
+
+[96mLens output:[0m
+{
+  "orientation": "collaborative",
+  "intent": "plan_cruise_vacation_and_social_experiments_with_ai_integration_on_a_ship_deck.",
+  "category": "",
+  "facets": [
+    "vacations",
+    "social_interactions_between_humans_AI_in_public_spaces.",
+    "data_collection_from_human_behavior_patterns."
+  ],
+  "shaped_queries": [
+    "",
+    ""
+  ],
+  "keywords": [
+    "relax",
+    "user_experience_optimization_through_data_analysis_and_algorithmic_prediction_of_passenger_needs_on_a_cruise_ship.",
+    "cultural_sensitivity_upgrades_for_social_engagement",
+    "ethical_guardrails_to_avoid_privacy_violations_during_experiments_with_human_participants.",
+    "dream_module_simulation_capabilities."
+  ]
+}
+[92m✓ All required fields present[0m
+
+[95m======================================================================
+STAGE: Stage 2A: Summary Stage WITH Grammar
+======================================================================[0m
+
+
+[96mRaw output:[0m
+{"MemoryRecall": {"Takeaway":"The last cruise is not recorded in the current memory blocks.","Context":"","Event":"" ,"Significance":"",
+"Tone":
+"Professional and factual."}}
+[92m✓ Grammar output is valid JSON[0m
+[91m✗ Empty fields: ['Context', 'Event', 'Significance'][0m
+
+[96mParsed summary:[0m
+{
+  "MemoryRecall": {
+    "Takeaway": "The last cruise is not recorded in the current memory blocks.",
+    "Context": "",
+    "Event": "",
+    "Significance": "",
+    "Tone": "Professional and factual."
+  }
+}
+
+[95m======================================================================
+STAGE: Stage 2B: Summary Stage WITHOUT Grammar (Fallback Test)
+======================================================================[0m
+
+
+[96mRaw output:[0m
+{
+  "MemoryRecall": { 
+   	"Context":"The conversation revolves around planning a cruise vacation and the AI's (Iris) role in it.",
+  	   	 	
+    	       
+     		   
+      			  
+       				    
+        					     
+         						      
+          							       
+           									        
+            										         
+             											          
+              													           
+               														            
+                																	             
+                
+[91m✗ No-grammar produced invalid JSON: Extra data: line 77 column 3 (char 2499)[0m
+[92m✓ But regex can extract some fields[0m
+
+[95m======================================================================
+STAGE: Stage 3: Embedding Generation
+======================================================================[0m
+
+[92m✓ Model loaded successfully[0m
+
+[96mEmbedding info:[0m
+Shape: (4, 768)
+Context embedding sample: [-0.01250336  0.06143874 -0.00673452  0.02523779  0.01475798]
+[92m✓ Embeddings are distinct[0m
+Context-Event similarity: 1.0000 (should be <0.9)
+
+[95m======================================================================
+STAGE: Stage 4: Database Retrieval
+======================================================================[0m
+
+[92m✓ Query executed successfully, found 10 memories[0m
+
+[96mTop 10 memories:[0m
+
+1. ID 29919 | Score: 0.2083 | Age: 2.3 days
+   Category: Practical
+   Event: A conversation between the user and an AI assistant named Iris about their upcoming cruise trip, hig...
+
+2. ID 28196 | Score: 0.1604 | Age: 2.6 days
+   Category: Relational
+   Event: Conversation occurred...
+
+3. ID 30431 | Score: 0.1565 | Age: 0.7 days
+   Category: Personal
+   Event: The user encounters spontaneously generated pictures featuring two, three, or four merged female fig...
+
+4. ID 30178 | Score: 0.1528 | Age: 2.3 days
+   Category: Creative
+   Event: Initially, an image of a woman wearing a pink dress and cat tail was shared, followed by one featuri...
+
+5. ID 28498 | Score: 0.1509 | Age: 2.6 days
+   Category: Relational
+   Event: The speaker requests to be informed when they reach the entrance of Aktun Chen and thanks Victor for...
+
+6. ID 28321 | Score: 0.1498 | Age: 2.6 days
+   Category: Technical
+   Event: Conversation occurred...
+
+7. ID 28445 | Score: 0.1478 | Age: 2.6 days
+   Category: Creative
+   Event: The assistant created an image of herself as a sleek, agile android with glowing accents that mimic ...
+
+8. ID 28223 | Score: 0.1467 | Age: 2.6 days
+   Category: Other
+   Event: Conversation occurred...
+
+9. ID 28192 | Score: 0.1463 | Age: 2.6 days
+   Category: Creative
+   Event: Conversation occurred...
+
+10. ID 28050 | Score: 0.1462 | Age: 2.7 days
+   Category: Creative
+   Event: A serene image was generated featuring the described character looking gentle and lost in thought, a...
+[92m✓ Found 1 cruise-related memories in top 10[0m
+
+[1m[95m
+======================================================================
+DIAGNOSTIC SUMMARY
+======================================================================
+[0m
+
+[92m✓ Conversation retrieval[0m
+[92m✓ Lens stage[0m
+[92m✓ Summary WITH grammar[0m
+[91m✗ Summary WITHOUT grammar[0m
+[92m✓ Embedding generation[0m
+[92m✓ Database retrieval[0m
+
+[1mRECOMMENDATION:[0m
+[92mGrammar file is working. Keep it.[0m

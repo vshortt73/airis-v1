@@ -6,13 +6,20 @@ All settings explicitly defined
 # ============================================
 # OLLAMA CONFIGURATION
 # ============================================
-# Main Ollama instance (GPU 0 - RTX 5090)
+# Main Ollama instance (GPU 1 - RTX 5090 with 32GB VRAM via inverted CUDA) - Port 11434
 OLLAMA_BASE_URL = "http://localhost:11434"
+#OLLAMA_MODEL = "qwen2.5:72b"  # 72B model with RAM offloading
 OLLAMA_MODEL = "qwen3:32b"
-OLLAMA_CONTEXT_WINDOW = 32768  # CRITICAL: Never use default 4096
+OLLAMA_CONTEXT_WINDOW = 65536  # 64K context - qwen3:32b native context window
 
-# Vision Ollama instance (GPU 1 - RTX 4080 Super)
+OLLAMA_MEMORY_MODEL: "qwen2.5:14b"
+OLLAMA_MEMORY_CONTEXT_WINDOW = 4096
+OLLAMA_MEMORY_URL = "http://localhost:11436"
+
+# Vision Ollama instance (GPU 0 - RTX 4080 Super with 16GB VRAM via inverted CUDA) - Port 11435
+OLLAMA_VISION_MODEL: "llava:7b"
 VISION_OLLAMA_URL = "http://localhost:11435"
+
 
 # ============================================
 # SERVER CONFIGURATION
@@ -35,12 +42,12 @@ SESSION_TIMEOUT_MINUTES = 30  # Create new session if gap exceeds this
 # TOKEN BUDGET ALLOCATION
 # ============================================
 # Total available context window
-CONTEXT_WINDOW = OLLAMA_CONTEXT_WINDOW  # 16384 tokens
+CONTEXT_WINDOW = OLLAMA_CONTEXT_WINDOW  # 131072 tokens (128K)
 
 # Fixed allocations (cannot be truncated)
 SYSTEM_PROMPT_BASE_BUDGET = 600         # Base identity paragraph
 CHARACTER_TRAITS_BUDGET = 200           # All 144 traits (estimated)
-RESPONSE_GENERATION_BUDGET = 2500       # Room for Iris to respond
+RESPONSE_GENERATION_BUDGET = 2000       # Room for Iris to respond (reduced for 8K context)
 
 # Dynamic allocations (can be truncated with priority)
 # Priority 1 (High) - Truncate last
@@ -71,12 +78,12 @@ SAFETY_MARGIN = CONTEXT_WINDOW - TOTAL_ALLOCATED
 # CONTEXT MANAGEMENT
 # ============================================
 
-# Primary limit: conversation turns (user+assistant pairs)
-MAX_CONVERSATION_TURNS = 15
+# Primary limit: conversation turns (DEPRECATED - now using dynamic token budgeting)
+MAX_CONVERSATION_TURNS = 500  # Legacy - not used anymore, kept for compatibility
 
-# Safety limits: prevent context overflow
-MAX_CONTEXT_TOKENS = 12000        # Hard token limit for conversation history
-MAX_TOTAL_MESSAGES = 100          # Absolute message count limit (safety net)
+# Safety limits: prevent runaway loading
+MAX_CONTEXT_TOKENS = 6000     # Conversation history token limit (dynamic fills this)
+MAX_TOTAL_MESSAGES = 50       # DIAGNOSTIC: Reduced from 500 to test tool calling with less history
 
 # Context budget allocation (total: 16384 tokens)
 SYSTEM_PROMPT_TOKEN_BUDGET = 2000  # Reserve for system prompt
@@ -94,6 +101,7 @@ CONTEXT_DEBUG = False              # Log detailed token counting info
 # ============================================
 SYSTEM_INSTRUCTIONS = True
 CHARACTER_TRAITS = True
+SHORT_TERM_FACTS = True           # Include recent manually flagged facts
 EPISODIC_MEMORIES = True
 TOOLS_ENABLE = True
 TOOL_RESULTS = True
@@ -108,7 +116,15 @@ DB_NAME = "irisdb"
 DB_USER = "irisuser"
 # IMPORTANT: Use IRIS_DB_PASSWORD environment variable instead of hardcoding
 # DB_PASSWORD is a fallback only - DO NOT commit real credentials
-DB_PASSWORD = None  # Always use IRIS_DB_PASSWORD environment variable
+DB_PASSWORD = "yourpassword"  # Always use IRIS_DB_PASSWORD environment variable
+IRIS_DB_PASSWORD = "yourpassword"
+
+# ============================================
+# TOOL RESULT LIMITS
+# ============================================
+# SQL query result token safety threshold
+# Prevents context overflow from unbounded query results
+MAX_SQL_RESULT_TOKENS = 3000  # Token limit for SQL query results
 
 # ============================================
 # VISION SYSTEM CONFIGURATION

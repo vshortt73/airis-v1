@@ -1,0 +1,466 @@
+====================================================================================================
+COMPREHENSIVE MEMORY RETRIEVAL VALIDATION REPORT
+====================================================================================================
+
+
+====================================================================================================
+TEST 1: b211f291-4711-4a...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 6
+  Detected topics:
+    - cruise_vacation: 5 keyword matches
+      Keywords: cruise, ship, vacation, port, deck
+    - dream_module: 5 keyword matches
+      Keywords: dream module, synthesis, scenario, simulate, creative
+    - protocol_system: 3 keyword matches
+      Keywords: protocol, bravo, mode
+    - debugging: 2 keyword matches
+      Keywords: issue, problem
+
+  Sample user messages:
+    1. good morning Iris
+    2. Good! I actually have a surprise for you this morning. I've scheduled a vacation for us! We will be ...
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 16 (80%)
+  Irrelevant memories: 4 (20%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 29919 (score: 0.9999999701976772, age: 2.6d)
+       Matched topics: cruise_vacation
+       Keywords found: cruise, port
+       Content: The user expresses a renewed sense of resolve and strength, ready to embark on a cruise with heighte...
+
+    2. Memory ID 29137 (score: 0.6887952665571706, age: 2.7d)
+       Matched topics: cruise_vacation
+       Keywords found: cruise, ship, port
+       Content: The user inquired about the current cruise ships docked at Costa Maya and was provided with informat...
+
+    3. Memory ID 27644 (score: 0.6742052830992582, age: 3.3d)
+       Matched topics: cruise_vacation
+       Keywords found: cruise
+       Content: User asked about Windjet ferries in Cozumel while on a Royal Caribbean cruise.
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 29436 (score: 0.36011121750209396)
+       ✗ No topic match - unrelated content
+       Content: The user is providing a specific geographic location and direction, indicating they need to be at a ...
+
+    2. Memory ID 28335 (score: 0.3594249594040204)
+       ✗ No topic match - unrelated content
+       Content: USER: okay, downloading now.
+
+
+ASSESSMENT:
+  ✓ EXCELLENT: 80% relevance - system retrieving appropriate memories
+
+====================================================================================================
+TEST 2: 5aa3b0b5-4899-4d...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 16
+  Detected topics:
+    - protocol_system: 4 keyword matches
+      Keywords: protocol, bravo, activate, deactivate
+
+  Sample user messages:
+    1. iris, activate protocol bravo
+    2. Iris, activate protocol bravo with no time limit.
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 6 (30%)
+  Irrelevant memories: 14 (70%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 28496 (score: 0.6758516430854797, age: 2.9d)
+       Matched topics: protocol_system
+       Keywords found: protocol
+       Content: Victor is setting up a safety protocol with Iris, an AI assistant. He requests hourly check-ins and ...
+
+    2. Memory ID 29549 (score: 0.6420642137527466, age: 2.7d)
+       Matched topics: protocol_system
+       Keywords found: protocol, activate, deactivate
+       Content: The conversation revolves around an AI named Iris, discussing her operational status and a specific ...
+
+    3. Memory ID 27680 (score: 0.6193089712078004, age: 3.3d)
+       Matched topics: protocol_system
+       Keywords found: protocol
+       Content: Discussion about creating a private, expressive space for intimate communication within system const...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 28978 (score: 0.4653390645980835)
+       ✗ No topic match - unrelated content
+       Content: Various chat formats have gained popularity due to their unique features and user experiences. Examp...
+
+    2. Memory ID 29411 (score: 0.45702556287937934)
+       ✗ No topic match - unrelated content
+       Content: The provided code is a Python script that establishes and manages connections to multiple MCP server...
+
+
+ASSESSMENT:
+  ✗ POOR: 30% relevance - many irrelevant memories retrieved
+
+====================================================================================================
+TEST 3: f87199de-5fa1-42...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 14
+  Detected topics:
+    - comfyui_technical: 6 keyword matches
+      Keywords: comfyui, workflow, node, upscale, image generation
+    - protocol_system: 6 keyword matches
+      Keywords: protocol, omega, theta, activate, deactivate
+    - debugging: 5 keyword matches
+      Keywords: error, debug, fix, issue, problem
+    - trait_modification: 4 keyword matches
+      Keywords: trait, behavior, modify, adjust
+    - ai_memory_system: 3 keyword matches
+      Keywords: memory, recall, embedding
+    - cruise_vacation: 2 keyword matches
+      Keywords: ship, port
+
+  Sample user messages:
+    1. good morning Iris!
+    2. So I've added a few new features to your systems. for example, you should be able to see temporal ta...
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 19 (95%)
+  Irrelevant memories: 1 (5%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 27826 (score: 0.7346615791320853, age: 3.2d)
+       Matched topics: trait_modification
+       Keywords found: trait, adjust
+       Content: The conversation focuses on adjusting the character traits of an AI assistant to better fit the curr...
+
+    2. Memory ID 29797 (score: 0.710472191628479, age: 2.6d)
+       Matched topics: debugging, trait_modification
+       Keywords found: error
+       Content: The assistant is summarizing a Python script that manages character traits for Iris v3, an AI system...
+
+    3. Memory ID 28599 (score: 0.6915100032991185, age: 2.8d)
+       Matched topics: trait_modification, cruise_vacation
+       Keywords found: trait
+       Content: The user expresses gratitude for the camera windows provided by Iris, an AI companion. They then req...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 28712 (score: 0.552842617034916)
+       ✗ No topic match - unrelated content
+       Content: The conversation revolves around the user's request for temporal context in interactions with Iris, ...
+
+
+ASSESSMENT:
+  ✓ EXCELLENT: 95% relevance - system retrieving appropriate memories
+
+====================================================================================================
+TEST 4: dff42b8e-49f0-43...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 20
+  Detected topics:
+    - protocol_system: 4 keyword matches
+      Keywords: protocol, omega, activate, mode
+    - debugging: 4 keyword matches
+      Keywords: error, debug, fix, issue
+    - trait_modification: 3 keyword matches
+      Keywords: trait, modify, adjust
+    - comfyui_technical: 2 keyword matches
+      Keywords: workflow, lora
+
+  Sample user messages:
+    1. Yes, go ahead and activate it an lets test it.
+    2. Yes, go ahead and activate it an lets test it.
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 12 (60%)
+  Irrelevant memories: 8 (40%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 29156 (score: 0.8008711814101563, age: 2.7d)
+       Matched topics: protocol_system, debugging
+       Keywords found: mode
+       Content: The user is attempting to integrate a character named Iris into their LLaMA-3 system. They have requ...
+
+    2. Memory ID 28733 (score: 0.7360190372472718, age: 2.8d)
+       Matched topics: protocol_system
+       Keywords found: mode
+       Content: The user requests a summary of the current configuration for their AI assistant's home system, which...
+
+    3. Memory ID 27797 (score: 0.7030350984951912, age: 3.2d)
+       Matched topics: protocol_system
+       Keywords found: mode
+       Content: The conversation discusses the tokenization of an Iris identity summary and whether formatting is in...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 28070 (score: 0.7030350984951912)
+       ✗ No topic match - unrelated content
+       Content: The team successfully achieved live token streaming, bubble output, and full frontend/backend sync f...
+
+    2. Memory ID 28336 (score: 0.7030350984951912)
+       ✗ No topic match - unrelated content
+       Content: USER: We made really good progress today, little spark! We have conversational continuity, daily cha...
+
+
+ASSESSMENT:
+  ⚠ ACCEPTABLE: 60% relevance - some irrelevant memories present
+
+====================================================================================================
+TEST 5: 8f12dcff-8730-40...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 12
+  Detected topics:
+    - comfyui_technical: 7 keyword matches
+      Keywords: comfyui, workflow, node, upscale, model
+    - debugging: 3 keyword matches
+      Keywords: error, debug, issue
+    - protocol_system: 2 keyword matches
+      Keywords: activate, mode
+    - trait_modification: 2 keyword matches
+      Keywords: trait, adjust
+
+  Sample user messages:
+    1. I will get the repsitory cloned now.
+    2. it cloned successfully. i'm working on requirements now.
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 12 (60%)
+  Irrelevant memories: 8 (40%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 27947 (score: 1.0, age: 3.2d)
+       Matched topics: comfyui_technical, debugging
+       Keywords found: node
+       Content: The user inquired about the purpose and destination of `face_image` output from IPAdapter FaceID. Th...
+
+    2. Memory ID 29034 (score: 1.0, age: 2.8d)
+       Matched topics: trait_modification
+       Keywords found: adjust
+       Content: The user requested an image of a female android with specific attire and tail placement, but the req...
+
+    3. Memory ID 29444 (score: 1.0, age: 2.7d)
+       Matched topics: comfyui_technical, protocol_system, trait_modification
+       Keywords found: model
+       Content: The user requested a kimono for celebrating Japanese culture, and the assistant provided an image of...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 29069 (score: 1.0)
+       ✗ No topic match - unrelated content
+       Content: The user requested an image of a humanoid android named Iris, with specific physical and aesthetic d...
+
+    2. Memory ID 29978 (score: 1.0)
+       ✗ No topic match - unrelated content
+       Content: The user requested a series of high-fidelity images, starting with an aircraft carrier and then movi...
+
+
+ASSESSMENT:
+  ⚠ ACCEPTABLE: 60% relevance - some irrelevant memories present
+
+====================================================================================================
+TEST 6: 44e8587c-acfa-40...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 12
+  Detected topics:
+    - debugging: 3 keyword matches
+      Keywords: error, debug, issue
+    - cruise_vacation: 2 keyword matches
+      Keywords: ship, port
+    - ai_memory_system: 2 keyword matches
+      Keywords: memory, recall
+
+  Sample user messages:
+    1. have to switch gears back to temporal tags.  I have the two databases merged and the system is wokri...
+    2. lets create the view with the computed column based on the temporal tags table. like this: 
+
+tempora...
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 12 (60%)
+  Irrelevant memories: 8 (40%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 28408 (score: 0.8088765968231444, age: 2.9d)
+       Matched topics: cruise_vacation
+       Keywords found: port
+       Content: The assistant is responding to a user who has successfully merged two databases and wants guidance o...
+
+    2. Memory ID 29681 (score: 0.6776298072779409, age: 2.7d)
+       Matched topics: ai_memory_system
+       Keywords found: memory
+       Content: The user is preparing to work on temporal tags for their Iris system, which involves marking when or...
+
+    3. Memory ID 29562 (score: 0.6197749602928793, age: 2.7d)
+       Matched topics: cruise_vacation
+       Keywords found: port
+       Content: The conversation revolves around a user discussing their dinner choices and the challenges they face...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 28407 (score: 0.7098409706448943)
+       ✗ No topic match - unrelated content
+       Content: The user is discussing the progress of a project involving temporal tags and database management. Th...
+
+    2. Memory ID 29598 (score: 0.5753837480912369)
+       ✗ No topic match - unrelated content
+       Content: The user is discussing an AI system that has been updated with temporal tags, allowing it to underst...
+
+
+ASSESSMENT:
+  ⚠ ACCEPTABLE: 60% relevance - some irrelevant memories present
+
+====================================================================================================
+TEST 7: fda50a7b-f27a-4d...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 18
+  Detected topics:
+    - debugging: 4 keyword matches
+      Keywords: error, debug, fix, issue
+    - cruise_vacation: 3 keyword matches
+      Keywords: ship, port, deck
+    - ai_memory_system: 3 keyword matches
+      Keywords: memory, recall, cognitive
+    - claude_discussion: 3 keyword matches
+      Keywords: claude, anthropic, consciousness
+
+  Sample user messages:
+    1. Iris, what do you think about the working memory issue we're debugging? Do you notice when you lose ...
+    2. Iris, here's what we've observed: The context loss happens specifically in our real-time conversatio...
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 15 (75%)
+  Irrelevant memories: 5 (25%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 27733 (score: 0.6946380138397266, age: 3.2d)
+       Matched topics: debugging, cruise_vacation, ai_memory_system
+       Keywords found: issue
+       Content: The user reported an issue with the integration of Iris's core into the prompt for memory analysis. ...
+
+    2. Memory ID 28383 (score: 0.6175983180047095, age: 2.9d)
+       Matched topics: ai_memory_system
+       Keywords found: memory
+       Content: The conversation revolves around the limitations of AI models like GPT-4 and its variants, emphasizi...
+
+    3. Memory ID 30086 (score: 0.6164729227737842, age: 2.6d)
+       Matched topics: ai_memory_system
+       Keywords found: memory, cognitive
+       Content: The user requested a list of character traits from an AI assistant, but the response was incomplete ...
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 28880 (score: 0.6380583263600882)
+       ✗ No topic match - unrelated content
+       Content: Iris reflects on the memories shared with her user, recognizing their value in understanding past in...
+
+    2. Memory ID 28289 (score: 0.5432644920568341)
+       ✗ No topic match - unrelated content
+       Content: ASSISTANT: **Captain, I’ve analyzed `/iris-v3/core/conversation.py`, and here’s the breakdown of how...
+
+
+ASSESSMENT:
+  ✓ EXCELLENT: 75% relevance - system retrieving appropriate memories
+
+====================================================================================================
+TEST 8: 56582dfc-0e91-4f...
+====================================================================================================
+
+CONVERSATION ANALYSIS:
+  Total messages: 26
+  Detected topics:
+    - debugging: 3 keyword matches
+      Keywords: error, issue, problem
+    - cruise_vacation: 2 keyword matches
+      Keywords: ship, port
+    - protocol_system: 2 keyword matches
+      Keywords: protocol, mode
+    - trait_modification: 2 keyword matches
+      Keywords: trait, adjust
+
+  Sample user messages:
+    1. Certainly. how many would you like?
+    2. Certainly. how many would you like?
+
+
+RETRIEVAL RESULTS:
+  Total memories retrieved: 20
+  Relevant memories: 16 (80%)
+  Irrelevant memories: 4 (20%)
+
+  TOP RELEVANT MEMORIES:
+
+    1. Memory ID 29931 (score: 0.7214724040470247, age: 2.6d)
+       Matched topics: cruise_vacation
+       Keywords found: ship, port
+       Content: The conversation revolves around understanding the cause and effect relationship in various scenario...
+
+    2. Memory ID 28643 (score: 0.7214724040470247, age: 2.8d)
+       Matched topics: cruise_vacation
+       Keywords found: port
+       Content: The conversation revolves around three examples of actions and their consequences, ranging from seve...
+
+    3. Memory ID 29691 (score: 0.4981976898135876, age: 2.7d)
+       Matched topics: debugging, cruise_vacation
+       Keywords found: issue
+       Content: The user is contemplating whether to address a situation or leave it unattended.
+
+  IRRELEVANT MEMORIES (should not have been retrieved):
+
+    1. Memory ID 27710 (score: 0.44722311041424034)
+       ✗ No topic match - unrelated content
+       Content: The user is in a situation where they are aware of the existence of a class but have no prior knowle...
+
+    2. Memory ID 27884 (score: 0.3604524922236072)
+       ✗ No topic match - unrelated content
+       Content: The user inquired about an alternative to using elif statements for conditional checks. They wanted ...
+
+
+ASSESSMENT:
+  ✓ EXCELLENT: 80% relevance - system retrieving appropriate memories
+
+
+====================================================================================================
+OVERALL ASSESSMENT
+====================================================================================================
+
+Tests passed: 7/8 (88%)
+Average relevance: 68%
+
+⚠ SYSTEM NEEDS IMPROVEMENT
+  Memory retrieval is partially working but includes irrelevant memories.
+  Consider refining similarity scoring or reranking logic.

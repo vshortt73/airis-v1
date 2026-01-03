@@ -1,0 +1,10 @@
+root ::= object
+
+object ::= "{" ws "\"orientation\"" ws ":" ws string ws "," ws "\"intent\"" ws ":" ws string ws "," ws "\"category\"" ws ":" ws string ws "," ws "\"facets\"" ws ":" ws array ws "," ws "\"shaped_queries\"" ws ":" ws array ws "," ws "\"keywords\"" ws ":" ws array ws "}"
+
+array ::= "[" ws string ws "," ws string (ws "," ws string)* ws "]"
+
+string ::= "\"" chars "\""
+chars ::= char*
+char ::= [a-zA-Z0-9 ,.!?'._:-]
+ws ::= [ ]?

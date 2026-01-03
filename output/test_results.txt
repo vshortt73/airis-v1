@@ -1,0 +1,6 @@
+ERROR:  syntax error at or near "n"
+LINE 7: n    + LENGTH(COALESCE(conv_title,))
+        ^
+Estimated 0 tokens for  rows
+Safe limit:  rows
+SELECT * FROM  LIMIT ;

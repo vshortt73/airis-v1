@@ -1,0 +1,13 @@
+root ::= object
+
+object ::= "{ ws "\"Context\"" ws ":" ws string ws "," ws "\"Event\"" ws ":" ws string ws "," ws "\"Significance\"" ws ":" ws string ws "," ws "\"Tone\"" ws ":" ws string ws "," ws "\"Takeaway\"" ws ":" ws string ws "}" ws "}"
+
+string ::= "\"" chars "\""
+
+chars  ::= char*
+char   ::= safe | escape
+safe   ::= [a-zA-Z0-9 ,.!?'._-]
+escape ::= "\\" ["\\/bfnrt] | "\\u" hex hex hex hex
+hex    ::= [0-9a-fA-F]
+
+ws ::= [ \t\n\r]*

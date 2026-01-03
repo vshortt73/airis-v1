@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ephemeral Chat - Model Testing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f0f23;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: #1a1a2e;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border: 1px solid #2a2a3e;
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #16213e;
+            color: #e0e0e0;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2a2a3e;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .model-selector {
+            padding: 8px 12px;
+            border: 1px solid #3a3a4e;
+            border-radius: 6px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .model-selector option {
+            background: #2a2a3e;
+            color: #e0e0e0;
+        }
+
+        .tools-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .tools-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #4a9eff;
+        }
+
+        .clear-btn {
+            padding: 8px 16px;
+            border: 1px solid #3a3a4e;
+            border-radius: 6px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .clear-btn:hover {
+            background: #3a3a4e;
+            border-color: #4a4a5e;
+        }
+
+        .system-prompt-container {
+            padding: 15px 20px;
+            background: #1a1a2e;
+            border-bottom: 1px solid #2a2a3e;
+        }
+
+        .system-prompt-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .system-prompt-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #3a3a4e;
+            border-radius: 6px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .system-prompt-input:focus {
+            outline: none;
+            border-color: #ffa500;
+        }
+
+        .system-prompt-input::placeholder {
+            color: #666;
+            font-style: italic;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #0f0f1e;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: #4a9eff;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: #2a2a3e;
+            color: #e0e0e0;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #3a3a4e;
+        }
+
+        .message.system {
+            justify-content: center;
+        }
+
+        .message.system .message-content {
+            background: rgba(74, 158, 255, 0.1);
+            color: #4a9eff;
+            font-size: 13px;
+            max-width: 90%;
+            text-align: center;
+            border: 1px solid rgba(74, 158, 255, 0.2);
+        }
+
+        .message.tool {
+            justify-content: flex-start;
+        }
+
+        .message.tool .message-content {
+            background: #2a2a1e;
+            color: #ffd666;
+            border-left: 4px solid #ffa500;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-width: 80%;
+            border: 1px solid #3a3a2e;
+        }
+
+        .tool-name {
+            font-weight: bold;
+            color: #ffa500;
+            margin-bottom: 5px;
+        }
+
+        .tool-result {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 165, 0, 0.2);
+        }
+
+        .input-container {
+            padding: 20px;
+            background: #16213e;
+            border-top: 1px solid #2a2a3e;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #3a3a4e;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 50px;
+            max-height: none;
+            background: #2a2a3e;
+            color: #e0e0e0;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        .send-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #4a9eff;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.4);
+        }
+
+        .send-btn:active {
+            transform: translateY(0);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.2;
+            stroke: #4a9eff;
+        }
+
+        .empty-state h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #888;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* Scrollbar styling */
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #3a3a4e;
+            border-radius: 3px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #4a4a5e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Ephemeral Chat</h1>
+            <div class="header-controls">
+                <span class="status-indicator" id="status">Loading models...</span>
+                <select class="model-selector" id="modelSelector" disabled>
+                    <option>Loading models...</option>
+                </select>
+                <label class="tools-toggle">
+                    <input type="checkbox" id="toolsToggle">
+                    <span>🔧 Enable Tools</span>
+                </label>
+                <button class="clear-btn" id="clearBtn" onclick="clearConversation()">Clear Chat</button>
+            </div>
+        </div>
+
+        <div class="system-prompt-container">
+            <div class="system-prompt-label">
+                <span>⚙️ System Prompt</span>
+                <span style="color: #666; font-size: 11px;">(persistent - injected at each turn)</span>
+            </div>
+            <textarea
+                class="system-prompt-input"
+                id="systemPromptInput"
+                placeholder="Enter system instructions here... (e.g., 'You are a helpful assistant. Be concise and accurate.')"
+                oninput="autoResizeTextarea(this)"
+            ></textarea>
+        </div>
+
+        <div class="messages-container" id="messagesContainer">
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <h2>No Memory, No Limits</h2>
+                <p>Test prompts and compare model responses on the fly</p>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea
+                    class="message-input"
+                    id="messageInput"
+                    placeholder="Type your message..."
+                    onkeydown="handleKeyPress(event)"
+                    oninput="autoResizeTextarea(this)"
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messages = [];
+        let isStreaming = false;
+        let selectedModel = null;
+
+        // Load available models on startup
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/ephemeral/models');
+                const data = await response.json();
+
+                if (data.success && data.models.length > 0) {
+                    const selector = document.getElementById('modelSelector');
+                    selector.innerHTML = '';
+
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.name;
+                        selector.appendChild(option);
+                    });
+
+                    selectedModel = data.models[0].name;
+                    selector.disabled = false;
+                    document.getElementById('sendBtn').disabled = false;
+                    document.getElementById('messageInput').disabled = false;
+
+                    updateStatus(`Ready • ${data.models.length} models available`);
+
+                    // Add system message
+                    addSystemMessage(`Loaded ${data.models.length} models. Selected: ${selectedModel}`);
+                } else {
+                    updateStatus('No models available');
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+                updateStatus('Error loading models');
+                addSystemMessage('⚠️ Could not connect to Ollama. Is it running?');
+            }
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function addSystemMessage(text) {
+            const container = document.getElementById('messagesContainer');
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system';
+            messageDiv.innerHTML = `<div class="message-content">${text}</div>`;
+            container.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addMessage(role, content) {
+            const container = document.getElementById('messagesContainer');
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+            container.appendChild(messageDiv);
+            scrollToBottom();
+
+            return messageDiv;
+        }
+
+        function updateLastMessage(content) {
+            const container = document.getElementById('messagesContainer');
+            const messages = container.querySelectorAll('.message.assistant');
+            if (messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                const contentDiv = lastMessage.querySelector('.message-content');
+                contentDiv.textContent = content;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('messagesContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessage() {
+            if (isStreaming) return;
+
+            const input = document.getElementById('messageInput');
+            const userMessage = input.value.trim();
+
+            if (!userMessage) return;
+
+            // Update selected model
+            selectedModel = document.getElementById('modelSelector').value;
+            const toolsEnabled = document.getElementById('toolsToggle').checked;
+            const systemPrompt = document.getElementById('systemPromptInput').value.trim();
+
+            // Add user message
+            messages.push({ role: 'user', content: userMessage });
+            addMessage('user', userMessage);
+            input.value = '';
+            autoResizeTextarea(input);
+
+            // Disable input
+            isStreaming = true;
+            document.getElementById('sendBtn').innerHTML = '<div class="loading"></div>';
+            document.getElementById('sendBtn').disabled = true;
+            input.disabled = true;
+
+            try {
+                let assistantContent = '';
+                let currentAssistantDiv = null;
+
+                // Build messages array with system prompt if provided
+                let messagesToSend = [...messages];
+                if (systemPrompt) {
+                    // Prepend system message at the beginning
+                    messagesToSend = [
+                        { role: 'system', content: systemPrompt },
+                        ...messages
+                    ];
+                }
+
+                // Stream response
+                const response = await fetch('/api/ephemeral/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: selectedModel,
+                        messages: messagesToSend,
+                        stream: true,
+                        tools_enabled: toolsEnabled
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.substring(6);
+                            try {
+                                const data = JSON.parse(jsonStr);
+
+                                if (data.error) {
+                                    if (!currentAssistantDiv) {
+                                        currentAssistantDiv = addMessage('assistant', '');
+                                    }
+                                    assistantContent = `Error: ${data.error}`;
+                                    updateLastMessage(assistantContent);
+                                    break;
+                                }
+
+                                // Handle tool calls
+                                if (data.tool_calls) {
+                                    console.log('Tool calls requested:', data.tool_calls);
+                                    for (const toolCall of data.tool_calls) {
+                                        const func = toolCall.function;
+                                        addToolMessage(func.name, 'Executing...', null);
+                                    }
+                                }
+
+                                // Handle tool results
+                                if (data.tool_result) {
+                                    console.log('Tool result:', data.tool_result);
+                                    updateLastToolMessage(data.tool_result.name, data.tool_result.result);
+                                }
+
+                                // Handle content streaming
+                                if (data.content) {
+                                    if (!currentAssistantDiv) {
+                                        currentAssistantDiv = addMessage('assistant', '');
+                                    }
+                                    assistantContent += data.content;
+                                    updateLastMessage(assistantContent);
+                                }
+
+                                if (data.done) {
+                                    break;
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse SSE data:', e);
+                            }
+                        }
+                    }
+                }
+
+                // Save assistant response
+                if (assistantContent) {
+                    messages.push({ role: 'assistant', content: assistantContent });
+                }
+
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addSystemMessage('⚠️ Error communicating with model');
+            } finally {
+                // Re-enable input
+                isStreaming = false;
+                document.getElementById('sendBtn').innerHTML = 'Send';
+                document.getElementById('sendBtn').disabled = false;
+                input.disabled = false;
+                input.focus();
+            }
+        }
+
+        function addToolMessage(toolName, status, result) {
+            const container = document.getElementById('messagesContainer');
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message tool';
+            messageDiv.setAttribute('data-tool-name', toolName);
+
+            let content = `<div class="tool-name">🔧 ${toolName}</div>`;
+            content += `<div class="tool-status">${status}</div>`;
+
+            if (result) {
+                content += `<div class="tool-result">${JSON.stringify(result, null, 2)}</div>`;
+            }
+
+            messageDiv.innerHTML = `<div class="message-content">${content}</div>`;
+            container.appendChild(messageDiv);
+            scrollToBottom();
+
+            return messageDiv;
+        }
+
+        function updateLastToolMessage(toolName, result) {
+            const container = document.getElementById('messagesContainer');
+            const toolMessages = container.querySelectorAll(`.message.tool[data-tool-name="${toolName}"]`);
+
+            if (toolMessages.length > 0) {
+                const lastToolMessage = toolMessages[toolMessages.length - 1];
+                const contentDiv = lastToolMessage.querySelector('.message-content');
+
+                let content = `<div class="tool-name">🔧 ${toolName}</div>`;
+                content += `<div class="tool-status">✓ Completed</div>`;
+                content += `<div class="tool-result">${JSON.stringify(result, null, 2)}</div>`;
+
+                contentDiv.innerHTML = content;
+                scrollToBottom();
+            }
+        }
+
+        function clearConversation() {
+            messages = [];
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <h2>No Memory, No Limits</h2>
+                    <p>Test prompts and compare model responses on the fly</p>
+                </div>
+            `;
+        }
+
+        function autoResizeTextarea(textarea) {
+            // Reset height to get accurate scrollHeight
+            textarea.style.height = 'auto';
+            // Set height to scrollHeight to fit content
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            loadModels();
+        });
+    </script>
+</body>
+</html>

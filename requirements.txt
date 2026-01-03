@@ -11,6 +11,7 @@ psycopg2-binary==2.9.9
 
 # AI/ML
 tiktoken==0.5.2
+sentence-transformers>=2.2.0
 
 # MCP (Model Context Protocol)
 fastmcp>=0.1.0
@@ -22,3 +23,4 @@ websockets>=12.0
 # NOTE: Must be installed with CUDA support for GPU acceleration
 # Installation command: CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 llama-cpp-python>=0.2.0
+bcrypt==4.1.2
