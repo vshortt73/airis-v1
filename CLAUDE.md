@@ -26,10 +26,102 @@ This file (CLAUDE.md) provides technical architecture documentation. IRIS_DEV_LO
 **Key Capabilities**:
 - Multi-turn conversation with cross-session memory continuity
 - MCP (Model Context Protocol) tool architecture with autonomous tool execution
-- Dual-Ollama vision system with GPU isolation (main: qwen3:32b on GPU 0, vision: llava on GPU 1)
+- Distributed two-node GPU architecture with resource management
+- Dynamic emotional state tracking with sentiment analysis
 - Episodic memory retrieval with semantic embeddings
 - Protocol system for configurable personality modes
+- Real-time video generation (FLOAT) with lip-sync
+- Text-to-speech (XTTS) and speech-to-text (Whisper)
 - WebSocket-based real-time chat interface
+
+---
+
+## Distributed Architecture Overview
+
+**CRITICAL: This is a two-node system. Services are distributed across localhost and Node2.**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LOCALHOST (Main Server)                           │
+│                              iris-desktop                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  GPU 0: RTX 5090 (32GB)                                                     │
+│  ├── Ollama (port 11434)                                                    │
+│  │   └── qwen3:32b - Primary inference model                                │
+│  │                                                                          │
+│  Services:                                                                  │
+│  ├── Iris FastAPI Server (port 8000) - Main application                     │
+│  └── PostgreSQL (port 5432) - Database                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                            2.5G/10G Network
+                                    │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              NODE2 (GPU Server)                             │
+│                               iris-node2                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  GPU 0: RTX 4080 Super (16GB) - MUTUALLY EXCLUSIVE SERVICES                 │
+│  ├── iris-vision.service (port 11435) - llava-phi-3 vision model            │
+│  ├── iris-float.service (port 8000) - FLOAT video generation                │
+│  └── iris-freud.service (port 11435) - gemma-3-4b dream processing          │
+│      ⚠️  Only ONE of these can run at a time! Managed by GPU Manager.       │
+│                                                                             │
+│  GPU 1: RTX 3060 (12GB) - COEXISTING SERVICES                               │
+│  ├── iris-xtts.service (port 8700) - Text-to-speech                         │
+│  ├── iris-stt.service (port 8600) - Whisper speech-to-text                  │
+│  └── iris-sentiment.service (port 11437) - Mistral 7B sentiment analysis    │
+│      ✓  All three run simultaneously, ~7GB VRAM total                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Service Inventory
+
+| Service | Location | GPU | Port | SystemD Unit | Model/Purpose |
+|---------|----------|-----|------|--------------|---------------|
+| Main Inference | localhost | 0 (5090) | 11434 | ollama | qwen3:32b |
+| Iris Server | localhost | CPU | 8000 | - | FastAPI application |
+| PostgreSQL | localhost | CPU | 5432 | postgresql | Database |
+| Vision | node2 | 0 (4080S) | 11435 | iris-vision | llava-phi-3 |
+| FLOAT | node2 | 0 (4080S) | 8000 | iris-float | Video generation |
+| Freud | node2 | 0 (4080S) | 11435 | iris-freud | gemma-3-4b dreams |
+| XTTS | node2 | 1 (3060) | 8700 | iris-xtts | Text-to-speech |
+| STT | node2 | 1 (3060) | 8600 | iris-stt | Whisper ASR |
+| Sentiment | node2 | 1 (3060) | 11437 | iris-sentiment | Mistral 7B |
+
+### GPU Manager (`core/gpu_manager.py`)
+
+Node2 GPU 0 services are **mutually exclusive**. The GPU Manager handles swapping:
+
+```python
+from core.gpu_manager import request_gpu
+
+# Request a GPU 0 service - blocks until ready or fails
+success, error = await request_gpu("vision")  # or "float" or "freud"
+if success:
+    # Service is ready, make your API call
+    result = await vision_service.analyze(image)
+else:
+    # GPU busy or swap failed
+    print(f"Vision unavailable: {error}")
+```
+
+**Behavior:**
+- Service already loaded → Immediate success
+- Different service loaded, GPU idle → Stops current, starts requested, notifies user
+- GPU busy (processing request) → Returns error "GPU busy: X is processing"
+- Service swap in progress → Returns error "GPU is switching services"
+
+**Integration Points:**
+- `core/vision_manager.py` - Calls `request_gpu("vision")` before image analysis
+- `app/api/routes_video.py` - Calls `request_gpu("float")` before video sessions
+
+**SSH Requirements:** GPU Manager uses SSH to control Node2 services. Requires passwordless sudo:
+```bash
+# On Node2: /etc/sudoers.d/iris
+captain ALL=(ALL) NOPASSWD: /bin/systemctl start iris-*.service, /bin/systemctl stop iris-*.service, /bin/systemctl restart iris-*.service, /bin/systemctl status iris-*.service
+```
+
+---
 
 ## Development Commands
 
@@ -68,15 +160,21 @@ curl http://localhost:8000/api/conversation/context/summary | jq
 python mcp_servers/mcp_client.py
 python mcp_servers/tool_manager.py
 
-# Test protocol system
-python test_protocol_system.py
+# Test GPU manager
+python core/gpu_manager.py
 
-# Test embeddings (memory system)
-python test_embedding_insert.py
+# Test emotional state
+python core/emotional_state.py
 
-# Test traits server
-python -m pytest tests/test_traits_server.py
+# Test Node2 services
+curl http://node2:11435/health  # Vision/Freud
+curl http://node2:8000/health   # FLOAT (returns HTML)
+curl http://node2:8700/health   # XTTS
+curl http://node2:8600/health   # STT
+curl http://node2:11437/health  # Sentiment
 ```
+
+---
 
 ## Core Architecture
 
@@ -86,18 +184,15 @@ python -m pytest tests/test_traits_server.py
 
 2. **Time-Based Session Detection**: New sessions are created when gap ≥ 30 minutes (configurable via `SESSION_TIMEOUT_MINUTES`), but this doesn't affect conversation continuity.
 
-3. **Token-Aware Context Management**: Uses tiktoken (`cl100k_base` encoding) for accurate token counting. Context is limited by:
-   - `MAX_CONVERSATION_TURNS = 30` (primary limit: user+assistant pairs)
-   - `MAX_CONTEXT_TOKENS = 12000` (hard token limit)
-   - `MAX_TOTAL_MESSAGES = 100` (safety brake)
+3. **Token-Aware Context Management**: Uses tiktoken (`cl100k_base` encoding) for accurate token counting.
 
-4. **Explicit Ollama Context Window**: ALWAYS sets `num_ctx: OLLAMA_CONTEXT_WINDOW` in API calls. Default is 32768 tokens (NEVER use Ollama's default 4096).
+4. **Explicit Ollama Context Window**: ALWAYS sets `num_ctx: OLLAMA_CONTEXT_WINDOW` in API calls. Default is 65536 tokens.
 
-5. **MCP-Based Tool Architecture**: Tools are implemented as MCP (Model Context Protocol) servers. Each server runs as a separate process, managed by FastMCP client connections.
+5. **MCP-Based Tool Architecture**: Tools are implemented as MCP (Model Context Protocol) servers.
 
-6. **Vision Support**: Dual-Ollama architecture for vision capabilities. Primary model (qwen3:32b) handles text/tools on GPU 0, while dedicated vision model (llava) runs on GPU 1 for image analysis on demand.
+6. **Distributed GPU Architecture**: Services split across localhost and Node2 with GPU Manager for resource coordination.
 
-7. **Protocol System**: Database-driven personality configuration system allowing preset modes (e.g., "Theta" for strangers, "Professional" for work). Protocols control system instructions, traits, tool availability, and memory visibility. **Note**: GUI and API implemented, runtime integration pending.
+7. **Emotional State Tracking**: Sentiment analysis updates Iris's emotional state each turn, influencing responses.
 
 ### Module Structure
 
@@ -108,430 +203,475 @@ app/
 └── api/
     ├── routes_chat.py     # WebSocket chat endpoint with tool calling
     ├── routes_session.py  # Session management endpoints
-    └── routes_context.py  # Context inspection endpoints
+    ├── routes_context.py  # Context inspection endpoints
+    ├── routes_tts.py      # Text-to-speech endpoints
+    ├── routes_stt.py      # Speech-to-text endpoints
+    ├── routes_video.py    # FLOAT video generation endpoints
+    ├── routes_vision.py   # Vision analysis endpoints
+    ├── routes_gpu.py      # GPU manager status/control endpoints
+    ├── routes_admin.py    # Admin console endpoints
+    ├── routes_faces.py    # Face recognition endpoints
+    ├── routes_protocols.py # Protocol management endpoints
+    └── routes_ephemeral.py # Ephemeral chat endpoints
 
 core/
 ├── conversation.py        # In-memory conversation history manager
-├── system_prompt.py       # DB-driven system prompt assembly with vision support
+├── system_prompt.py       # DB-driven system prompt assembly
 ├── token_counter.py       # tiktoken-based token counting
 ├── attachments.py         # Image/file storage and encoding
 ├── embeddings.py          # Embedding generation for episodic memory
-└── vision_manager.py      # Vision model lifecycle and request coordination
+├── vision_manager.py      # Vision model lifecycle (uses GPU manager)
+├── gpu_manager.py         # Node2 GPU resource coordination
+├── emotional_state.py     # Dynamic emotional state tracking
+├── ui_notify.py           # UI notification system
+├── face_recognition.py    # Face detection and recognition
+└── prompt_builder.py      # Prompt construction utilities
 
 database/
-├── persistence.py                    # Session & message storage, context-aware loading
-├── character_traits.py               # Loads personality traits from fulltraits table
-├── memory_loader.py                  # Episodic memory retrieval (production)
-├── memory_loader_experimental.py     # Enhanced memory retrieval with semantic search
-└── tool_loader.py                    # Tool definitions from mcp_tools table
+├── persistence.py         # Session & message storage, context-aware loading
+├── character_traits.py    # Loads personality traits from fulltraits table
+├── memory_loader.py       # Episodic memory retrieval (production)
+├── config_loader.py       # Database-driven configuration
+└── tool_loader.py         # Tool definitions from mcp_tools table
 
-ollama/
-└── client.py              # Streaming chat API client with tool calling (dual non-streaming + streaming pattern)
+backend/
+├── knowledge/             # RAG System - Document search via vector embeddings
+│   ├── file_scanner.py    # Directory traversal and incremental indexing
+│   ├── extractors.py      # Text extraction (code, markdown, PDF)
+│   ├── chunker.py         # Hybrid semantic chunking with token limits
+│   ├── embedder.py        # Dual-facet batch embedding generation
+│   ├── db_writer.py       # Transactional database operations
+│   └── indexer.py         # Main orchestrator (called by cron)
+└── memory/
+    ├── dreams/            # Dream processing system
+    └── new/               # Memory creation pipeline
+
+inference/
+├── client.py              # Streaming chat API client with tool calling (llama.cpp)
+└── vision_service.py      # Vision model API client
 
 mcp_servers/
 ├── server_configs.py      # MCP server registry and tool routing
 ├── mcp_client.py          # FastMCP client for tool execution
 ├── tool_manager.py        # Global tool manager singleton
-├── tool_loader.py         # Load tool definitions from database
-├── base/                  # Base server classes and utilities
-├── info/                  # Info server (weather, news, web fetch, webcam)
+├── base/                  # Base server classes
+├── info/                  # Info server (weather, news, web fetch)
 ├── traits/                # Traits server (personality management)
 ├── system/                # System server (health monitoring)
-└── protocols/             # Protocol server (personality mode management)
+├── protocols/             # Protocol server (personality modes)
+├── knowledge/             # Knowledge base search server
+└── directions/            # Navigation/directions server
+
+services/
+└── face_monitor.py        # Background face monitoring service
+
+static/
+├── index.html             # Main chat UI with PiP video player
+├── admin.html             # Admin console
+├── video_player.html      # Standalone video player
+├── face_manager.html      # Face recognition management
+├── protocol_editor.html   # Protocol configuration GUI
+└── ...                    # Other UI pages
 ```
 
-### Key Data Flow
+---
 
-1. **Initialization** (`app/main.py`):
-   - Creates `ConversationHistory(enable_persistence=True)`
-   - Calls `get_or_create_session()` → determines session based on time gap
-   - Calls `load_recent_conversation()` → loads history across ALL sessions
-   - Initializes `ToolManager` → loads tool definitions from database
+## MCP Tool Development - IMPORTANT
 
-2. **Message Handling** (`app/api/routes_chat.py`):
-   - User message → `add_user_message()` → saves to DB with image attachments
-   - Build context: `assemble_full_context()` → system message + conversation history + loaded images
-   - Get tool definitions: `tool_manager.get_tool_definitions_for_ollama()`
-   - First Ollama call (non-streaming) with tools → check if tools requested
-   - If tools requested:
-     - Execute tools via `tool_manager.execute_tool()`
-     - Add tool results to conversation
-     - Second Ollama call (streaming) for final response
-   - If no tools: use direct response from first call
-   - Assistant message → `add_assistant_message()` → saves to DB
+**Tool definitions exist in TWO places that MUST stay synchronized:**
 
-3. **Context Assembly** (`core/system_prompt.py`):
-   - System instructions (from `system_instructions` table)
-   - Character traits (from `fulltraits` table)
-   - Episodic memories (from `episodic_memory` table in XML format)
-   - Conversation history with loaded images from disk
+1. **Python code** (`mcp_servers/*/server.py`) - The actual implementation
+2. **Database** (`mcp_tools.input_schema`) - What the model sees
 
-4. **Tool Execution** (`mcp_servers/`):
-   - Tool request → `ToolManager.execute_tool()`
-   - Route to correct MCP server via `MCPClient`
-   - Execute via FastMCP's `client.call_tool()`
-   - Return JSON result to conversation
+**THE MODEL ONLY SEES THE DATABASE SCHEMA.** Python function parameters are invisible to the model unless they're also in `mcp_tools.input_schema`.
 
-### Database Schema
+### When Adding/Modifying Tool Parameters:
 
-**Critical Tables**:
-- `chat_history`: Stores all messages with role, content, timestamp, session_id, tool_calls, attachments (JSONB)
-- `chat_sessions`: Session metadata (for analytics, NOT for memory boundaries)
-- `system_instructions`: Active system prompt components (ordered by `instruction_order`)
-- `fulltraits`: Personality trait settings (name/value pairs)
-- `chat_history_with_temporal`: View that adds temporal descriptions to messages
-- `episodic_memory`: Long-term memory storage with metadata and embeddings (vector similarity search)
-- `mcp_tools`: Tool definitions in Ollama format with icons and server routing
-- `protocols`: Preset personality configurations (controls instructions, traits, tools, history/memory visibility)
+1. Update the Python function signature
+2. **Create SQL to update `mcp_tools.input_schema`** - This is the step that gets missed!
+3. Put SQL in `database/sql/`
+4. Remind user to run the SQL
+5. Restart Iris
 
-**Important**: The conversation loader queries `chat_history` WITHOUT session_id filters to maintain continuity.
+### Example SQL for adding a parameter:
 
-### Configuration Management
-
-All settings in `app/config.py`:
-
-**Session Management**:
-- `SESSION_TIMEOUT_MINUTES = 30` - Gap threshold for new sessions
-
-**Context Limits**:
-- `MAX_CONVERSATION_TURNS = 30` - Primary limit
-- `MAX_CONTEXT_TOKENS = 12000` - Token safety limit
-- `MAX_TOTAL_MESSAGES = 100` - Absolute message limit
-
-**Token Budgets** (defined but not all fully implemented):
-- System prompt base: 600 tokens
-- Character traits: 200 tokens
-- Response generation: 2500 tokens
-- Conversation history: 7000 tokens
-- Episodic memory: 2500 tokens
-- Tool definitions/results: 2300 tokens
-
-**Ollama**:
-- `OLLAMA_BASE_URL = "http://localhost:11434"` - Main Ollama (GPU 0)
-- `OLLAMA_MODEL = "qwen3:32b"` - Primary model for text/tools
-- `OLLAMA_CONTEXT_WINDOW = 65536` - 64K context window (CRITICAL: Always set explicitly)
-- `VISION_OLLAMA_URL = "http://localhost:11435"` - Vision Ollama (GPU 1)
-- `OLLAMA_VISION_MODEL = "llava:7b"` - Dedicated vision model
-- `OLLAMA_MEMORY_URL = "http://localhost:11436"` - Memory processing Ollama
-- `OLLAMA_MEMORY_MODEL = "qwen2.5:14b"` - Memory/embeddings model
-
-**Database**:
-- Use `IRIS_DB_PASSWORD` environment variable (preferred)
-- Falls back to `DB_PASSWORD` in config.py
-
-**Vision System** (see VISION_ARCHITECTURE.md for details):
-- Dual-Ollama setup with GPU isolation
-- Vision model loads on-demand, auto-unloads after 5 min idle
-- Enables ComfyUI/XTTS use on GPU 1 when vision inactive
-
-### Message Format (Ollama)
-
-System uses proper Ollama message format:
-
-```python
-{
-    "role": "user|assistant|tool|system",
-    "content": "message text",
-    "images": ["base64_string"],  # For vision
-    "tool_calls": [...],          # For assistant messages
-    "tool_name": "...",           # For tool messages
-    "tool_call_id": "..."         # For tool messages
-}
+```sql
+UPDATE mcp_tools
+SET input_schema = jsonb_set(
+    input_schema::jsonb,
+    '{properties,new_param}',
+    '{"type": "string", "description": "Description here"}'::jsonb
+)
+WHERE tool_name = 'tool_name';
 ```
 
-### Tool Calling Flow
+### Checking current tool schema:
 
-**Dual-Call Pattern** (used in `routes_chat.py`):
-1. **First Call** (non-streaming with tools): Send user message + tool definitions to Ollama
-2. **Tool Decision**: Ollama decides whether to call tools or respond directly
-3. **If tools requested**:
-   - Execute tools via `ToolManager.execute_tool()`
-   - Add tool results to conversation as "tool" role messages
-   - **Second Call** (streaming): Send updated conversation with tool results back to Ollama
-   - Stream final response to user
-4. **If no tools**: Stream the direct response from first call
-
-**Tool Execution Details**:
-1. **Tool Discovery**: `tool_loader.py` reads from `mcp_tools` table
-2. **Tool Registration**: `server_configs.py` maps tools to MCP servers
-3. **Connection**: `ToolManager` initializes `MCPClient` with server configs
-4. **Execution**:
-   - Extract function name and arguments from Ollama's tool_calls
-   - Route to correct server via `tool_to_server` mapping
-   - Execute via FastMCP's stdio transport
-   - Return JSON result to conversation
-5. **Autonomous Tools**: Some tools (like weather, news) execute without confirmation; others require user approval
-
-### Image Handling
-
-**Storage** (`core/attachments.py`):
-- User uploads: `attachments/user/{session_id}/`
-- Generated images: `attachments/generated/{session_id}/`
-- Metadata stored as JSONB in `chat_history.attachments`
-
-**Loading**:
-- `assemble_full_context()` loads images from disk
-- Encodes to base64 and adds to message `images` array
-- Ollama receives images in native format (no data URI prefix)
-
-**Supported Formats**: PNG, JPG, JPEG, GIF, WebP
-
-## Common Patterns
-
-### Adding Messages to History
-
-```python
-# User message
-active_conversation.add_user_message(content, images=None)
-
-# Assistant message
-active_conversation.add_assistant_message(content, tool_calls=None, images=None)
-
-# Tool message
-active_conversation.add_tool_message(content, tool_name, tool_call_id=None)
+```sql
+SELECT tool_name, input_schema FROM mcp_tools WHERE tool_name = 'seed';
 ```
 
-### Database Connections
+---
 
-All database modules use the same pattern:
-```python
-def get_db_connection():
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
-    conn_params = {
-        'host': config.DB_HOST,
-        'port': config.DB_PORT,
-        'database': config.DB_NAME,
-        'user': config.DB_USER
-    }
-    if password:
-        conn_params['password'] = password
-    return psycopg2.connect(**conn_params)
+## Configuration - DATABASE IS SOURCE OF TRUTH
+
+**IMPORTANT:** All configuration should live in the `system_config` database table. The `config.py` file contains **fallback defaults only** - used if database is unavailable.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    system_config table                       │
+│                   (SOURCE OF TRUTH)                          │
+│  All runtime config lives here for admin UI management       │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼ loads on startup
+┌─────────────────────────────────────────────────────────────┐
+│                      config.py                               │
+│  - Bootstrap values (DB connection only)                     │
+│  - Fallback defaults if DB unavailable                       │
+│  - Values OVERWRITTEN by database on load                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Path Setup
+### When Adding/Modifying Configuration:
 
-Files use this pattern to ensure imports work:
-```python
-import os, sys
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, PROJECT_ROOT)
+1. **Add to database FIRST** - Create SQL in `database/sql/`
+2. **Update config.py** - Only as a fallback default
+3. **Run the SQL** - Populate the database
+4. **Restart Iris** - Config loads from DB on startup
+
+### Populating the Database:
+
+```bash
+# Complete sync of all config values
+psql -h localhost -U irisuser -d irisdb -f database/sql/populate_system_config_complete.sql
 ```
 
-### Creating New MCP Tools
+### Config Categories in Database:
 
-1. Add tool definition to `mcp_tools` table (JSON schema in Ollama format):
-   ```sql
-   INSERT INTO mcp_tools (name, description, parameters, icon, server_name) VALUES (
-       'my_tool',
-       'Description of what this tool does',
-       '{"type": "object", "properties": {...}, "required": [...]}',
-       '🔧',
-       'my_server'
-   );
-   ```
-2. Add tool implementation to appropriate server (e.g., `mcp_servers/info/info_server.py`):
-   ```python
-   @mcp.tool()
-   def my_tool(arg1: str, arg2: int) -> str:
-       """Tool description"""
-       # Implementation
-       return json.dumps({"success": True, "result": {...}})
-   ```
-3. Register tool in `server_configs.py` under correct server's `tools` array
-4. Mark as autonomous or confirmation-required in `get_autonomous_tools()` if needed
+| Category | Description |
+|----------|-------------|
+| `llm` | Ollama/LLM backend settings |
+| `server` | Host, port |
+| `remote_services` | Node2 service URLs |
+| `identity` | Iris name, Victor name |
+| `session` | Session timeout |
+| `tokens` | Token budgets |
+| `features` | Feature flags |
+| `emotional` | Emotional state decay |
+| `vision` | Vision system |
+| `face` | Face recognition |
+| `knowledge` | RAG/knowledge base |
+| `context` | Context management |
 
-### Adding New MCP Server
+### Checking Current Config:
 
-1. Create server directory: `mcp_servers/{name}/`
-2. Implement server: `{name}_server.py` using FastMCP:
-   ```python
-   from mcp import FastMCP
-   mcp = FastMCP("Server Name")
+```sql
+-- All config by category
+SELECT category, key, value, description FROM system_config ORDER BY category, key;
 
-   @mcp.tool()
-   def my_tool(param: str) -> str:
-       return json.dumps({"success": True, "result": "..."})
-
-   if __name__ == "__main__":
-       mcp.run()
-   ```
-3. Add config to `server_configs.py`:
-   ```python
-   {
-       "name": "my_server",
-       "command": "python",
-       "args": [str(PROJECT_ROOT / "mcp_servers" / "my_server" / "my_server.py")],
-       "tools": ["tool1", "tool2"]
-   }
-   ```
-4. Add tool definitions to database `mcp_tools` table
-
-## Important Implementation Details
-
-### Token Counting Strategy
-
-`database/persistence.py:182-298` implements sophisticated context loading:
-1. Load last N user+assistant messages (across all sessions)
-2. Include all tool messages within that timeframe
-3. Truncate by message count if needed
-4. Truncate by token count if needed (removes oldest messages first)
-
-### System Prompt Assembly
-
-`core/system_prompt.py` builds prompts from database:
-- Queries `system_instructions` table for active instructions
-- Orders by `instruction_order` field
-- Appends character traits from `fulltraits` table
-- Appends episodic memories in XML format
-- Loads images from disk and adds to message context
-
-### Tool Result Format
-
-Tools must return JSON with this structure:
-```python
-{
-    "success": True,
-    "result": {...},      # Actual tool data
-    "error": "..."        # If success=False
-}
+-- Specific category
+SELECT key, value, description FROM system_config WHERE category = 'tokens';
 ```
 
-### Logging Pattern
+### Key Settings Reference:
 
-All modules use detailed logging:
-```python
-print(f"[module.py][function] Message")  # Info
-print(f"[module.py][function] ✓ Success message")  # Success
-print(f"[module.py][function] ✗ Error: {e}")  # Error
+- `SESSION_TIMEOUT_MINUTES` - Gap threshold for new sessions (default: 30)
+- `OLLAMA_CONTEXT_WINDOW` - Context window size (default: 32768)
+- `MAX_TOTAL_MESSAGES` - Safety limit on messages loaded
+- `FACE_MONITORING_ENABLED` - Enable face recognition
+- `EMOTIONAL_STATE` - Enable emotional tracking
+
+### Database Connection (Bootstrap Only)
+- Use `IRIS_DB_PASSWORD` environment variable (required)
+- Host: localhost, Port: 5432, Database: irisdb, User: irisuser
+
+---
+
+## Emotional State System
+
+Iris has a dynamic emotional state that evolves with each conversation turn.
+
+### How It Works
+
+1. **User sends message** → Mistral 7B (on Node2) analyzes sentiment
+2. **Returns:** `{tone, intent, descriptors[], intensity}`
+3. **Emotion mapping** applies weighted changes to 11 emotional states
+4. **Decay** moves states toward baseline over time
+5. **State injected** into system prompt, influencing responses
+
+### Emotional States Tracked
+
+| State | Default | Description |
+|-------|---------|-------------|
+| Calm | 0.60 | Baseline tranquility |
+| Joy | 0.50 | Happiness, delight |
+| Desire | 0.30 | Wanting, attraction |
+| Excitement | 0.40 | Anticipation, energy |
+| Trust | 0.70 | Safety, confidence |
+| Longing | 0.20 | Deep yearning |
+| Intimacy | 0.40 | Emotional closeness |
+| Desperation | 0.10 | Urgency, intense need |
+| Closeness | 0.50 | General connection |
+| Vulnerability | 0.30 | Openness |
+| Devotion | 0.60 | Dedication, loyalty |
+
+### Configuration
+- `EMOTIONAL_DECAY_PER_TURN = 0.05` - 5% decay per turn
+- `EMOTIONAL_DECAY_PER_MINUTE = 0.02` - 2% decay per minute
+
+See `EMOTIONAL_STATE_TRACKER.md` for full documentation.
+
+---
+
+## Video Streaming (FLOAT)
+
+Real-time video generation with lip-sync from text-to-speech.
+
+### Architecture
+
+```
+User sends message
+       │
+       ▼
+┌─────────────────┐
+│  TTS Queue      │──────► XTTS (node2:8700) ──► Audio
+│  (index.html)   │                                │
+└─────────────────┘                                │
+       │                                           │
+       ▼                                           ▼
+┌─────────────────┐    ┌─────────────────┐   ┌─────────────────┐
+│  GPU Manager    │───►│  FLOAT Server   │───│  Video Chunk    │
+│  request_gpu()  │    │  (node2:8000)   │   │  (.mp4)         │
+└─────────────────┘    └─────────────────┘   └─────────────────┘
+                                                    │
+                                                    ▼
+                                            ┌─────────────────┐
+                                            │  PiP Player     │
+                                            │  (index.html)   │
+                                            └─────────────────┘
 ```
 
-## API Endpoints
+### Endpoints
 
-**Chat**:
+- `POST /api/video/start-session-saved` - Start session with saved reference image
+- `POST /api/video/start-session` - Start session with uploaded image
+- `POST /api/video/queue-chunk` - Queue text for video generation
+- `GET /api/video/poll-chunk/{session_id}` - Poll for ready video chunks
+- `POST /api/video/end-session/{session_id}` - End session
+
+### GPU Manager Integration
+
+Video sessions call `request_gpu("float")` before starting. If vision is running, it will be stopped first.
+
+---
+
+## Admin Console
+
+Web-based administration at `/static/admin.html`.
+
+### Features
+
+- **Service Monitoring**: Status of all localhost and Node2 services
+- **Service Control**: Start/stop/restart services
+- **System Stats**: Sessions, messages, memories counts
+- **Configuration**: Face monitoring, token budgets, session settings
+- **STT Settings**: Whisper model, voice threshold, silence timeout
+- **Video Streaming**: Start sessions, manage reference images
+- **Service Logs**: View journalctl logs for any service
+- **Quick Actions**: Clear caches, reset state, access other tools
+
+### API Endpoints
+
+- `GET /api/admin/services/all` - All service statuses
+- `POST /api/admin/services/control` - Start/stop/restart services
+- `GET /api/admin/stats` - System statistics
+- `GET /api/admin/logs/service/{name}` - Service logs
+
+---
+
+## API Endpoints Summary
+
+### Chat
 - `GET /` - Web interface
-- `WS /ws/chat` - WebSocket chat endpoint (handles tool calling, images, streaming)
+- `WS /ws/chat` - WebSocket chat endpoint
 - `GET /prompt` - View assembled system prompt
 
-**Context Inspection**:
+### Context
 - `GET /api/conversation/context` - Full context with messages
 - `GET /api/conversation/context/summary` - Token stats only
-- `GET /api/conversation/info` - Basic info
 
-**Session Management**:
+### Sessions
 - `GET /api/sessions/recent` - List recent sessions
 - `POST /api/sessions/new` - Create new session
-- `POST /api/sessions/load/{id}` - Load specific session
 
-**Protocol System** (see PROTOCOL_SYSTEM_README.md):
-- `GET /api/protocols` - List all protocols
-- `GET /api/protocols/{id}` - Get specific protocol
-- `POST /api/protocols` - Create new protocol
+### GPU Manager
+- `GET /api/gpu/status` - Current GPU state
+- `POST /api/gpu/request/{service}` - Request a service
+- `POST /api/gpu/detect` - Re-detect current service
+- `GET /api/gpu/services` - List available services
+
+### Vision
+- `POST /api/vision/analyze` - Analyze image
+- `GET /api/vision/status` - Vision model status
+
+### Video
+- `POST /api/video/start-session-saved` - Start with saved image
+- `POST /api/video/queue-chunk` - Queue video generation
+- `GET /api/video/poll-chunk/{id}` - Poll for ready chunks
+
+### TTS/STT
+- `POST /api/tts/speak` - Generate speech
+- `POST /api/stt/transcribe` - Transcribe audio
+
+### Admin
+- `GET /api/admin/services/all` - Service statuses
+- `POST /api/admin/services/control` - Control services
+- `GET /api/admin/stats` - System stats
+
+### Protocols
+- `GET /api/protocols` - List protocols
+- `POST /api/protocols` - Create protocol
 - `PUT /api/protocols/{id}` - Update protocol
-- `DELETE /api/protocols/{id}` - Delete protocol
-- `GET /api/protocols/options/instructions` - Get available instructions
-- `GET /api/protocols/options/traits` - Get available traits
-- `GET /api/protocols/options/tools` - Get available tools
-- Protocol Editor GUI: `http://localhost:8000/static/protocol_editor.html`
 
-**Vision** (see VISION_ARCHITECTURE.md):
-- `POST /api/vision/analyze` - Analyze single image
-- `GET /api/vision/status` - Check vision model status
+---
 
-**Health**:
-- `GET /api/health` - System status
+## Database Schema
 
-## Environment Setup
+### Critical Tables
 
-Required environment variables:
-- `IRIS_DB_PASSWORD` - PostgreSQL password (required)
-- `PYTHONPATH` - Set to project root (handled by start.sh)
+- `chat_history` - Messages with role, content, timestamp, session_id, tool_calls, attachments
+- `chat_sessions` - Session metadata (analytics only, NOT memory boundaries)
+- `system_instructions` - System prompt components (ordered by instruction_order)
+- `fulltraits` - Personality traits (name/value pairs)
+- `episodic_memories` - Long-term memory with vector embeddings
+- `mcp_tools` - Tool definitions with icons and server routing
+- `protocols` - Personality mode configurations
+- `emotional_state` - Current emotional state (single row)
+- `system_config` - Runtime configuration overrides
+- `faces` - Face recognition data
 
-## Dependencies
+### Important Views
 
-Core dependencies (see requirements.txt):
-- **FastAPI 0.109.0** - Web framework
-- **uvicorn 0.27.0** - ASGI server
-- **httpx 0.26.0** - Async HTTP client for Ollama
-- **psycopg2-binary 2.9.9** - PostgreSQL adapter
-- **tiktoken 0.5.2** - Token counting for context management
-- **fastmcp >=0.1.0** - MCP client/server implementation
-- **sentence-transformers >=2.2.0** - Embeddings for episodic memory
-- **llama-cpp-python >=0.2.0** - Vision model integration (install with CUDA: `CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python`)
-- **websockets >=12.0** - WebSocket support for real-time chat
-- **bcrypt 4.1.2** - Password hashing for protocol passphrases
+- `episodic_memories_readable` - Memories without embedding columns
+- `chat_history_readable` - Messages without embedding column
+- `chat_history_with_temporal` - Messages with temporal descriptions
+
+---
 
 ## Troubleshooting
 
-**Database Connection Issues**:
-- Ensure `IRIS_DB_PASSWORD` is set
-- Test with: `python tests/test_database.py`
+### Service Not Responding
 
-**Import Errors**:
-- Set `PYTHONPATH`: `export PYTHONPATH="$(pwd):$PYTHONPATH"`
-- Or use `./scripts/start.sh` which handles this
+```bash
+# Check service status
+ssh node2 'systemctl status iris-vision'
+ssh node2 'systemctl status iris-sentiment'
 
-**Context/Token Issues**:
-- Check token counts: `curl http://localhost:8000/api/conversation/context/summary`
-- Enable debug logging: Set `CONTEXT_DEBUG = True` in `app/config.py`
+# View logs
+ssh node2 'journalctl -u iris-vision -n 50'
 
-**Ollama Connection**:
-- Verify Ollama is running: `curl http://localhost:11434/api/tags`
-- Check model name in `app/config.py`: `OLLAMA_MODEL`
-- Verify context window setting: `OLLAMA_CONTEXT_WINDOW = 32768`
+# Restart service
+ssh node2 'sudo systemctl restart iris-vision'
+```
 
-**Tool Execution Issues**:
-- Test tool manager: `python mcp_servers/tool_manager.py`
-- Test MCP client: `python mcp_servers/mcp_client.py`
-- Check server status via logs or add endpoint
-- Verify tool definitions in `mcp_tools` table
+### GPU Manager Issues
 
-**Vision/Image Issues**:
-- Check attachment paths: `ls attachments/user/` and `attachments/generated/`
-- Verify base64 encoding doesn't include data URI prefix for Ollama
-- Test attachment loading: `python -c "from core.attachments import load_and_encode; print(load_and_encode('path'))"`
-- Check vision Ollama service: `systemctl status ollama-vision`
-- Verify GPU 1 availability: `nvidia-smi`
+```bash
+# Check current GPU state
+curl http://localhost:8000/api/gpu/status | jq
 
-**Ollama Service Management**:
-- Main Ollama (GPU 0): `systemctl status ollama` (port 11434)
-- Vision Ollama (GPU 1): `systemctl status ollama-vision` (port 11435)
-- Memory Ollama: `systemctl status ollama-memory` (port 11436)
-- Start script automatically checks and starts services if needed
+# Force re-detect
+curl -X POST http://localhost:8000/api/gpu/detect | jq
+
+# Test SSH connectivity
+ssh -o BatchMode=yes captain@node2 'echo OK'
+
+# Test sudo access
+ssh captain@node2 'sudo systemctl status iris-vision'
+```
+
+### Emotional State Not Updating
+
+```bash
+# Check sentiment service
+curl http://node2:11437/health
+
+# Test sentiment analysis
+python -c "
+import asyncio
+from core.emotional_state import get_emotional_tracker
+async def test():
+    tracker = get_emotional_tracker()
+    await tracker.load_state()
+    result = await tracker.process_message('Hello!')
+    print(result)
+asyncio.run(test())
+"
+```
+
+### Video Not Generating
+
+1. Check GPU manager state: `curl http://localhost:8000/api/gpu/status`
+2. Verify FLOAT is running: `curl http://node2:8000/`
+3. Check TTS is enabled in browser (speech toggle)
+4. Look for `[TTS] → Routing to VIDEO` in browser console
+
+---
+
+## Key Files Reference
+
+### Configuration
+- `app/config.py` - All settings
+- `database/config_loader.py` - Database config overrides
+
+### GPU Management
+- `core/gpu_manager.py` - GPU resource coordination
+- `app/api/routes_gpu.py` - GPU status endpoints
+
+### Emotional State
+- `core/emotional_state.py` - Sentiment tracking
+- `EMOTIONAL_STATE_TRACKER.md` - Full documentation
+
+### Video System
+- `app/api/routes_video.py` - Video endpoints
+- `static/index.html` - PiP video player (search for "PiPVideoPlayer")
+
+### Admin
+- `app/api/routes_admin.py` - Admin API
+- `static/admin.html` - Admin console UI
+
+### Node2 Services
+- `/etc/systemd/system/iris-*.service` on Node2
+
+---
+
+## Systemd Services (Node2)
+
+Location: `/etc/systemd/system/` on node2
+
+| Service | Description | GPU | Port |
+|---------|-------------|-----|------|
+| iris-vision.service | llava-phi-3 vision model | 0 | 11435 |
+| iris-float.service | FLOAT video generation | 0 | 8000 |
+| iris-freud.service | gemma-3-4b dream processing | 0 | 11435 |
+| iris-xtts.service | XTTS text-to-speech | 1 | 8700 |
+| iris-stt.service | Whisper speech-to-text | 1 | 8600 |
+| iris-sentiment.service | Mistral 7B sentiment | 1 | 11437 |
+
+**Note:** Vision and Freud share port 11435 with `Conflicts=` directive.
+
+---
 
 ## Additional Documentation
 
-For detailed information on specific subsystems, see:
-- **VISION_ARCHITECTURE.md** - Dual-Ollama vision system design and implementation
-- **VISION_SETUP.md** - Step-by-step vision system installation guide
-- **PROTOCOL_SYSTEM_README.md** - Protocol-based personality configuration system
-- **PROTOCOL_MULTISTEP_GUIDE.md** - Multi-step protocol interaction patterns
-- **SECURITY_CRITICAL_INSTRUCTIONS.md** - Security considerations for protocol passphrases
-- **README_NIGHTLY_MEMORY.md** (scripts/) - Automated episodic memory creation via cron
-- **TOOL_STORAGE_FIX.md** - Tool definition storage migration from code to database
+- `EMOTIONAL_STATE_TRACKER.md` - Emotional state system
+- `backend/knowledge/README.md` - Knowledge base / RAG system
+- `PROTOCOL_SYSTEM_README.md` - Protocol configuration
+- `scripts/README_NIGHTLY_MEMORY.md` - Memory creation cron
 
-## Key Implementation Notes
+---
 
-### GPU Isolation Strategy
-- **GPU 0 (RTX 5090)**: Main Ollama with qwen3:32b - always loaded, handles all text/tools
-- **GPU 1 (RTX 4080 Super)**: Vision Ollama with llava - on-demand loading, shares with ComfyUI/XTTS
-- Use `CUDA_VISIBLE_DEVICES` environment variable to isolate GPU assignment
-- Vision model auto-unloads after 5 minutes of inactivity to free VRAM
-
-### Memory System
-- **Episodic Memory**: Stored in `episodic_memory` table with vector embeddings
-- **Semantic Search**: Uses sentence-transformers for similarity matching
-- **Memory Retrieval**: `memory_loader.py` (production) or `memory_loader_experimental.py` (enhanced)
-- **Nightly Creation**: Automated script (`scripts/nightly_memory_creation.sh`) runs via cron
-- **Embedding Model**: sentence-transformers creates embeddings for semantic search
-
-### Database Triggers
-- `update_chat_history_updated_at`: Auto-updates timestamps on message edits
-- Check trigger status: `./scripts/check_trigger_status.sh`
-- Fix permissions if needed: `./scripts/fix_trigger_permissions.sh`
-
-### Start Script Behavior
-- Sets `IRIS_DB_PASSWORD` environment variable
-- Checks all three Ollama services (main, vision, memory)
-- Starts any stopped services automatically
-- Sets `PYTHONPATH` for proper imports
-- Launches uvicorn server on port 8000
+*Last updated: 2026-01-20*

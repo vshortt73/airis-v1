@@ -1,0 +1,42 @@
+[Unit]
+Description=Iris Main Inference Server (Qwen3-32B on llama.cpp)
+Documentation=https://github.com/ggerganov/llama.cpp
+After=network.target
+
+[Service]
+Type=simple
+User=captain
+Group=captain
+WorkingDirectory=/iris-v3
+
+# GPU 0 (RTX 5090)
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="PATH=/usr/local/cuda/bin:/usr/local/bin:/usr/bin:/bin"
+
+ExecStart=/programs/llama.cpp/build/bin/llama-server \
+    -m /localmodels/qwen/Qwen3-32B-Q4_K_M.gguf \
+    --port 11434 \
+    --host 0.0.0.0 \
+    -c 40960 \
+    --jinja \
+    -fa on \
+    -ngl 99 \
+    -sm none \
+    -mg 0 \
+    -b 4096 \
+    -ub 2048 \
+    -t 16 \
+    --cache-reuse 0 \
+    --slots \
+    -np 1
+
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iris-llama
+
+[Install]
+WantedBy=multi-user.target

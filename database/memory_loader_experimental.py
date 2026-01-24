@@ -49,10 +49,10 @@ def _fetch_memory_data():
                                 JOIN public.episodic_memories_with_age em on lm.memory_id = em.id
                         """)
             mems = cur.fetchall()
-            print(f"[memory_loader.py] Loaded {len(mems)} memories from database")
+            print(f"[memory_loader_experimental.py] Loaded {len(mems)} memories from database")
             return mems
     except Exception as e:
-        print(f"[memory_loader_experimental.py] Error fetching memories: {e}")
+        print(f"[memory_loader_experimental.py] >>>>>  Error fetching memories: {e}")
         return []
 
 def _clean_field(text, prefixes_to_remove=None):
@@ -98,9 +98,11 @@ def get_memories_structured() -> Optional[str]:
         voice = _clean_field(row.get("voice", ""))
         category = _clean_field(row.get("category", ""))
         emotion = _clean_field(row.get("emotion_label", ""))
-        temporal = _clean_field(row.get("temporal_description", ""))
-        bias = _clean_field(row.get("emotion_bias", ""))
-        
+        #temporal = _clean_field(row.get("temporal_description", ""))
+        temporal = "recent"
+        #bias = _clean_field(row.get("emotion_bias", ""))
+        bias = "neutral"
+
         # Build block
         block += "-------------------------------------------------------\n"
         if voice or category:
@@ -145,7 +147,8 @@ def get_memories_conversational() -> Optional[str]:
         # Extract and clean fields
         takeaway = _clean_field(row.get("takeaway", ""), ["[relational]", "adaptive"])
         event = _clean_field(row.get("summary_event", ""))
-        temporal = _clean_field(row.get("temporal_description", ""))
+        #temporal = _clean_field(row.get("temporal_description", ""))
+        temporal = "recent"
         emotion = _clean_field(row.get("emotion_label", ""))
         category = _clean_field(row.get("category", ""))
         
@@ -184,12 +187,15 @@ def get_memories_conversational() -> Optional[str]:
 # FORMAT C: XML HYBRID (Anthropic recommended)
 # ============================================================================
 
-def get_memories_xml() -> Optional[str]:
+def get_memories_xml(limit: int = 10) -> Optional[str]:
     """
     FORMAT C: XML structure with natural language content
 
     Pros: Structured (XML tags), natural content, metadata in attributes
     Cons: Slightly more verbose than pure conversational
+
+    Args:
+        limit: Maximum number of memories to return (default 10)
     """
     mems = _fetch_memory_data()
     if not mems:
@@ -197,6 +203,9 @@ def get_memories_xml() -> Optional[str]:
 
     # Sort memories by tier (Tier 1 first, most relevant)
     mems_sorted = sorted(mems, key=lambda x: x.get("tier", 3))
+
+    # Apply limit after sorting
+    mems_sorted = mems_sorted[:limit]
 
     memories = []
 
@@ -231,8 +240,6 @@ def get_memories_xml() -> Optional[str]:
             content_parts.append(event)
         if takeaway:
             content_parts.append(f"Key insight: {takeaway}")
-        if significance:
-            content_parts.append(f"Why it matters: {significance}")
 
         content = " ".join(content_parts)
 
@@ -268,13 +275,14 @@ Your memories (sorted by relevance):
 # MAIN FUNCTION - Switch between formats
 # ============================================================================
 
-def get_memories(format_type: str = "structured") -> Optional[str]:
+def get_memories(format_type: str = "structured", limit: int = 10) -> Optional[str]:
     """
     Get memories in specified format
-    
+
     Args:
         format_type: "structured", "conversational", or "xml"
-    
+        limit: Maximum number of memories to return (default 10)
+
     Returns:
         Formatted memory string
     """
@@ -283,9 +291,9 @@ def get_memories(format_type: str = "structured") -> Optional[str]:
     elif format_type == "conversational":
         return get_memories_conversational()
     elif format_type == "xml":
-        return get_memories_xml()
+        return get_memories_xml(limit)
     else:
-        print(f"[memory_loader.py] Unknown format type: {format_type}, defaulting to structured")
+        print(f"[memory_loader_experimental.py] Unknown format type: {format_type}, defaulting to structured")
         return get_memories_structured()
 
 if __name__ == "__main__":

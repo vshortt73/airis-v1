@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
-Quick test to verify Ollama services for dream system
+Quick test to verify llama.cpp services for dream system
+
+Architecture:
+- Iris: localhost:11434 (local RTX 5090, qwen3-32b)
+- Freud: node2:11435 (remote RTX 4080, gemma-3-4b) - swaps with Vision at night
 """
 import asyncio
 import httpx
-import json
+import os
+import sys
 
-async def test_ollama(url, model_name, test_name):
-    """Test if an Ollama service is responding"""
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from app import config
+
+async def test_llama_server(url, test_name):
+    """Test if a llama.cpp server is responding (OpenAI-compatible API)"""
     print(f"\n=== Testing {test_name} ===")
     print(f"URL: {url}")
-    print(f"Model: {model_name}")
 
-    endpoint = f"{url}/api/chat"
+    endpoint = f"{url}/v1/chat/completions"
     payload = {
-        "model": model_name,
         "messages": [
             {"role": "user", "content": "Say 'test successful' and nothing else."}
         ],
-        "stream": False,
-        "options": {
-            "num_ctx": 8192,
-            "temperature": 0.1
-        }
+        "temperature": 0.1,
+        "stream": False
     }
 
     try:
@@ -31,21 +36,9 @@ async def test_ollama(url, model_name, test_name):
             response = await client.post(endpoint, json=payload)
             response.raise_for_status()
             data = response.json()
-            content = data.get('message', {}).get('content', '')
+            content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
 
             print(f"✓ Response received: {content[:100]}")
-
-            # Check response metrics
-            total_duration = data.get('total_duration', 0) / 1e9  # nanoseconds to seconds
-            load_duration = data.get('load_duration', 0) / 1e9
-            prompt_eval_count = data.get('prompt_eval_count', 0)
-            eval_count = data.get('eval_count', 0)
-
-            print(f"  Total time: {total_duration:.2f}s")
-            print(f"  Load time: {load_duration:.2f}s")
-            print(f"  Prompt tokens: {prompt_eval_count}")
-            print(f"  Response tokens: {eval_count}")
-
             return True
 
     except httpx.TimeoutException as e:
@@ -63,34 +56,42 @@ async def test_ollama(url, model_name, test_name):
 
 async def main():
     print("=" * 60)
-    print("Dream System Ollama Connection Test")
+    print("Dream System llama.cpp Connection Test")
     print("=" * 60)
 
-    # Test Freud (GPU 0)
-    freud_ok = await test_ollama(
-        url="http://localhost:11434",
-        model_name="qwen2.5:14b",
-        test_name="Freud (GPU 0)"
+    # Get URLs from config
+    iris_url = config.OLLAMA_BASE_URL  # localhost:11434
+    freud_url = getattr(config, 'FREUD_URL', 'http://node2:11435')
+
+    print(f"\nConfiguration:")
+    print(f"  Iris URL: {iris_url}")
+    print(f"  Freud URL: {freud_url}")
+
+    # Test Iris (local RTX 5090)
+    iris_ok = await test_llama_server(
+        url=iris_url,
+        test_name="Iris (local RTX 5090, qwen3-32b)"
     )
 
-    # Test Iris (GPU 1)
-    iris_ok = await test_ollama(
-        url="http://localhost:11435",
-        model_name="qwen3:32b",
-        test_name="Iris (GPU 1)"
+    # Test Freud (remote node2 RTX 4080)
+    freud_ok = await test_llama_server(
+        url=freud_url,
+        test_name="Freud (node2 RTX 4080, gemma-3-4b)"
     )
 
     print("\n" + "=" * 60)
     print("Test Results:")
     print("=" * 60)
-    print(f"Freud (GPU 0): {'✓ PASS' if freud_ok else '✗ FAIL'}")
-    print(f"Iris (GPU 1):  {'✓ PASS' if iris_ok else '✗ FAIL'}")
+    print(f"Iris (localhost:11434):  {'✓ PASS' if iris_ok else '✗ FAIL'}")
+    print(f"Freud (node2:11435):     {'✓ PASS' if freud_ok else '✗ FAIL'}")
 
-    if freud_ok and iris_ok:
+    if iris_ok and freud_ok:
         print("\n✓ All services ready for dream creation!")
         return 0
     else:
         print("\n✗ Some services failed - check errors above")
+        if not freud_ok:
+            print("  Note: Freud only runs during nightly dreams (swaps with Vision)")
         return 1
 
 if __name__ == "__main__":

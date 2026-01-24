@@ -56,8 +56,9 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 class ScoringConfig:
     """Configuration for transformer models and scoring"""
 
-    # Device selection (auto-detect GPU if available)
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    # Device selection - Force CPU to avoid competing with llama.cpp for GPU memory
+    # The transformer models are small enough to run efficiently on CPU
+    DEVICE = "cpu"
 
     # Model selection
     SENTIMENT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"  # Valence
@@ -723,6 +724,70 @@ def calculate_recurrence_transformer(
     return 1.0 - novelty
 
 # ============================================
+# DOMINANT EMOTION DETECTION
+# ============================================
+
+def detect_dominant_emotion(messages: List[Dict]) -> str:
+    """
+    Detect the dominant emotion in a conversation using GoEmotions model
+
+    Args:
+        messages: List of message dicts with 'role' and 'message' fields
+
+    Returns:
+        Dominant emotion label string
+    """
+    print(f"[Emotion] Detecting dominant emotion...")
+
+    # Load emotion detection model
+    emotion_classifier = load_model(ScoringConfig.EMOTION_MODEL, "pipeline")
+    if emotion_classifier is None:
+        print(f"[Emotion] ✗ Failed to load model, returning neutral")
+        return 'neutral'
+
+    # Aggregate emotion scores across all messages
+    emotion_totals = {}
+
+    for msg in messages:
+        text = msg['message']
+
+        # Skip very short messages
+        if len(text.strip()) < 5:
+            continue
+
+        try:
+            # Get emotion predictions
+            predictions = emotion_classifier(text[:512])[0]
+
+            for pred in predictions:
+                emotion = pred['label']
+                score = pred['score']
+
+                if emotion not in emotion_totals:
+                    emotion_totals[emotion] = 0.0
+                emotion_totals[emotion] += score
+
+        except Exception as e:
+            continue
+
+    if not emotion_totals:
+        return 'neutral'
+
+    # Sort emotions by score descending
+    sorted_emotions = sorted(emotion_totals.items(), key=lambda x: x[1], reverse=True)
+
+    # If top emotion is "neutral", use the second-highest instead
+    dominant_emotion, dominant_score = sorted_emotions[0]
+
+    if dominant_emotion == 'neutral' and len(sorted_emotions) > 1:
+        second_emotion, second_score = sorted_emotions[1]
+        print(f"[Emotion] Top was neutral ({dominant_score:.3f}), using: {second_emotion} ({second_score:.3f})")
+        return second_emotion
+
+    print(f"[Emotion] Dominant: {dominant_emotion} (score: {dominant_score:.3f})")
+    return dominant_emotion
+
+# ============================================
 # MAIN SCORING PIPELINE
 # ============================================
 
@@ -782,6 +847,9 @@ def score_topic(
     print(f"\n[Scoring] Calculating recurrence...")
     recurrence = calculate_recurrence_transformer(topic_embedding, session_id)
 
+    print(f"\n[Scoring] Detecting dominant emotion...")
+    dominant_emotion = detect_dominant_emotion(messages)
+
     scores = {
         'session_id': session_id,
         'topic_id': topic_id,
@@ -795,6 +863,9 @@ def score_topic(
         'coherence': round(coherence, 3),
         'cohesion': round(cohesion, 3),
         'recurrence': round(recurrence, 3),
+
+        # Dominant emotion from transformer model
+        'dominant_emotion': dominant_emotion,
 
         # Metadata
         'embedding': topic_embedding.tolist() if topic_embedding is not None else None,
@@ -811,6 +882,7 @@ def score_topic(
     print(f"  Coherence:  {scores['coherence']:.3f}  [MEDIUM - Semantic flow]")
     print(f"  Cohesion:   {scores['cohesion']:.3f}  [MEDIUM - Narrative quality]")
     print(f"  Recurrence: {scores['recurrence']:.3f}  [LOWER - Schema integration]")
+    print(f"  Emotion:    {scores['dominant_emotion']}  [TRANSFORMER - GoEmotions model]")
     print(f"{'='*70}\n")
 
     return scores

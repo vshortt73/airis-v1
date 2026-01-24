@@ -1,9 +1,6 @@
 """
-Memory Server - MCP server for short-term memory management
-
-Provides tools for:
-- Storing short-term facts (manually flagged by user)
-- Retrieving active facts for context injection
+Memory Server - Unified MCP server for short-term memory management
+Provides insert, retrieve, and archive actions for short-term facts
 """
 
 from mcp.server.fastmcp import FastMCP
@@ -12,206 +9,125 @@ import json
 import os
 import sys
 from datetime import datetime
+from typing import Optional
 
-# Add project root to path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Initialize MCP server
 mcp = FastMCP("Memory Server")
+
 
 def get_db_connection():
     """Create database connection"""
     password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
-
     conn_params = {
         'host': config.DB_HOST,
         'port': config.DB_PORT,
         'database': config.DB_NAME,
         'user': config.DB_USER
     }
-
     if password:
         conn_params['password'] = password
-
     return psycopg2.connect(**conn_params)
 
 
-@mcp.tool()
-def short_term_memory_insert(fact: str, category: str = None, conversation_id: str = None) -> str:
-    """
-    Store a short-term fact for future reference.
-
-    Use this tool when Victor explicitly says:
-    - "Remember this: [fact]"
-    - "Make a note: [fact]"
-    - "Don't forget: [fact]"
-    - "For future reference: [fact]"
-
-    Args:
-        fact: Single sentence factual statement to remember
-        category: Optional category (ongoing_project, user_preference, discovery, user_status, other)
-        conversation_id: Optional conversation/session ID for traceability
-
-    Returns:
-        JSON result with success status and fact_id
-    """
+def _handle_insert(fact: str, category: Optional[str] = None) -> dict:
+    """Store a short-term fact"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Insert fact into database
         cursor.execute("""
             INSERT INTO short_term_facts (
-                fact_text,
-                category,
-                conversation_id,
-                created_date,
-                last_referenced_date
-            ) VALUES (
-                %s, %s, %s, NOW(), NOW()
-            ) RETURNING fact_id, created_date;
-        """, (fact, category, conversation_id))
+                fact_text, category, created_date, last_referenced_date
+            ) VALUES (%s, %s, NOW(), NOW())
+            RETURNING fact_id, created_date;
+        """, (fact, category))
 
-        result = cursor.fetchone()
-        fact_id, created_date = result
-
+        fact_id, created_date = cursor.fetchone()
         conn.commit()
         cursor.close()
         conn.close()
 
-        print(f"[memory_server][insert] ✓ Stored fact {fact_id}: {fact[:60]}...")
+        print(f"[memory][insert] ✓ Stored fact {fact_id}: {fact[:60]}...")
 
-        return json.dumps({
+        return {
             "success": True,
             "fact_id": fact_id,
             "fact": fact,
             "category": category,
-            "created_date": created_date.isoformat(),
             "message": f"Stored fact {fact_id} successfully"
-        })
+        }
 
     except Exception as e:
-        print(f"[memory_server][insert] ✗ Error: {e}")
-        return json.dumps({
-            "success": False,
-            "error": str(e)
-        })
+        print(f"[memory][insert] ✗ Error: {e}")
+        return {"success": False, "error": str(e)}
 
 
-@mcp.tool()
-def short_term_memory_retrieve(limit: int = 20) -> str:
-    """
-    Retrieve active short-term facts for context injection.
-
-    Returns facts that are:
-    - Status: active (not archived)
-    - Created within last 90 days OR referenced within last 30 days
-    - Ordered by most recently referenced first
-
-    Args:
-        limit: Maximum number of facts to retrieve (default: 20)
-
-    Returns:
-        JSON result with list of active facts
-    """
+def _handle_retrieve(limit: int = 20) -> dict:
+    """Retrieve active short-term facts"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Retrieve active facts
         cursor.execute("""
-            SELECT
-                fact_id,
-                fact_text,
-                category,
-                created_date,
-                last_referenced_date,
-                reference_count
+            SELECT fact_id, fact_text, category, created_date,
+                   last_referenced_date, reference_count
             FROM short_term_facts
             WHERE status = 'active'
-              AND (
-                created_date > NOW() - INTERVAL '90 days'
-                OR last_referenced_date > NOW() - INTERVAL '30 days'
-              )
+              AND (created_date > NOW() - INTERVAL '90 days'
+                   OR last_referenced_date > NOW() - INTERVAL '30 days')
             ORDER BY last_referenced_date DESC
             LIMIT %s;
         """, (limit,))
 
         facts = cursor.fetchall()
-
-        # Format facts for return
         fact_list = []
-        fact_ids_to_update = []
+        fact_ids = []
 
         for row in facts:
             fact_id, text, category, created, referenced, ref_count = row
-
             fact_list.append({
                 "fact_id": fact_id,
                 "fact_text": text,
                 "category": category,
-                "created_date": created.isoformat() if created else None,
-                "last_referenced_date": referenced.isoformat() if referenced else None,
                 "reference_count": ref_count
             })
+            fact_ids.append(fact_id)
 
-            fact_ids_to_update.append(fact_id)
-
-        # Update reference tracking for retrieved facts
-        if fact_ids_to_update:
+        # Update reference tracking
+        if fact_ids:
             cursor.execute("""
                 UPDATE short_term_facts
-                SET
-                    last_referenced_date = NOW(),
-                    reference_count = reference_count + 1
+                SET last_referenced_date = NOW(), reference_count = reference_count + 1
                 WHERE fact_id = ANY(%s);
-            """, (fact_ids_to_update,))
-
+            """, (fact_ids,))
             conn.commit()
 
         cursor.close()
         conn.close()
 
-        print(f"[memory_server][retrieve] ✓ Retrieved {len(fact_list)} active facts")
+        print(f"[memory][retrieve] ✓ Retrieved {len(fact_list)} facts")
 
-        return json.dumps({
+        return {
             "success": True,
             "count": len(fact_list),
             "facts": fact_list
-        })
+        }
 
     except Exception as e:
-        print(f"[memory_server][retrieve] ✗ Error: {e}")
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-            "facts": []
-        })
+        print(f"[memory][retrieve] ✗ Error: {e}")
+        return {"success": False, "error": str(e), "facts": []}
 
 
-@mcp.tool()
-def short_term_memory_archive_old() -> str:
-    """
-    Archive old, unreferenced facts.
-
-    Archives facts that:
-    - Created more than 90 days ago AND
-    - Not referenced in the last 30 days AND
-    - Currently have status 'active'
-
-    Archived facts are NOT deleted - they remain in database for training data.
-
-    Returns:
-        JSON result with count of archived facts
-    """
+def _handle_archive() -> dict:
+    """Archive old, unreferenced facts"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Archive old facts
         cursor.execute("""
             UPDATE short_term_facts
             SET status = 'archived'
@@ -223,36 +139,78 @@ def short_term_memory_archive_old() -> str:
 
         archived = cursor.fetchall()
         conn.commit()
-
-        archived_list = [
-            {"fact_id": fid, "fact_text": text}
-            for fid, text in archived
-        ]
-
         cursor.close()
         conn.close()
 
-        print(f"[memory_server][archive] ✓ Archived {len(archived_list)} facts")
+        print(f"[memory][archive] ✓ Archived {len(archived)} facts")
 
-        return json.dumps({
+        return {
             "success": True,
-            "archived_count": len(archived_list),
-            "archived_facts": archived_list
-        })
+            "archived_count": len(archived),
+            "message": f"Archived {len(archived)} old facts"
+        }
 
     except Exception as e:
-        print(f"[memory_server][archive] ✗ Error: {e}")
+        print(f"[memory][archive] ✗ Error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def memory(
+    action: str,
+    fact: str = None,
+    category: str = None,
+    limit: int = 20
+) -> str:
+    """
+    Unified short-term memory management.
+
+    Actions:
+        - "insert": Store a new fact (requires fact parameter)
+        - "retrieve": Get active facts for context
+        - "archive": Archive old, unreferenced facts
+
+    Args:
+        action: "insert", "retrieve", or "archive"
+        fact: The fact to store (required for insert)
+        category: Category for the fact (optional, for insert)
+        limit: Max facts to retrieve (default: 20, for retrieve)
+
+    Returns:
+        JSON result with action-specific data
+
+    Examples:
+        memory(action="insert", fact="Victor prefers dark mode")
+        memory(action="retrieve", limit=10)
+        memory(action="archive")
+    """
+    action = action.lower().strip()
+    print(f"[memory] Action: {action}")
+
+    if action == "insert":
+        if not fact:
+            return json.dumps({
+                "success": False,
+                "error": "fact parameter required for insert action"
+            })
+        return json.dumps(_handle_insert(fact, category))
+
+    elif action == "retrieve":
+        return json.dumps(_handle_retrieve(limit))
+
+    elif action == "archive":
+        return json.dumps(_handle_archive())
+
+    else:
         return json.dumps({
             "success": False,
-            "error": str(e)
+            "error": f"Unknown action: {action}",
+            "valid_actions": ["insert", "retrieve", "archive"]
         })
 
 
-# Run server
 if __name__ == "__main__":
-    print("[memory_server] Starting Memory Server...")
-    print("[memory_server] Available tools:")
-    print("  - short_term_memory_insert")
-    print("  - short_term_memory_retrieve")
-    print("  - short_term_memory_archive_old")
+    print("[memory_server] Starting Memory Server (Unified)...")
+    print("Tool: memory(action, fact?, category?, limit?)")
+    print("Actions: insert, retrieve, archive")
     mcp.run()

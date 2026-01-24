@@ -46,13 +46,13 @@ def get_memories() -> Optional[Dict]:
                                    em.emotion_label,
                                    em.voice,
                                    em.category,
-                                   temporal_description,
-                                   emotion_bias
+                                   ' ' as temporal_description,
+                                   'neutral' as emotion_bias
                                    from live_memories lm
                                     join public.episodic_memories_with_age em on lm.memory_id = em.id
                             """)
                 mems = cur.fetchall()
-                print(f"[memory_loader.py][get_memoriws] loaded {len(mems)} memories for system prompt")
+                print(f"[memory_loader.py][get_memories] loaded {len(mems)} memories for system prompt")
                 block_lines = []
                 for row in mems:
                     # Clean and normalize fields

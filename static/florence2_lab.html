@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Florence2 Lab - Iris v3</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: #2a2a35;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header h1 span {
+            color: var(--accent);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-loaded {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .status-unloaded {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 350px 1fr 400px;
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 65px);
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            background: var(--bg-tertiary);
+        }
+
+        .panel-content {
+            padding: 1rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Controls Panel */
+        .control-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        select, input[type="text"], textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-primary:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-full {
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* Image Panel */
+        .image-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            border-radius: 0.5rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #imageCanvas {
+            max-width: 100%;
+            max-height: calc(100vh - 200px);
+            border-radius: 0.5rem;
+        }
+
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        /* Results Panel */
+        .result-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .result-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .result-content {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .result-caption {
+            font-size: 1rem;
+            line-height: 1.6;
+            font-family: inherit;
+        }
+
+        .detection-list {
+            list-style: none;
+        }
+
+        .detection-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            background: var(--bg-primary);
+            border-radius: 0.25rem;
+        }
+
+        .detection-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .detection-label {
+            flex: 1;
+        }
+
+        .detection-confidence {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .stat-item {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Task categories */
+        .task-category {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .task-category:first-child {
+            margin-top: 0;
+        }
+
+        /* Quick actions */
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .quick-btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 0.25rem;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        /* Webcam modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            max-width: 640px;
+            width: 100%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #webcamVideo {
+            width: 100%;
+            border-radius: 0.5rem;
+            background: #000;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>
+            <span>Florence2</span> Lab
+        </h1>
+        <div>
+            <span id="statusBadge" class="status-badge status-unloaded">Model Not Loaded</span>
+            <button id="loadModelBtn" class="btn btn-secondary" style="margin-left: 0.5rem;">Load Model</button>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Controls Panel -->
+        <div class="panel">
+            <div class="panel-header">Controls</div>
+            <div class="panel-content">
+                <div class="control-group">
+                    <label class="control-label">Image Source</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button id="uploadBtn" class="btn btn-secondary" style="flex: 1;">
+                            Upload
+                        </button>
+                        <button id="webcamBtn" class="btn btn-secondary" style="flex: 1;">
+                            Webcam
+                        </button>
+                        <button id="pasteBtn" class="btn btn-secondary" style="flex: 1;">
+                            Paste
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">Task</label>
+                    <select id="taskSelect">
+                        <optgroup label="Captioning">
+                            <option value="caption">Caption</option>
+                            <option value="detailed_caption">Detailed Caption</option>
+                            <option value="more_detailed_caption">More Detailed Caption</option>
+                        </optgroup>
+                        <optgroup label="Object Detection">
+                            <option value="object_detection">Object Detection</option>
+                            <option value="dense_region_caption">Dense Region Caption</option>
+                            <option value="region_proposal">Region Proposal</option>
+                        </optgroup>
+                        <optgroup label="OCR">
+                            <option value="ocr">OCR (Text Only)</option>
+                            <option value="ocr_with_region">OCR with Regions</option>
+                        </optgroup>
+                        <optgroup label="Grounding (requires text)">
+                            <option value="phrase_grounding">Phrase Grounding</option>
+                            <option value="open_vocabulary_detection">Open Vocabulary Detection</option>
+                            <option value="referring_expression_segmentation">Referring Expression Segmentation</option>
+                        </optgroup>
+                        <optgroup label="Region Analysis (requires region)">
+                            <option value="region_to_category">Region to Category</option>
+                            <option value="region_to_description">Region to Description</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="control-group" id="textInputGroup">
+                    <label class="control-label">Text Input <span style="color: var(--text-secondary);">(for grounding tasks)</span></label>
+                    <textarea id="textInput" placeholder="e.g., 'a red car' or 'the person on the left'"></textarea>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">Quick Actions</label>
+                    <div class="quick-actions">
+                        <button class="quick-btn" data-task="caption">Caption</button>
+                        <button class="quick-btn" data-task="object_detection">Detect</button>
+                        <button class="quick-btn" data-task="ocr">OCR</button>
+                        <button class="quick-btn" data-task="dense_region_caption">Dense</button>
+                    </div>
+                </div>
+
+                <button id="analyzeBtn" class="btn btn-primary btn-full" disabled>
+                    Analyze Image
+                </button>
+
+                <div style="margin-top: 1rem;">
+                    <button id="cascadeBtn" class="btn btn-secondary btn-full" disabled>
+                        Caption + Ground All
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Panel -->
+        <div class="panel">
+            <div class="panel-header">Image</div>
+            <div class="panel-content" style="padding: 0; position: relative;">
+                <div id="dropZone" class="drop-zone" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div class="drop-zone-icon">📷</div>
+                    <div style="font-size: 1.1rem; margin-bottom: 0.5rem;">Drop image here</div>
+                    <div style="color: var(--text-secondary);">or click to upload</div>
+                </div>
+
+                <div id="imageDisplay" class="canvas-container hidden">
+                    <canvas id="imageCanvas"></canvas>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <div id="loadingOverlay" class="loading-overlay hidden">
+                    <div class="spinner"></div>
+                    <div id="loadingText">Processing...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="panel">
+            <div class="panel-header">Results</div>
+            <div class="panel-content">
+                <div id="resultsPlaceholder" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                    Upload an image and run analysis to see results
+                </div>
+
+                <div id="resultsContent" class="hidden">
+                    <div class="stats-grid" style="margin-bottom: 1rem;">
+                        <div class="stat-item">
+                            <div class="stat-value" id="inferenceTime">-</div>
+                            <div class="stat-label">Inference (s)</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="detectionCount">-</div>
+                            <div class="stat-label">Detections</div>
+                        </div>
+                    </div>
+
+                    <div id="captionResult" class="result-section hidden">
+                        <div class="result-title">Caption</div>
+                        <div class="result-content result-caption" id="captionText"></div>
+                    </div>
+
+                    <div id="detectionsResult" class="result-section hidden">
+                        <div class="result-title">Detections</div>
+                        <ul class="detection-list" id="detectionsList"></ul>
+                    </div>
+
+                    <div id="ocrResult" class="result-section hidden">
+                        <div class="result-title">Extracted Text</div>
+                        <div class="result-content" id="ocrText"></div>
+                    </div>
+
+                    <div id="rawResult" class="result-section">
+                        <div class="result-title">
+                            Raw Output
+                            <button id="copyRawBtn" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;">Copy</button>
+                        </div>
+                        <div class="result-content" id="rawText"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Webcam Modal -->
+    <div id="webcamModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Capture from Webcam</h3>
+                <button class="modal-close" id="closeWebcam">&times;</button>
+            </div>
+            <video id="webcamVideo" autoplay playsinline></video>
+            <div class="modal-actions">
+                <button id="captureBtn" class="btn btn-primary" style="flex: 1;">Capture</button>
+                <button id="cancelWebcam" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentImage = null;
+        let currentImageBase64 = null;
+        let modelLoaded = false;
+
+        // Elements
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const imageDisplay = document.getElementById('imageDisplay');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const taskSelect = document.getElementById('taskSelect');
+        const textInput = document.getElementById('textInput');
+        const textInputGroup = document.getElementById('textInputGroup');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const cascadeBtn = document.getElementById('cascadeBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const statusBadge = document.getElementById('statusBadge');
+        const loadModelBtn = document.getElementById('loadModelBtn');
+
+        // Colors for bounding boxes
+        const COLORS = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e',
+            '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6',
+            '#a855f7', '#d946ef', '#ec4899', '#f43f5e'
+        ];
+
+        // Initialize
+        async function init() {
+            await checkModelStatus();
+            setupEventListeners();
+        }
+
+        async function checkModelStatus() {
+            try {
+                const response = await fetch('/api/florence2/status');
+                const status = await response.json();
+                modelLoaded = status.loaded;
+                updateStatusBadge();
+            } catch (error) {
+                console.error('Failed to check model status:', error);
+            }
+        }
+
+        function updateStatusBadge() {
+            if (modelLoaded) {
+                statusBadge.textContent = 'Model Loaded';
+                statusBadge.className = 'status-badge status-loaded';
+                loadModelBtn.textContent = 'Unload Model';
+            } else {
+                statusBadge.textContent = 'Model Not Loaded';
+                statusBadge.className = 'status-badge status-unloaded';
+                loadModelBtn.textContent = 'Load Model';
+            }
+            updateAnalyzeButton();
+        }
+
+        function updateAnalyzeButton() {
+            analyzeBtn.disabled = !currentImage;
+            cascadeBtn.disabled = !currentImage;
+        }
+
+        function setupEventListeners() {
+            // File upload
+            document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+
+            // Drop zone
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', handleDrop);
+
+            // Paste
+            document.getElementById('pasteBtn').addEventListener('click', handlePaste);
+            document.addEventListener('paste', handlePasteEvent);
+
+            // Webcam
+            document.getElementById('webcamBtn').addEventListener('click', openWebcam);
+            document.getElementById('closeWebcam').addEventListener('click', closeWebcam);
+            document.getElementById('cancelWebcam').addEventListener('click', closeWebcam);
+            document.getElementById('captureBtn').addEventListener('click', captureWebcam);
+
+            // Task selection
+            taskSelect.addEventListener('change', handleTaskChange);
+
+            // Quick actions
+            document.querySelectorAll('.quick-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    taskSelect.value = btn.dataset.task;
+                    handleTaskChange();
+                    if (currentImage) analyzeImage();
+                });
+            });
+
+            // Analyze
+            analyzeBtn.addEventListener('click', analyzeImage);
+            cascadeBtn.addEventListener('click', cascadeAnalysis);
+
+            // Load/Unload model
+            loadModelBtn.addEventListener('click', toggleModel);
+
+            // Copy raw
+            document.getElementById('copyRawBtn').addEventListener('click', () => {
+                const rawText = document.getElementById('rawText').textContent;
+                navigator.clipboard.writeText(rawText);
+            });
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) loadImage(file);
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        }
+
+        async function handlePaste() {
+            try {
+                const items = await navigator.clipboard.read();
+                for (const item of items) {
+                    for (const type of item.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await item.getType(type);
+                            loadImage(blob);
+                            return;
+                        }
+                    }
+                }
+                alert('No image found in clipboard');
+            } catch (error) {
+                console.error('Paste failed:', error);
+                alert('Failed to paste. Try Ctrl+V instead.');
+            }
+        }
+
+        function handlePasteEvent(e) {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) loadImage(file);
+                    break;
+                }
+            }
+        }
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    currentImageBase64 = e.target.result.split(',')[1];
+                    displayImage(img);
+                    updateAnalyzeButton();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function displayImage(img) {
+            dropZone.classList.add('hidden');
+            imageDisplay.classList.remove('hidden');
+
+            // Set canvas size
+            const maxWidth = imageDisplay.parentElement.clientWidth - 32;
+            const maxHeight = window.innerHeight - 200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            if (height > maxHeight) {
+                width = (maxHeight / height) * width;
+                height = maxHeight;
+            }
+
+            imageCanvas.width = width;
+            imageCanvas.height = height;
+            overlayCanvas.width = width;
+            overlayCanvas.height = height;
+
+            const ctx = imageCanvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Clear overlay
+            const overlayCtx = overlayCanvas.getContext('2d');
+            overlayCtx.clearRect(0, 0, width, height);
+        }
+
+        // Webcam functions
+        let webcamStream = null;
+
+        function openWebcam() {
+            document.getElementById('webcamModal').classList.remove('hidden');
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+                .then(stream => {
+                    webcamStream = stream;
+                    document.getElementById('webcamVideo').srcObject = stream;
+                })
+                .catch(err => {
+                    console.error('Webcam error:', err);
+                    alert('Could not access webcam');
+                    closeWebcam();
+                });
+        }
+
+        function closeWebcam() {
+            document.getElementById('webcamModal').classList.add('hidden');
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+        }
+
+        function captureWebcam() {
+            const video = document.getElementById('webcamVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(blob => {
+                loadImage(blob);
+                closeWebcam();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function handleTaskChange() {
+            const task = taskSelect.value;
+            const needsText = ['phrase_grounding', 'open_vocabulary_detection', 'referring_expression_segmentation', 'region_to_category', 'region_to_description'].includes(task);
+            textInputGroup.style.display = needsText ? 'block' : 'none';
+        }
+
+        async function toggleModel() {
+            loadModelBtn.disabled = true;
+            try {
+                if (modelLoaded) {
+                    await fetch('/api/florence2/unload', { method: 'POST' });
+                } else {
+                    showLoading('Loading model...');
+                    await fetch('/api/florence2/load', { method: 'POST' });
+                    hideLoading();
+                }
+                await checkModelStatus();
+            } catch (error) {
+                console.error('Toggle model failed:', error);
+                alert('Failed to toggle model');
+                hideLoading();
+            }
+            loadModelBtn.disabled = false;
+        }
+
+        function showLoading(text = 'Processing...') {
+            loadingText.textContent = text;
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        async function analyzeImage() {
+            if (!currentImage) return;
+
+            const task = taskSelect.value;
+            const textInputValue = textInput.value.trim();
+
+            showLoading(`Running ${task}...`);
+
+            try {
+                const response = await fetch('/api/florence2/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageBase64,
+                        task: task,
+                        text_input: textInputValue || null
+                    })
+                });
+
+                const result = await response.json();
+                displayResults(result, task);
+
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                alert('Analysis failed: ' + error.message);
+            }
+
+            hideLoading();
+        }
+
+        async function cascadeAnalysis() {
+            if (!currentImage) return;
+
+            showLoading('Running caption + grounding...');
+
+            try {
+                const response = await fetch('/api/florence2/cascade/caption-ground', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageBase64,
+                        task: 'detailed_caption'
+                    })
+                });
+
+                const result = await response.json();
+
+                // Display combined results
+                const displayResult = {
+                    success: result.success,
+                    task: '<DETAILED_CAPTION> + <CAPTION_TO_PHRASE_GROUNDING>',
+                    result: result.grounding,
+                    inference_time: result.total_inference_time,
+                    raw_output: result
+                };
+
+                // Show caption
+                document.getElementById('resultsPlaceholder').classList.add('hidden');
+                document.getElementById('resultsContent').classList.remove('hidden');
+
+                document.getElementById('captionResult').classList.remove('hidden');
+                document.getElementById('captionText').textContent = result.caption;
+
+                // Draw grounding boxes
+                if (result.grounding) {
+                    drawBoundingBoxes(result.grounding, currentImage);
+                    showDetectionsList(result.grounding);
+                }
+
+                document.getElementById('inferenceTime').textContent = result.total_inference_time?.toFixed(2) || '-';
+                document.getElementById('rawText').textContent = JSON.stringify(result, null, 2);
+
+            } catch (error) {
+                console.error('Cascade analysis failed:', error);
+                alert('Analysis failed: ' + error.message);
+            }
+
+            hideLoading();
+        }
+
+        function displayResults(result, task) {
+            document.getElementById('resultsPlaceholder').classList.add('hidden');
+            document.getElementById('resultsContent').classList.remove('hidden');
+
+            // Hide all result sections first
+            document.getElementById('captionResult').classList.add('hidden');
+            document.getElementById('detectionsResult').classList.add('hidden');
+            document.getElementById('ocrResult').classList.add('hidden');
+
+            // Update stats
+            document.getElementById('inferenceTime').textContent = result.inference_time?.toFixed(2) || '-';
+
+            // Clear overlay
+            const overlayCtx = overlayCanvas.getContext('2d');
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (!result.success) {
+                document.getElementById('rawText').textContent = 'Error: ' + result.error;
+                document.getElementById('detectionCount').textContent = '-';
+                return;
+            }
+
+            const data = result.result;
+            document.getElementById('rawText').textContent = JSON.stringify(result.raw_output, null, 2);
+
+            // Handle different result types
+            if (typeof data === 'string') {
+                // Caption or OCR text
+                if (task.includes('caption')) {
+                    document.getElementById('captionResult').classList.remove('hidden');
+                    document.getElementById('captionText').textContent = data;
+                } else if (task.includes('ocr')) {
+                    document.getElementById('ocrResult').classList.remove('hidden');
+                    document.getElementById('ocrText').textContent = data;
+                }
+                document.getElementById('detectionCount').textContent = '-';
+            } else if (data && data.bboxes) {
+                // Object detection results
+                drawBoundingBoxes(data, currentImage);
+                showDetectionsList(data);
+                document.getElementById('detectionCount').textContent = data.bboxes?.length || 0;
+            } else if (data && data.quad_boxes) {
+                // OCR with region results
+                drawOCRBoxes(data, currentImage);
+                document.getElementById('ocrResult').classList.remove('hidden');
+                document.getElementById('ocrText').textContent = data.labels?.join('\n') || '';
+                document.getElementById('detectionCount').textContent = data.quad_boxes?.length || 0;
+            } else if (data && data.polygons) {
+                // Segmentation results
+                drawPolygons(data, currentImage);
+                document.getElementById('detectionCount').textContent = data.polygons?.length || 0;
+            } else {
+                document.getElementById('detectionCount').textContent = '-';
+            }
+        }
+
+        function drawBoundingBoxes(data, img) {
+            const ctx = overlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            const scaleX = overlayCanvas.width / img.width;
+            const scaleY = overlayCanvas.height / img.height;
+
+            const bboxes = data.bboxes || [];
+            const labels = data.labels || [];
+
+            bboxes.forEach((bbox, i) => {
+                const [x1, y1, x2, y2] = bbox;
+                const color = COLORS[i % COLORS.length];
+
+                // Scale coordinates
+                const sx1 = x1 * scaleX;
+                const sy1 = y1 * scaleY;
+                const sx2 = x2 * scaleX;
+                const sy2 = y2 * scaleY;
+
+                // Draw box
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(sx1, sy1, sx2 - sx1, sy2 - sy1);
+
+                // Draw label background
+                const label = labels[i] || `Object ${i + 1}`;
+                ctx.font = '12px sans-serif';
+                const textWidth = ctx.measureText(label).width;
+
+                ctx.fillStyle = color;
+                ctx.fillRect(sx1, sy1 - 18, textWidth + 8, 18);
+
+                // Draw label text
+                ctx.fillStyle = 'white';
+                ctx.fillText(label, sx1 + 4, sy1 - 5);
+            });
+        }
+
+        function drawOCRBoxes(data, img) {
+            const ctx = overlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            const scaleX = overlayCanvas.width / img.width;
+            const scaleY = overlayCanvas.height / img.height;
+
+            const quadBoxes = data.quad_boxes || [];
+            const labels = data.labels || [];
+
+            quadBoxes.forEach((quad, i) => {
+                const color = COLORS[i % COLORS.length];
+
+                // Scale quad coordinates
+                const scaledQuad = quad.map((val, idx) =>
+                    idx % 2 === 0 ? val * scaleX : val * scaleY
+                );
+
+                // Draw quad
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(scaledQuad[0], scaledQuad[1]);
+                for (let j = 2; j < scaledQuad.length; j += 2) {
+                    ctx.lineTo(scaledQuad[j], scaledQuad[j + 1]);
+                }
+                ctx.closePath();
+                ctx.stroke();
+
+                // Draw label
+                const label = labels[i] || '';
+                if (label) {
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = color;
+                    ctx.fillText(label, scaledQuad[0], scaledQuad[1] - 2);
+                }
+            });
+        }
+
+        function drawPolygons(data, img) {
+            const ctx = overlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            const scaleX = overlayCanvas.width / img.width;
+            const scaleY = overlayCanvas.height / img.height;
+
+            const polygons = data.polygons || [];
+            const labels = data.labels || [];
+
+            polygons.forEach((polygonGroup, i) => {
+                const color = COLORS[i % COLORS.length];
+
+                polygonGroup.forEach(polygon => {
+                    if (polygon.length < 6) return; // Need at least 3 points
+
+                    // Scale and draw
+                    ctx.fillStyle = color + '40'; // Semi-transparent fill
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+
+                    ctx.beginPath();
+                    ctx.moveTo(polygon[0] * scaleX, polygon[1] * scaleY);
+                    for (let j = 2; j < polygon.length; j += 2) {
+                        ctx.lineTo(polygon[j] * scaleX, polygon[j + 1] * scaleY);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                });
+            });
+        }
+
+        function showDetectionsList(data) {
+            const bboxes = data.bboxes || [];
+            const labels = data.labels || [];
+
+            if (bboxes.length === 0) {
+                document.getElementById('detectionsResult').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('detectionsResult').classList.remove('hidden');
+            const list = document.getElementById('detectionsList');
+            list.innerHTML = '';
+
+            labels.forEach((label, i) => {
+                if (!label) return;
+                const li = document.createElement('li');
+                li.className = 'detection-item';
+                li.innerHTML = `
+                    <span class="detection-color" style="background: ${COLORS[i % COLORS.length]}"></span>
+                    <span class="detection-label">${label}</span>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // Initialize
+        init();
+        handleTaskChange();
+    </script>
+</body>
+</html>

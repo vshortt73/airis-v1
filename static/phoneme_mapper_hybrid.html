@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid Phoneme Mapper - Jaw + Blend Shapes</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #canvas-container {
+            flex: 1;
+        }
+        #controls-panel {
+            width: 450px;
+            background: #2a2a2a;
+            border-left: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 15px;
+            background: #333;
+            border-bottom: 1px solid #444;
+        }
+        .panel-header h1 {
+            font-size: 1.3rem;
+            color: #bb86fc;
+            margin-bottom: 5px;
+        }
+        .panel-header .subtitle {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .panel-header .instructions {
+            font-size: 0.8rem;
+            color: #03dac6;
+            background: #1a3a3a;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #03dac6;
+        }
+        .controls-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        .phoneme-section {
+            margin-bottom: 20px;
+            background: #333;
+            border-radius: 8px;
+            padding: 15px;
+            border: 2px solid #444;
+        }
+        .phoneme-section.active {
+            border-color: #bb86fc;
+        }
+        .phoneme-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .phoneme-name {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #bb86fc;
+        }
+        .phoneme-desc {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .input-label {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: 5px;
+            display: block;
+            font-weight: 600;
+        }
+        .shape-input {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        .shape-input:focus {
+            outline: none;
+            border-color: #bb86fc;
+        }
+        textarea.shape-input {
+            min-height: 50px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        .test-button {
+            width: 100%;
+            padding: 8px;
+            background: #444;
+            border: 1px solid #555;
+            border-radius: 5px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .test-button:hover {
+            background: #555;
+        }
+        .panel-footer {
+            padding: 15px;
+            background: #333;
+            border-top: 1px solid #444;
+        }
+        .panel-footer button {
+            width: 100%;
+            padding: 10px;
+            background: #bb86fc;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        .panel-footer button:hover {
+            background: #d4b3ff;
+        }
+        .panel-footer button.secondary {
+            background: #03dac6;
+        }
+        .panel-footer button.secondary:hover {
+            background: #04f5dd;
+        }
+        .hint {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+
+        <div id="controls-panel">
+            <div class="panel-header">
+                <h1>Hybrid Phoneme Mapper</h1>
+                <div class="subtitle">Jaw Rotation + Blend Shapes</div>
+                <div class="instructions">
+                    Each phoneme needs TWO things:<br>
+                    1. <strong>Jaw Open %</strong> - How wide the mouth opens (0-100%)<br>
+                    2. <strong>Blend Shapes</strong> - Lip/tongue positions (comma-separated indices)
+                </div>
+            </div>
+
+            <div class="controls-scroll" id="phoneme-container">
+                <!-- Phonemes will be generated here -->
+            </div>
+
+            <div class="panel-footer">
+                <button id="save-mapping-btn">Save Hybrid Mapping</button>
+                <button id="load-mapping-btn" class="secondary">Load Mapping</button>
+                <button id="test-sequence-btn" class="secondary">Test Full Sequence</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let avatarModel = null;
+        let blendShapeMeshes = [];
+        let jawBone = null;
+        let jawInitialRotation = null;  // Store initial jaw rotation
+
+        const phonemeData = [
+            { id: 'X', name: 'Silence', desc: 'Closed mouth', hint: 'Mouth fully closed', defaultJaw: 0, defaultShapes: '' },
+            { id: 'A', name: 'Open', desc: '"ah" sound - wide open', hint: 'Like saying "father"', defaultJaw: 80, defaultShapes: '' },
+            { id: 'B', name: 'Lips Together', desc: 'M, P, B sounds', hint: 'Lips pressed together', defaultJaw: 0, defaultShapes: '' },
+            { id: 'C', name: 'Lips Forward', desc: 'SH, CH, J sounds', hint: 'Lips pursed forward', defaultJaw: 30, defaultShapes: '' },
+            { id: 'D', name: 'Tongue Up', desc: 'D, T, N sounds', hint: 'Tongue visible behind teeth', defaultJaw: 40, defaultShapes: '' },
+            { id: 'E', name: 'Relaxed', desc: '"eh" sound', hint: 'Like saying "bed"', defaultJaw: 50, defaultShapes: '' },
+            { id: 'F', name: 'Bottom Lip Up', desc: 'F, V sounds', hint: 'Lower lip touches upper teeth', defaultJaw: 20, defaultShapes: '' },
+            { id: 'G', name: 'Tongue Back', desc: 'K, G sounds', hint: 'Tongue pulls back (not visible)', defaultJaw: 40, defaultShapes: '' },
+            { id: 'H', name: 'Tongue Forward', desc: 'L, R sounds', hint: 'Tongue forward/visible', defaultJaw: 50, defaultShapes: '' }
+        ];
+
+        // ============================================
+        // SCENE SETUP
+        // ============================================
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2a2a2a);
+
+            camera = new THREE.PerspectiveCamera(50, (window.innerWidth - 450) / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0.9, 1.2);
+            camera.lookAt(0, 0.9, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth - 450, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0.9, 0);
+            controls.enableDamping = true;
+            controls.update();
+
+            // Bright lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+            scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.0));
+
+            const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            keyLight.position.set(1, 1, 2);
+            scene.add(keyLight);
+
+            const faceLight = new THREE.PointLight(0xffffff, 1.0, 5);
+            faceLight.position.set(0, 1.0, 1.5);
+            scene.add(faceLight);
+        }
+
+        // ============================================
+        // MODEL LOADING
+        // ============================================
+
+        function loadModel() {
+            const loader = new GLTFLoader();
+            loader.load('/assets/3D/alina/scene.gltf',
+                (gltf) => {
+                    avatarModel = gltf.scene;
+                    scene.add(avatarModel);
+
+                    console.log('[Mapper] Model loaded, inspecting materials...');
+
+                    // Configure materials and textures
+                    avatarModel.traverse((node) => {
+                        // Find Alina's jaw bone
+                        if (node.isBone && node.name === 'CC_Base_JawRoot_040') {
+                            jawBone = node;
+                            // Store initial rotation as rest pose
+                            jawInitialRotation = jawBone.rotation.z;
+                            console.log('[Mapper] Found jaw bone:', node.name);
+                            console.log('[Mapper] Initial jaw Z rotation:', jawInitialRotation);
+                        }
+
+                        if (node.isMesh && node.morphTargetInfluences && node.morphTargetInfluences.length > 0) {
+                            blendShapeMeshes.push(node);
+                            console.log(`[Mapper] Found ${node.morphTargetInfluences.length} blend shapes`);
+                        }
+
+                        // Fix materials and textures
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+
+                            if (node.material) {
+                                // Handle both single material and material arrays
+                                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                                materials.forEach((mat, idx) => {
+                                    console.log(`[Mapper] Material ${idx} on ${node.name}:`, {
+                                        name: mat.name,
+                                        type: mat.type,
+                                        hasMap: !!mat.map,
+                                        hasNormalMap: !!mat.normalMap,
+                                        color: mat.color,
+                                        opacity: mat.opacity
+                                    });
+
+                                    // Convert SpecularGlossiness to Standard if needed
+                                    if (mat.type === 'MeshStandardMaterial') {
+                                        // Ensure textures have correct color space
+                                        if (mat.map) {
+                                            mat.map.colorSpace = THREE.SRGBColorSpace;
+                                            mat.map.needsUpdate = true;
+                                        }
+                                        if (mat.normalMap) {
+                                            mat.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+                                            mat.normalMap.needsUpdate = true;
+                                        }
+                                        if (mat.emissiveMap) {
+                                            mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                                            mat.emissiveMap.needsUpdate = true;
+                                        }
+
+                                        // Set material properties for better visibility
+                                        mat.roughness = mat.roughness || 0.8;
+                                        mat.metalness = mat.metalness || 0.0;
+                                        mat.side = THREE.DoubleSide;
+                                        mat.needsUpdate = true;
+                                    }
+                                });
+                            }
+                        }
+                    });
+
+                    if (!jawBone) {
+                        console.warn('[Mapper] Jaw bone not found!');
+                    }
+
+                    console.log('[Mapper] Model setup complete');
+                    buildUI();
+                },
+                (progress) => {
+                    const pct = (progress.loaded / progress.total * 100).toFixed(2);
+                    console.log(`[Mapper] Loading: ${pct}%`);
+                },
+                (error) => {
+                    console.error('[Mapper] Error loading model:', error);
+                }
+            );
+        }
+
+        // ============================================
+        // UI GENERATION
+        // ============================================
+
+        function buildUI() {
+            const container = document.getElementById('phoneme-container');
+            phonemeData.forEach(phoneme => {
+                const section = document.createElement('div');
+                section.className = 'phoneme-section';
+                section.dataset.phoneme = phoneme.id;
+
+                section.innerHTML = `
+                    <div class="phoneme-header">
+                        <div class="phoneme-name">${phoneme.id} - ${phoneme.name}</div>
+                    </div>
+                    <div class="phoneme-desc">${phoneme.desc}</div>
+
+                    <label class="input-label">Jaw Open (0-100%):</label>
+                    <input type="number" class="shape-input jaw-input" data-phoneme="${phoneme.id}"
+                           value="${phoneme.defaultJaw}" min="0" max="100">
+
+                    <label class="input-label">Blend Shape Indices:</label>
+                    <textarea class="shape-input blend-input" data-phoneme="${phoneme.id}"
+                              placeholder="e.g., 1, 50, 63">${phoneme.defaultShapes}</textarea>
+
+                    <div class="hint">${phoneme.hint}</div>
+                    <button class="test-button" data-phoneme="${phoneme.id}">Test ${phoneme.id}</button>
+                `;
+
+                container.appendChild(section);
+            });
+
+            // Add event listeners
+            document.querySelectorAll('.test-button').forEach(btn => {
+                btn.addEventListener('click', () => testPhoneme(btn.dataset.phoneme));
+            });
+        }
+
+        // ============================================
+        // ANIMATION FUNCTIONS
+        // ============================================
+
+        function setJawRotation(percent) {
+            if (!jawBone || jawInitialRotation === null) return;
+            const maxRotation = 0.5;  // radians (~28 degrees)
+            // Apply rotation relative to initial rest pose
+            // Positive Z rotation opens jaw downward from rest position
+            const delta = (percent / 100) * maxRotation;
+            jawBone.rotation.z = jawInitialRotation + delta;
+        }
+
+        function setBlendShapes(indices, value = 1.0) {
+            // Reset all
+            blendShapeMeshes.forEach(mesh => {
+                for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
+                    mesh.morphTargetInfluences[i] = 0;
+                }
+            });
+
+            // Set specified
+            indices.forEach(index => {
+                blendShapeMeshes.forEach(mesh => {
+                    if (index < mesh.morphTargetInfluences.length) {
+                        mesh.morphTargetInfluences[index] = value;
+                    }
+                });
+            });
+        }
+
+        function parseShapeIndices(text) {
+            if (!text || text.trim() === '') return [];
+            return text.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+        }
+
+        function testPhoneme(phonemeId) {
+            const jawInput = document.querySelector(`.jaw-input[data-phoneme="${phonemeId}"]`);
+            const blendInput = document.querySelector(`.blend-input[data-phoneme="${phonemeId}"]`);
+
+            const jawPercent = parseInt(jawInput.value) || 0;
+            const blendIndices = parseShapeIndices(blendInput.value);
+
+            console.log(`Testing ${phonemeId}: Jaw ${jawPercent}%, Shapes`, blendIndices);
+
+            // Apply both
+            setJawRotation(jawPercent);
+            setBlendShapes(blendIndices);
+
+            // Highlight
+            document.querySelectorAll('.phoneme-section').forEach(s => s.classList.remove('active'));
+            document.querySelector(`.phoneme-section[data-phoneme="${phonemeId}"]`).classList.add('active');
+
+            // Reset after 2 seconds
+            setTimeout(() => {
+                console.log(`Resetting ${phonemeId}`);
+                setJawRotation(0);
+                setBlendShapes([]);
+                document.querySelectorAll('.phoneme-section').forEach(s => s.classList.remove('active'));
+            }, 2000);
+        }
+
+        // ============================================
+        // SAVE/LOAD
+        // ============================================
+
+        document.getElementById('save-mapping-btn').addEventListener('click', () => {
+            const mapping = {};
+            phonemeData.forEach(p => {
+                const jawInput = document.querySelector(`.jaw-input[data-phoneme="${p.id}"]`);
+                const blendInput = document.querySelector(`.blend-input[data-phoneme="${p.id}"]`);
+
+                mapping[p.id] = {
+                    jaw: parseInt(jawInput.value) || 0,
+                    blendShapes: parseShapeIndices(blendInput.value)
+                };
+            });
+
+            const json = JSON.stringify(mapping, null, 2);
+            console.log('Hybrid mapping:', json);
+
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'alina_hybrid_phoneme_mapping.json';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            alert('Hybrid mapping saved!');
+        });
+
+        document.getElementById('load-mapping-btn').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const mapping = JSON.parse(event.target.result);
+                        Object.keys(mapping).forEach(phonemeId => {
+                            const data = mapping[phonemeId];
+                            const jawInput = document.querySelector(`.jaw-input[data-phoneme="${phonemeId}"]`);
+                            const blendInput = document.querySelector(`.blend-input[data-phoneme="${phonemeId}"]`);
+
+                            if (jawInput) jawInput.value = data.jaw || 0;
+                            if (blendInput) blendInput.value = data.blendShapes ? data.blendShapes.join(', ') : '';
+                        });
+                        alert('Mapping loaded!');
+                    } catch (err) {
+                        alert('Error loading: ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        });
+
+        document.getElementById('test-sequence-btn').addEventListener('click', async () => {
+            for (const p of phonemeData) {
+                testPhoneme(p.id);
+                await new Promise(resolve => setTimeout(resolve, 600));
+            }
+            setJawRotation(0);
+            setBlendShapes([]);
+        });
+
+        // ============================================
+        // ANIMATION LOOP
+        // ============================================
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = (window.innerWidth - 450) / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth - 450, window.innerHeight);
+        });
+
+        // ============================================
+        // INIT
+        // ============================================
+
+        initScene();
+        loadModel();
+        animate();
+    </script>
+</body>
+</html>

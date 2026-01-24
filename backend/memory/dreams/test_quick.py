@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Quick test of dream system components"""
+"""
+Quick test of dream system components
+
+Architecture:
+- Iris: localhost:11434 (local RTX 5090, qwen3-32b)
+- Freud: node2:11435 (remote RTX 4080, gemma-3-4b) - swaps with Vision at night
+"""
 import os
 import sys
 
@@ -11,38 +17,44 @@ print("Importing modules...")
 import asyncio
 
 print("Importing conversation manager...")
-from backend.memory.dreams.conversation_manager import DreamConversation, call_ollama
+from backend.memory.dreams.conversation_manager import DreamConversation, DreamModelConfig, call_ollama
+from app import config
 print("Imports successful!")
 
-async def test_ollama_connection():
-    """Test basic Ollama connectivity"""
-    print("=== Testing Ollama Connections ===\n")
+async def test_llama_connections():
+    """Test basic llama.cpp connectivity"""
+    print("=== Testing llama.cpp Connections ===\n")
 
-    # Test Freud (main Ollama)
-    print("Testing Freud (http://localhost:11434 - qwen2.5:14b)...")
-    print("Creating messages...")
     messages = [{"role": "user", "content": "Say hello in 5 words"}]
-    print("Calling Ollama...")
-    response = await call_ollama(
-        "http://localhost:11434",
-        "qwen2.5:14b",
-        messages,
-        temperature=0.7
-    )
-    print(f"Freud response received: {len(response)} chars")
-    print(f"Freud: {response}\n")
 
-    # Test Iris (vision Ollama)
-    print("Testing Iris (http://localhost:11435 - qwen3:32b)...")
+    # Test Iris (local llama.cpp)
+    iris_url = config.OLLAMA_BASE_URL
+    print(f"Testing Iris ({iris_url})...")
     response = await call_ollama(
-        "http://localhost:11435",
-        "qwen3:32b",
+        iris_url,
+        DreamModelConfig.IRIS_MODEL,
         messages,
         temperature=0.7
     )
+    print(f"Iris response received: {len(response)} chars")
     print(f"Iris: {response}\n")
 
-    print("✓ Both models responding!\n")
+    # Test Freud (remote node2)
+    freud_url = DreamModelConfig.FREUD_URL
+    print(f"Testing Freud ({freud_url})...")
+    print("Note: Freud only available during nightly dreams (swaps with Vision)")
+    try:
+        response = await call_ollama(
+            freud_url,
+            DreamModelConfig.FREUD_MODEL,
+            messages,
+            temperature=0.7
+        )
+        print(f"Freud: {response}\n")
+        print("✓ Both models responding!\n")
+    except Exception as e:
+        print(f"Freud not available (expected during daytime): {e}\n")
+        print("✓ Iris responding! (Freud only available at night)\n")
 
 async def test_single_turn():
     """Test a single dream turn"""
@@ -65,7 +77,7 @@ async def test_single_turn():
 
 async def main():
     try:
-        await test_ollama_connection()
+        await test_llama_connections()
         await test_single_turn()
         print("✓ All tests passed!")
     except Exception as e:

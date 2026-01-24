@@ -19,19 +19,19 @@ from app import config
 class DreamModelConfig:
     """Configuration for Iris and Freud models"""
 
-    #Freud (Guide) - runs on GPU 0 (4080 Super, 16GB via inverted CUDA) - Port 11435
-    #FREUD_URL = "http://localhost:11437"  # CPU-only Ollama for Freud
-    FREUD_URL = "http://localhost:11435"
+    # Freud (Guide) - runs on node2:11435 (GPU 0, RTX 4080 SUPER)
+    # Swaps with Vision model during nightly dream processing
+    # Uses message sanitizer to handle strict user/assistant alternation requirement
+    FREUD_URL = getattr(config, 'FREUD_URL', 'http://node2:11435')
 
-    FREUD_MODEL = "gemma2:9b"  # Freud's model (~5GB, ~7-8GB with 16K context)
+    FREUD_MODEL = getattr(config, 'FREUD_MODEL', 'gemma3:4b')  # Freud's model
     FREUD_DREAM_TEMP = 0.8    # Dream phase temperature
     FREUD_REFLECTION_TEMP = 0.5  # Reflection phase temperature
     FREUD_SEED_TEMP = 1.2     # Creative seed scenarios
 
-    # Iris (Dreamer) - runs on GPU 1 (5090, 32GB via inverted CUDA) - Port 11434
+    # Iris (Dreamer) - runs on GPU 0 (5090, llama.cpp server) - Port 11434
     IRIS_URL = config.OLLAMA_BASE_URL  # http://localhost:11434
-    #IRIS_MODEL = "qwen2.5:72b"  # Iris 72B for PhD-level dream narratives
-    IRIS_MODEL = "qwen2.5:32b"  # Iris 32B model - 70b is too slow. 
+    IRIS_MODEL = "qwen3-32b"  # Iris model (loaded by llama_server_start.sh) 
 
     # Dream state parameters - highly creative, surreal, dream-like
     IRIS_DREAM_TEMP = 1.3         # Very high temperature for surreal associations
@@ -78,10 +78,60 @@ FREUD_REFLECTION_PROMPT = load_prompt('freud_reflection.txt')
 IRIS_DREAM_PROMPT = load_prompt('iris_dream_state.txt')
 
 # ============================================
-# OLLAMA API CLIENT
+# LLAMA.CPP API CLIENT (OpenAI-compatible)
 # ============================================
 
-async def call_ollama(
+def sanitize_messages_for_alternation(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """
+    Sanitize messages to ensure strict user/assistant alternation.
+    Some models (like Mistral) require this strictly.
+
+    - System messages are prepended to the first user message
+    - Consecutive same-role messages are merged
+    """
+    if not messages:
+        return []
+
+    result = []
+    system_content = []
+
+    # First pass: extract system messages
+    for msg in messages:
+        if msg.get("role") == "system":
+            system_content.append(msg.get("content", ""))
+        else:
+            result.append({"role": msg["role"], "content": msg.get("content", "")})
+
+    # If no non-system messages, return empty
+    if not result:
+        return [{"role": "user", "content": "\n\n".join(system_content)}] if system_content else []
+
+    # Prepend system content to first user message
+    if system_content:
+        system_text = "\n\n".join(system_content)
+        if result[0]["role"] == "user":
+            result[0]["content"] = f"{system_text}\n\n{result[0]['content']}"
+        else:
+            # First message is assistant, insert a user message before it
+            result.insert(0, {"role": "user", "content": system_text})
+
+    # Second pass: merge consecutive same-role messages
+    merged = []
+    for msg in result:
+        if merged and merged[-1]["role"] == msg["role"]:
+            # Merge with previous
+            merged[-1]["content"] += "\n\n" + msg["content"]
+        else:
+            merged.append(msg)
+
+    # Ensure we start with user (required by Mistral)
+    if merged and merged[0]["role"] == "assistant":
+        merged.insert(0, {"role": "user", "content": "Begin."})
+
+    return merged
+
+
+async def call_llama_cpp(
     url: str,
     model: str,
     messages: List[Dict[str, str]],
@@ -91,11 +141,11 @@ async def call_ollama(
     repeat_penalty: Optional[float] = None
 ) -> str:
     """
-    Call Ollama API for chat completion
+    Call llama.cpp server using OpenAI-compatible API
 
     Args:
-        url: Ollama base URL
-        model: Model name
+        url: llama.cpp server base URL
+        model: Model name (for logging - llama.cpp uses loaded model)
         messages: Conversation history with 'role' and 'content'
         temperature: Sampling temperature
         top_p: Nucleus sampling threshold (0.0-1.0)
@@ -105,51 +155,53 @@ async def call_ollama(
     Returns:
         Generated response text
     """
-    endpoint = f"{url}/api/chat"
+    endpoint = f"{url}/v1/chat/completions"
 
-    # Build options dict with all parameters
-    options = {
-        "num_ctx": DreamModelConfig.CONTEXT_WINDOW,
-        "temperature": temperature
+    # Sanitize messages for strict alternation (required by Mistral)
+    sanitized_messages = sanitize_messages_for_alternation(messages)
+
+    # Build payload in OpenAI format
+    payload = {
+        "messages": sanitized_messages,
+        "temperature": temperature,
+        "stream": False,
+        "n_ctx": DreamModelConfig.CONTEXT_WINDOW
     }
 
     # Add optional parameters if provided
     if top_p is not None:
-        options["top_p"] = top_p
+        payload["top_p"] = top_p
     if top_k is not None:
-        options["top_k"] = top_k
+        payload["top_k"] = top_k
     if repeat_penalty is not None:
-        options["repeat_penalty"] = repeat_penalty
-
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "options": options
-    }
+        payload["repeat_penalty"] = repeat_penalty
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(endpoint, json=payload)
             response.raise_for_status()
             data = response.json()
-            return data.get('message', {}).get('content', '')
+            # OpenAI format: choices[0].message.content
+            return data.get('choices', [{}])[0].get('message', {}).get('content', '')
 
     except httpx.TimeoutException as e:
-        print(f"[conversation_manager.py][call_ollama] ✗ TIMEOUT calling {url}: {e}")
+        print(f"[conversation_manager.py][call_llama_cpp] ✗ TIMEOUT calling {url}: {e}")
         print(f"  Model: {model}, Messages: {len(messages)}, Temp: {temperature}")
         return ""
     except httpx.HTTPStatusError as e:
-        print(f"[conversation_manager.py][call_ollama] ✗ HTTP ERROR calling {url}: Status {e.response.status_code}")
+        print(f"[conversation_manager.py][call_llama_cpp] ✗ HTTP ERROR calling {url}: Status {e.response.status_code}")
         print(f"  Response: {e.response.text[:500]}")
         print(f"  Model: {model}, Messages: {len(messages)}, Temp: {temperature}")
         return ""
     except Exception as e:
-        print(f"[conversation_manager.py][call_ollama] ✗ UNEXPECTED ERROR calling {url}: {type(e).__name__}: {e}")
+        print(f"[conversation_manager.py][call_llama_cpp] ✗ UNEXPECTED ERROR calling {url}: {type(e).__name__}: {e}")
         print(f"  Model: {model}, Messages: {len(messages)}, Temp: {temperature}")
         import traceback
         traceback.print_exc()
         return ""
+
+# Alias for backward compatibility
+call_ollama = call_llama_cpp
 
 # ============================================
 # CONVERSATION ORCHESTRATION

@@ -20,10 +20,9 @@ from app import config
 # CONFIGURATION
 # ============================================
 
-# Use 72B Ollama for memory analysis (verified 14K context @ 35 GPU layers)
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:72b"
-OLLAMA_CONTEXT_WINDOW = 14336  # 14K verified for 72B
+# Use llama.cpp server (OpenAI-compatible API on port 11434)
+LLM_BASE_URL = config.OLLAMA_BASE_URL  # http://localhost:11434
+LLM_CONTEXT_WINDOW = 32768  # Context window size
 
 # ============================================
 # DATABASE CONNECTION
@@ -148,30 +147,23 @@ EXAMPLES:
 Return ONLY the message numbers where topic changes occur, one number per line.
 If there are no topic changes in this conversation, return "NONE".
 
-Message numbers with topic changes:"""
+Message numbers with topic changes: /no_think"""
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{LLM_BASE_URL}/v1/chat/completions",
                 json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "num_ctx": OLLAMA_CONTEXT_WINDOW,
-                        "temperature": 0.2,
-                        "top_k": 40,
-                        "repeat_penalty": 1.1,
-                        "num_predict": 300,
-                        "stop": ["<|im_start|>", "<|im_end|>"]
-                    }
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 300,
+                    "stream": False
                 }
             )
 
             if response.status_code == 200:
                 result = response.json()
-                answer = result.get('response', '').strip()
+                answer = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
 
                 # Parse message numbers from response
                 boundaries = []
@@ -295,30 +287,23 @@ Answer in this format:
 Decision: [YES or NO]
 Reason: [One clear sentence explaining why]
 
-Answer:"""
+Answer: /no_think"""
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{LLM_BASE_URL}/v1/chat/completions",
                 json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "num_ctx": OLLAMA_CONTEXT_WINDOW,
-                        "temperature": 0.1,
-                        "top_k": 40,
-                        "repeat_penalty": 1.1,
-                        "num_predict": 100,
-                        "stop": ["<|im_start|>", "<|im_end|>"]
-                    }
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 100,
+                    "stream": False
                 }
             )
 
             if response.status_code == 200:
                 result = response.json()
-                answer = result.get('response', '').strip()
+                answer = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
 
                 # Parse response
                 decision = "YES"
@@ -521,30 +506,23 @@ CONVERSATION:
 IMPORTANT: Output ONLY the title (2-5 words). No explanations, no reasoning, no extra text.
 
 
-Output:"""
+Output: /no_think"""
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{LLM_BASE_URL}/v1/chat/completions",
                 json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "num_ctx": OLLAMA_CONTEXT_WINDOW,
-                        "temperature": 0.3,
-                        "top_k": 40,
-                        "repeat_penalty": 1.1,
-                        "num_predict": 200,
-                        "stop": ["<|im_start|>", "<|im_end|>", "\n\n"]
-                    }
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens": 200,
+                    "stream": False
                 }
             )
 
             if response.status_code == 200:
                 result = response.json()
-                description = result.get('response', '').strip()
+                description = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
 
                 # Take only first line (before any reasoning/thinking text)
                 if '\n' in description:
@@ -673,21 +651,19 @@ OUTPUT TITLE NOW:"""
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                "http://localhost:9600/generate",
+                f"{LLM_BASE_URL}/v1/chat/completions",
                 json={
-                    "prompt": prompt,
+                    "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "max_tokens": 20,
                     "temperature": 0.0,
-                    "top_k": 40,
-                    "repeat_penalty": 1.1,
-                    "stop": ["<|im_start|>", "<|im_end|>", "\n"]
+                    "stop": ["\n"]
                 }
             )
 
             if response.status_code == 200:
                 result = response.json()
-                title = result.get('text', '').strip()
+                title = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
                 # Clean up
                 title = title.strip('"\'')

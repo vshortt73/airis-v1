@@ -1,6 +1,9 @@
 """
 Embedding generation for Iris v3
 Generates vector embeddings for message text using SentenceTransformer
+
+FIXED: Added thread-safe locking to prevent race conditions when multiple
+       processes/threads try to load the model simultaneously
 """
 import os
 import sys
@@ -10,26 +13,46 @@ sys.path.insert(0, PROJECT_ROOT)
 from sentence_transformers import SentenceTransformer
 from typing import Optional, List
 import numpy as np
+import threading
 
 # Global model instance (lazy loaded)
 _embedding_model = None
+_model_lock = threading.Lock()
 
 def get_embedding_model():
-    """Get or initialize the embedding model (singleton pattern)"""
+    """
+    Get or initialize the embedding model (singleton pattern with thread safety)
+    
+    Thread-safe implementation prevents race conditions when multiple
+    processes try to load the model simultaneously.
+    
+    Returns:
+        SentenceTransformer model instance
+    """
     global _embedding_model
-    if _embedding_model is None:
-        try:
-            # Use the same model as the memory system: all-mpnet-base-v2 (768 dimensions)
-            # Force CPU usage to avoid competing with 70B model for GPU VRAM
-            _embedding_model = SentenceTransformer(
-                "all-mpnet-base-v2",
-                device='cpu',
-                cache_folder="/home/captain/.cache/huggingface/hub"
-            )
-            print("[embeddings.py][get_embedding_model] ✓ Loaded all-mpnet-base-v2 model")
-        except Exception as e:
-            print(f"[embeddings.py][get_embedding_model] ✗ Error loading model: {e}")
-            raise
+    
+    # Fast path: model already loaded
+    if _embedding_model is not None:
+        return _embedding_model
+    
+    # Slow path: need to load model (thread-safe)
+    with _model_lock:
+        # Double-check inside lock (another thread may have loaded it)
+        if _embedding_model is None:
+            try:
+                print("[embeddings.py][get_embedding_model] Loading all-mpnet-base-v2 model...")
+                # Use the same model as the memory system: all-mpnet-base-v2 (768 dimensions)
+                # Force CPU usage to avoid competing with 70B model for GPU VRAM
+                _embedding_model = SentenceTransformer(
+                    "all-mpnet-base-v2",
+                    device='cpu',
+                    cache_folder="/home/captain/.cache/huggingface/hub"
+                )
+                print("[embeddings.py][get_embedding_model] ✓ Loaded all-mpnet-base-v2 model")
+            except Exception as e:
+                print(f"[embeddings.py][get_embedding_model] ✗ Error loading model: {e}")
+                raise
+    
     return _embedding_model
 
 def generate_embedding(text: str) -> Optional[List[float]]:

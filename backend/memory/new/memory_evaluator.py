@@ -143,42 +143,33 @@ YOU MUST respond in EXACTLY this format (no extra text before or after):
 DECISION: [WORTHY or NOT_WORTHY]
 CATEGORY: [Practical/Personal/Technical/Creative/Relational/Learning/Other]
 VOICE: [neutral/practical/emotional/technical/creative]
-PRIMARY_EMOTION: [joy/sadness/fear/anger/surprise/love/curiosity/neutral]
+PRIMARY_EMOTION: Choose the DOMINANT emotion from the conversation: joy, sadness, fear, anger, surprise, love, curiosity, frustration, satisfaction, excitement, neutral
 CONFIDENCE: [number between 0.0 and 1.0]
 REASONING: [2-3 sentence explanation]
 
-Example output:
-DECISION: WORTHY
-CATEGORY: Technical
-VOICE: practical
-PRIMARY_EMOTION: curiosity
-CONFIDENCE: 0.8
-REASONING: This conversation contains valuable technical information about database optimization that could be referenced later. The user learned specific SQL techniques for improving query performance.
+IMPORTANT: Choose PRIMARY_EMOTION based on the actual emotional tone of the conversation, not a default. Technical problem-solving often has frustration or satisfaction. Creative work often has excitement or joy. Personal conversations often have love or sadness.
 
-Now evaluate the topic above:"""
+Now evaluate the topic above: /no_think"""
 
     try:
-        # Use llama.cpp API endpoint (port 9600) - no "thinking" mode!
+        # Use llama-server OpenAI-compatible API
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                "http://localhost:9600/generate",
+                f"{config.OLLAMA_BASE_URL}/v1/chat/completions",
                 json={
-                    "prompt": prompt,
+                    "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "max_tokens": 400,
-                    "temperature": 0.2,
-                    "top_k": 40,
-                    "repeat_penalty": 1.1,
-                    "stop": ["<|im_start|>", "<|im_end|>", "\n\n\n\n"]  # Removed "DECISION:" - it was stopping generation!
+                    "temperature": 0.2
                 }
             )
 
             if response.status_code == 200:
                 result = response.json()
-                answer = result.get('text', '').strip()
+                answer = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
                 # Debug: print raw response
-                print(f"\n[Debug] Raw LLM response from llama.cpp:")
+                print(f"\n[Debug] Raw LLM response from llama-server:")
                 print(f"  Full text ({len(answer)} chars):")
                 print(f"{answer}")
                 print(f"  [End of response]\n")
@@ -186,7 +177,7 @@ Now evaluate the topic above:"""
                 if answer:
                     evaluation = parse_evaluation(answer)
                 else:
-                    print(f"[Debug] Empty response from llama.cpp!")
+                    print(f"[Debug] Empty response from llama-server!")
                     evaluation = {
                         'worthy': False,
                         'reasoning': 'LLM returned empty response',

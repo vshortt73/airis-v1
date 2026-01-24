@@ -30,35 +30,40 @@ def get_db_connection():
     
     return psycopg2.connect(**conn_params)
 
-def get_trait_list() -> Optional[Dict]:
+def get_trait_list() -> Optional[str]:
     """
-    Get the traits that are active
-    
+    Get the traits that are active from the fulltraits table
+
+    Note: Protocol activation updates the fulltraits table directly,
+    so this function just reads the current values.
+
     Returns:
-        Dict with 'trait_name' and 'value'
+        Formatted string with trait name/value pairs
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT name, value
             FROM fulltraits
             ORDER BY name DESC
         """)
-        
+
         result = cursor.fetchall()
-        traitlist = "[PERSONALITY TRAITS]\n";
-        traitlist = "these trait settings control the way in which you respond and communicate. evaluate each trait to ensure response aligns with the settings."
+
+        # Format as string with proper header
+        traitlist = "[PERSONALITY TRAITS]\n"
+        traitlist += "these trait settings control the way in which you respond and communicate. evaluate each trait to ensure response aligns with the settings.\n\n"
 
         for row in result:
-                    name, value = row
-                    
-                    traitlist = traitlist + f"{name}: {value}\n"
+            name, value = row
+            traitlist += f"{name}: {value}\n"
+
         conn.close()
         return traitlist
 
     except Exception as e:
-        print(f"[persistence.py][get_trail_list] Error: {e}")
+        print(f"[character_traits.py][get_trait_list] Error: {e}")
         return None
 

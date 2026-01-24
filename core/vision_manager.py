@@ -1,13 +1,13 @@
 """
 Vision Manager for Iris v3
-High-level coordination of vision requests with auto-unload
+High-level coordination of vision requests via llama.cpp
 """
 
 import os
 import sys
 from typing import List, Dict, Optional
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 # Path setup
@@ -15,17 +15,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app import config
-from ollama.vision_service import get_vision_service
+from inference.vision_service import get_vision_service
 
 
 class VisionManager:
     """
-    Manages vision request lifecycle and model auto-unload
+    Manages vision request lifecycle via llama.cpp server
 
     Responsibilities:
-    - Load model on first request
+    - Check server availability on first request
     - Process single/batch image analysis
-    - Auto-unload model after idle timeout
     - Queue management for concurrent requests
     - Integration with conversation flow
     """
@@ -33,7 +32,6 @@ class VisionManager:
     def __init__(self):
         self.service = get_vision_service()
         self.last_used = None
-        self.unload_task = None
         self.processing = False
 
         print("[vision_manager.py][__init__] Vision manager initialized")
@@ -88,23 +86,20 @@ class VisionManager:
         self.processing = True
 
         try:
-            # Ensure model is loaded
+            # Check if llama.cpp server is available
             if not self.service.is_loaded():
-                print("[vision_manager.py][process_images] Loading vision model...")
+                print("[vision_manager.py][process_images] Checking llama.cpp vision server...")
                 success = await asyncio.to_thread(self.service.load_model)
                 if not success:
                     return {
                         "success": False,
-                        "error": "Failed to load vision model",
+                        "error": "Vision server not available. Is llama.cpp running on port 11435?",
                         "results": []
                     }
+                print("[vision_manager.py][process_images] ✓ Vision server ready")
 
             # Update last used time
             self.last_used = datetime.now()
-
-            # Cancel any pending unload
-            if self.unload_task and not self.unload_task.done():
-                self.unload_task.cancel()
 
             # Process each image
             results = []
@@ -145,9 +140,6 @@ class VisionManager:
                     print(f"[vision_manager.py][process_images] ✗ Image {i + 1} failed: {error_msg}")
                     results.append(f"[Error analyzing image {i + 1}: {error_msg}]")
 
-            # Schedule auto-unload
-            self._schedule_auto_unload()
-
             print(f"[vision_manager.py][process_images] ✓ Processed {len(images)} image(s) - {total_tokens} tokens, {total_time:.2f}s")
 
             return {
@@ -170,69 +162,25 @@ class VisionManager:
         finally:
             self.processing = False
 
-    def _schedule_auto_unload(self):
-        """Schedule model unload after idle timeout"""
-        # Cancel existing task
-        if self.unload_task and not self.unload_task.done():
-            self.unload_task.cancel()
-
-        # Create new unload task
-        async def auto_unload():
-            try:
-                timeout_seconds = config.VISION_AUTO_UNLOAD_MINUTES * 60
-                if config.VISION_DEBUG:
-                    print(f"[vision_manager.py][auto_unload] Scheduled unload in {timeout_seconds}s")
-
-                await asyncio.sleep(timeout_seconds)
-
-                # Check if still idle
-                if self.last_used:
-                    idle_time = datetime.now() - self.last_used
-                    if idle_time.total_seconds() >= timeout_seconds:
-                        print("[vision_manager.py][auto_unload] Unloading vision model due to idle timeout...")
-                        await asyncio.to_thread(self.service.unload_model)
-                    else:
-                        if config.VISION_DEBUG:
-                            print("[vision_manager.py][auto_unload] Model still in use, skipping unload")
-
-            except asyncio.CancelledError:
-                if config.VISION_DEBUG:
-                    print("[vision_manager.py][auto_unload] Unload cancelled")
-            except Exception as e:
-                print(f"[vision_manager.py][auto_unload] Error during auto-unload: {e}")
-
-        # Schedule task
-        try:
-            self.unload_task = asyncio.create_task(auto_unload())
-        except RuntimeError:
-            # No event loop running (sync context)
-            if config.VISION_DEBUG:
-                print("[vision_manager.py][_schedule_auto_unload] No event loop, auto-unload disabled")
-
     async def force_unload(self) -> bool:
         """
-        Force immediate model unload
+        Reset vision service state
 
         Returns:
             True if successful
         """
-        # Cancel auto-unload
-        if self.unload_task and not self.unload_task.done():
-            self.unload_task.cancel()
-
         # Wait for any active processing
         while self.processing:
             await asyncio.sleep(0.1)
 
-        # Unload
-        print("[vision_manager.py][force_unload] Forcing model unload...")
+        print("[vision_manager.py][force_unload] Resetting vision service state...")
         success = await asyncio.to_thread(self.service.unload_model)
 
         if success:
             self.last_used = None
-            print("[vision_manager.py][force_unload] ✓ Model unloaded")
+            print("[vision_manager.py][force_unload] ✓ State reset")
         else:
-            print("[vision_manager.py][force_unload] ✗ Unload failed")
+            print("[vision_manager.py][force_unload] ✗ Reset failed")
 
         return success
 
@@ -254,8 +202,7 @@ class VisionManager:
             "manager": {
                 "processing": self.processing,
                 "last_used": self.last_used.isoformat() if self.last_used else None,
-                "idle_seconds": idle_time,
-                "auto_unload_scheduled": self.unload_task is not None and not self.unload_task.done()
+                "idle_seconds": idle_time
             }
         }
 
@@ -297,27 +244,42 @@ async def analyze_images_for_conversation(
     Returns:
         Formatted analysis text or None if failed
     """
-    manager = get_vision_manager()
+    # Request GPU for vision service
+    from core.gpu_manager import request_gpu, get_gpu_manager
 
-    result = await manager.process_images(
-        images=images,
-        context=user_message
-    )
+    success, error = await request_gpu("vision")
+    if not success:
+        print(f"[vision_manager.py][analyze_images_for_conversation] GPU unavailable: {error}")
+        return f"Vision unavailable: {error}"
 
-    if result['success']:
-        analyses = result['results']
+    # Mark GPU as busy during processing
+    gpu = get_gpu_manager()
+    gpu.mark_busy()
 
-        # Format output
-        if len(analyses) == 1:
-            return analyses[0]
+    try:
+        manager = get_vision_manager()
+
+        result = await manager.process_images(
+            images=images,
+            context=user_message
+        )
+
+        if result['success']:
+            analyses = result['results']
+
+            # Format output
+            if len(analyses) == 1:
+                return analyses[0]
+            else:
+                formatted = []
+                for i, analysis in enumerate(analyses):
+                    formatted.append(f"Image {i + 1}: {analysis}")
+                return "\n\n".join(formatted)
         else:
-            formatted = []
-            for i, analysis in enumerate(analyses):
-                formatted.append(f"Image {i + 1}: {analysis}")
-            return "\n\n".join(formatted)
-    else:
-        print(f"[vision_manager.py][analyze_images_for_conversation] Error: {result.get('error')}")
-        return None
+            print(f"[vision_manager.py][analyze_images_for_conversation] Error: {result.get('error')}")
+            return None
+    finally:
+        gpu.mark_idle()
 
 
 # ============================================================================

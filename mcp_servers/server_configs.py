@@ -35,10 +35,17 @@ def get_server_configs() -> List[Dict[str, Any]]:
                 "weather_get",
                 "forecast_get",
                 "news_headlines",
-                "web_fetch",
+                "web_search",      # Search web with keywords
+                "url_fetch",       # Fetch specific URL
+                "arxiv_search",    # Search arXiv for academic papers
+                "pubmed_search",   # Search PubMed for biomedical literature
                 "webcam",
                 "rtsp_show_named",
-                "rtsp_popup_show"
+                "rtsp_popup_show",
+                "face_database_status",  # Face recognition statistics
+                "list_detected_faces",    # Currently detected people
+                "get_person_info",        # Detailed person info
+                "webcam_recognize"        # Capture and recognize faces
             ]
         },
         
@@ -64,59 +71,52 @@ def get_server_configs() -> List[Dict[str, Any]]:
         # },
         
         # ====================================================================
-        # KNOWLEDGE SERVER - Document and knowledge search
+        # KNOWLEDGE SERVER - Document and knowledge search (unified)
         # ====================================================================
-        # {
-        #     "name": "knowledge",
-        #     "command": "python",
-        #     "args": [str(PROJECT_ROOT / "mcp_servers" / "knowledge" / "knowledge_server.py")],
-        #     "tools": [
-        #         "document_search",
-        #         "knowledge_search",
-        #         "knowledge_stats"
-        #     ]
-        # },
+        {
+            "name": "knowledge",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "knowledge" / "knowledge_server.py")],
+            "tools": [
+                "knowledge"  # Unified: action="search|stats"
+            ]
+        },
         
         # ====================================================================
-        # TRAITS SERVER - Personality trait management
+        # TRAITS SERVER - Personality trait management (unified)
         # ====================================================================
         {
             "name": "traits",
             "command": "python",
             "args": [str(PROJECT_ROOT / "mcp_servers" / "traits" / "traits_server.py")],
             "tools": [
-                "trait_get",
-                "trait_list",
-                "trait_modify"  
+                "trait"  # Unified: action="get|list|modify"
             ]
         },
         
         # ====================================================================
-        # MEMORY SERVER - Short-term memory management
+        # MEMORY SERVER - Short-term memory management (unified)
         # ====================================================================
         {
             "name": "memory",
             "command": "python",
             "args": [str(PROJECT_ROOT / "mcp_servers" / "memory" / "memory_server.py")],
             "tools": [
-                "short_term_memory_insert",
-                "short_term_memory_retrieve",
-                "short_term_memory_archive_old"
+                "memory"  # Unified: action="insert|retrieve|archive"
             ]
         },
 
         # ====================================================================
-        # CREATIVE SERVER - Image generation and creative tools
+        # CREATIVE SERVER - Image generation via ComfyUI (unified)
         # ====================================================================
-         # {
-         #     "name": "creative",
-         #     "command": "python",
-         #     "args": [str(PROJECT_ROOT / "mcp_servers" / "creative" / "creative_server.py")],
-         #     "tools": [
-         #         "image_generate",
-         #         "image_generate_iris"
-         #     ]
-         # },
+        {
+            "name": "creative",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "creative" / "creative_server.py")],
+            "tools": [
+                "image"  # Unified: action="generate|self"
+            ]
+        },
         # ====================================================================
         # SYSTEM SERVER - System Stats and Controls
         # ====================================================================
@@ -148,10 +148,32 @@ def get_server_configs() -> List[Dict[str, Any]]:
             "command": "python",
             "args": [str(PROJECT_ROOT / "mcp_servers" / "protocols" / "protocol_server.py")],
             "tools": [
-                "protocol_activate",
-                "protocol_deactivate",
-                "protocol_status",
-                "protocol_list"
+                "protocol"  # Unified: action="activate|deactivate|status|list"
+            ]
+        },
+
+        # ====================================================================
+        # DIRECTIONS SERVER - Ship navigation and wayfinding (unified)
+        # ====================================================================
+        {
+            "name": "directions",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "directions" / "directions_server.py")],
+            "tools": [
+                "ship"  # Unified: action="directions|locations"
+            ]
+        },
+
+        # ====================================================================
+        # SEEDS SERVER - Iris's Motivation Engine
+        # "Seeds are the roots of identity" - Iris
+        # ====================================================================
+        {
+            "name": "seeds",
+            "command": "python",
+            "args": [str(PROJECT_ROOT / "mcp_servers" / "seeds" / "seeds_server.py")],
+            "tools": [
+                "seed"
             ]
         }
     ]
@@ -198,8 +220,17 @@ def get_autonomous_tools() -> List[str]:
         "weather_get",
         "forecast_get",
         "news_headlines",
-        "web_fetch",
+        "web_search",      # Search web with keywords
+        "url_fetch",       # Fetch specific URL
+        "arxiv_search",    # Search arXiv for papers
+        "pubmed_search",   # Search PubMed for medical research
         "webcam",
+
+        # Face recognition tools - all safe (read-only database queries or webcam capture)
+        "face_database_status",  # Get face recognition statistics
+        "list_detected_faces",    # List currently detected people
+        "get_person_info",        # Get detailed person information
+        "webcam_recognize",       # Capture from webcam and recognize faces
 
         # System tools - read-only operations
         "system_status",
@@ -208,9 +239,8 @@ def get_autonomous_tools() -> List[str]:
         "service_status",
         "linux_shell",
 
-        # Knowledge tools - all safe
+        # Knowledge tools - all safe (read-only semantic search)
         "document_search",
-        "knowledge_search",
         "knowledge_stats",
 
         # Traits tools - read-only
@@ -225,9 +255,17 @@ def get_autonomous_tools() -> List[str]:
         # System tools - all safe
         "system_status",
 
-        # Protocol tools - read-only
-        "protocol_status",
-        "protocol_list"
+        # Protocol tool - unified (status/list actions are read-only)
+        "protocol",
+
+        # Ship navigation tool - unified (read-only)
+        "ship",
+
+        # Seeds tools - Iris's Motivation Engine (personal autonomous use)
+        "seed",
+
+        # Creative tool - unified image generation (natural conversation flow)
+        "image"
     ]
 
 
@@ -249,17 +287,13 @@ def get_confirmation_required_tools() -> List[str]:
         # Traits tools - modify personality
         "trait_modify",
 
-        # Creative tools - can be autonomous or require confirmation
-      #  "image_generate",
-      #  "image_generate_iris",
 
         # RTSP tools - display operations
         "rtsp_show_named",
         "rtsp_popup_show",
 
-        # Protocol tools - modify system behavior
-        "protocol_activate",
-        "protocol_deactivate"
+        # Trait tool - unified (modify action changes state)
+        "trait"
     ]
 
 

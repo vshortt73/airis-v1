@@ -1,0 +1,116 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 981,
+      "steps": 25,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": ["11", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {"title": "KSampler"}
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "lustifySDXLNSFW_ggwpV7.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {"title": "Load Checkpoint"}
+  },
+  "5": {
+    "inputs": {
+      "width": 768,
+      "height": 1080,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {"title": "Empty Latent Image"}
+  },
+  "6": {
+    "inputs": {
+      "text": "a beautiful 30 year old woman sitting at a coffee shop",
+      "clip": ["4", 1]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP Text Encode (Prompt)"}
+  },
+  "7": {
+    "inputs": {
+      "text": "text, watermark, blurry, poor composure, bad lighting, poor composition, unprofessional, poor lighting, washed out, no color",
+      "clip": ["4", 1]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP Text Encode (Negative)"}
+  },
+  "8": {
+    "inputs": {
+      "samples": ["3", 0],
+      "vae": ["4", 2]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode"}
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "iris-gen",
+      "images": ["8", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "Save Image"}
+  },
+  "11": {
+    "inputs": {
+      "weight": 0.4,
+      "weight_faceidv2": 0.55,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "V only",
+      "model": ["13", 0],
+      "ipadapter": ["13", 1],
+      "image": ["12", 0],
+      "clip_vision": ["14", 0],
+      "insightface": ["15", 0]
+    },
+    "class_type": "IPAdapterFaceID",
+    "_meta": {"title": "IPAdapter FaceID"}
+  },
+  "12": {
+    "inputs": {
+      "image": "iris.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {"title": "Load Image"}
+  },
+  "13": {
+    "inputs": {
+      "preset": "FACEID",
+      "lora_strength": 0.6,
+      "provider": "CUDA",
+      "model": ["4", 0]
+    },
+    "class_type": "IPAdapterUnifiedLoaderFaceIDV2",
+    "_meta": {"title": "IPAdapter Unified Loader FaceID"}
+  },
+  "14": {
+    "inputs": {
+      "clip_name": "clip_vision_h.safetensors"
+    },
+    "class_type": "CLIPVisionLoader",
+    "_meta": {"title": "CLIP Vision Loader"}
+  },
+  "15": {
+    "inputs": {
+      "provider": "CPU",
+      "model_name": "buffalo_l"
+    },
+    "class_type": "IPAdapterInsightFaceLoaderV2",
+    "_meta": {"title": "IPAdapter InsightFace Loader"}
+  }
+}

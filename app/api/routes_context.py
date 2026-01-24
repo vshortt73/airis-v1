@@ -30,7 +30,7 @@ async def get_conversation_context() -> Dict[str, Any]:
     """
     try:
         # Build exactly what would be sent to Ollama
-        system_msg = build_system_message()
+        system_msg = build_system_message(user_message=None)  # No user message for static context view
         conversation_msgs = active_conversation.get_messages()
         
         # Load images for messages with attachments
@@ -147,3 +147,127 @@ async def conversation_info() -> Dict[str, Any]:
         "model": config.OLLAMA_MODEL,
         "context_window": config.OLLAMA_CONTEXT_WINDOW
     }
+
+
+@router.get("/messages")
+async def get_conversation_messages() -> Dict[str, Any]:
+    """
+    Get the conversation messages that are loaded into context.
+    Shows which messages are full (verbose) vs summarized.
+    """
+    try:
+        messages = active_conversation.get_messages()
+
+        # Analyze messages
+        verbose_count = 0
+        summary_count = 0
+        verbose_tokens = 0
+        summary_tokens = 0
+
+        message_list = []
+        for i, msg in enumerate(messages):
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            is_summary = msg.get("is_summary", False)
+            timeframe = msg.get("timeframe", "")
+
+            tokens = TokenCounter.count_tokens(content)
+
+            if is_summary:
+                summary_count += 1
+                summary_tokens += tokens
+            else:
+                verbose_count += 1
+                verbose_tokens += tokens
+
+            # Truncate content for display
+            preview = content[:200] + "..." if len(content) > 200 else content
+
+            message_list.append({
+                "index": i,
+                "role": role,
+                "is_summary": is_summary,
+                "timeframe": timeframe,
+                "tokens": tokens,
+                "chars": len(content),
+                "preview": preview
+            })
+
+        return {
+            "total_messages": len(messages),
+            "verbose_count": verbose_count,
+            "verbose_tokens": verbose_tokens,
+            "summary_count": summary_count,
+            "summary_tokens": summary_tokens,
+            "messages": message_list
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/raw")
+async def get_raw_context():
+    """
+    Get the EXACT context sent to the model.
+    This is exactly what Iris sees, with summaries clearly marked.
+    """
+    from fastapi.responses import PlainTextResponse
+    from database.persistence import load_recent_conversation
+
+    try:
+        # Load conversation with tiered budgets - same as assemble_full_context does
+        verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+        summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
+
+        history = load_recent_conversation(
+            verbose_budget=verbose_budget,
+            summary_budget=summary_budget,
+            max_messages=getattr(config, 'MAX_TOTAL_MESSAGES', 50)
+        )
+
+        # Build readable output
+        output = []
+        output.append("=" * 80)
+        output.append("CONVERSATION CONTEXT (what Iris sees)")
+        output.append(f"Budgets: {verbose_budget:,} verbose + {summary_budget:,} summary tokens")
+        output.append("=" * 80)
+        output.append("")
+
+        total_tokens = 0
+        verbose_count = 0
+        summary_count = 0
+
+        for i, msg in enumerate(history):
+            role = msg.get("role", "unknown").upper()
+            content = msg.get("content", "")
+            is_summary = msg.get("is_summary", False)
+            timeframe = msg.get("timeframe", "")
+            tokens = TokenCounter.count_tokens(content)
+            total_tokens += tokens
+
+            if is_summary:
+                summary_count += 1
+                marker = "📝 SUMMARY"
+            else:
+                verbose_count += 1
+                marker = "📄 VERBOSE"
+
+            output.append(f"{'─' * 80}")
+            header = f"[{i}] {role} | {marker} | {tokens:,} tokens"
+            if timeframe:
+                header += f" | {timeframe}"
+            output.append(header)
+            output.append(f"{'─' * 80}")
+            output.append(content)
+            output.append("")
+
+        output.append("=" * 80)
+        output.append(f"TOTAL: {len(history)} messages ({verbose_count} verbose, {summary_count} summaries)")
+        output.append(f"Tokens: {total_tokens:,} / {config.OLLAMA_CONTEXT_WINDOW:,} ({(total_tokens / config.OLLAMA_CONTEXT_WINDOW * 100):.1f}%)")
+        output.append("=" * 80)
+
+        return PlainTextResponse("\n".join(output))
+
+    except Exception as e:
+        import traceback
+        return PlainTextResponse(f"Error: {e}\n\n{traceback.format_exc()}")

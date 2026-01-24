@@ -55,22 +55,6 @@
             align-items: center;
         }
 
-        .model-selector {
-            padding: 8px 12px;
-            border: 1px solid #3a3a4e;
-            border-radius: 6px;
-            background: #2a2a3e;
-            color: #e0e0e0;
-            font-size: 14px;
-            cursor: pointer;
-            min-width: 200px;
-        }
-
-        .model-selector option {
-            background: #2a2a3e;
-            color: #e0e0e0;
-        }
-
         .tools-toggle {
             display: flex;
             align-items: center;
@@ -100,6 +84,80 @@
         .clear-btn:hover {
             background: #3a3a4e;
             border-color: #4a4a5e;
+        }
+
+        .model-indicator {
+            padding: 6px 12px;
+            background: #2a4a2e;
+            border: 1px solid #3a5a3e;
+            border-radius: 6px;
+            color: #8f8;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .server-select {
+            padding: 6px 10px;
+            background: #2a2a3e;
+            border: 1px solid #3a3a4e;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .server-select:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        .server-select option {
+            background: #2a2a3e;
+            color: #e0e0e0;
+        }
+
+        .temp-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+
+        .temp-slider {
+            width: 80px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #3a3a4e;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+
+        .temp-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #4a9eff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .temp-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #4a9eff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .temp-value {
+            min-width: 32px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            color: #4a9eff;
         }
 
         .system-prompt-container {
@@ -278,6 +336,89 @@
             transform: none;
         }
 
+        .image-btn {
+            padding: 12px;
+            border: 1px solid #3a3a4e;
+            border-radius: 8px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-btn:hover {
+            background: #3a3a4e;
+            border-color: #4a9eff;
+        }
+
+        .image-btn.has-image {
+            background: #2a4a2e;
+            border-color: #4a8a4e;
+            color: #8f8;
+        }
+
+        .image-preview-container {
+            display: none;
+            padding: 10px 20px 0 20px;
+            background: #16213e;
+        }
+
+        .image-preview-container.visible {
+            display: block;
+        }
+
+        .image-preview-wrapper {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .image-preview {
+            position: relative;
+            display: inline-block;
+        }
+
+        .image-preview img {
+            max-height: 100px;
+            max-width: 150px;
+            border-radius: 8px;
+            border: 2px solid #3a3a4e;
+        }
+
+        .image-preview .remove-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #ff4a4a;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-preview .remove-btn:hover {
+            background: #ff6a6a;
+        }
+
+        .message-image {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 8px;
+            display: block;
+        }
+
         .loading {
             display: inline-block;
             width: 12px;
@@ -349,10 +490,19 @@
         <div class="header">
             <h1>🧪 Ephemeral Chat</h1>
             <div class="header-controls">
-                <span class="status-indicator" id="status">Loading models...</span>
-                <select class="model-selector" id="modelSelector" disabled>
-                    <option>Loading models...</option>
+                <span class="status-indicator" id="status">Connecting...</span>
+                <select class="server-select" id="serverSelect" onchange="onServerChange()">
+                    <option value="main">Main (qwen3:32b)</option>
+                    <option value="node2_small">Node2 Small (mistral:7b)</option>
                 </select>
+                <span class="model-indicator" id="modelIndicator">llama.cpp</span>
+                <div class="temp-control" title="Temperature: 0 = deterministic, 2 = very creative">
+                    <span>🌡️</span>
+                    <input type="range" class="temp-slider" id="tempSlider"
+                           min="0" max="2" step="0.1" value="0.7"
+                           oninput="updateTempDisplay()">
+                    <span class="temp-value" id="tempValue">0.7</span>
+                </div>
                 <label class="tools-toggle">
                     <input type="checkbox" id="toolsToggle">
                     <span>🔧 Enable Tools</span>
@@ -384,8 +534,16 @@
             </div>
         </div>
 
+        <div class="image-preview-container" id="imagePreviewContainer">
+            <div class="image-preview-wrapper" id="imagePreviewWrapper"></div>
+        </div>
+
         <div class="input-container">
             <div class="input-wrapper">
+                <input type="file" id="imageInput" accept="image/*" multiple style="display: none;" onchange="handleImageSelect(event)">
+                <button class="image-btn" id="imageBtn" onclick="document.getElementById('imageInput').click()" title="Attach images">
+                    📷
+                </button>
                 <textarea
                     class="message-input"
                     id="messageInput"
@@ -401,44 +559,179 @@
     </div>
 
     <script>
+        // All requests go through same-origin backend to avoid HTTPS mixed content issues
+        // Backend proxies to: localhost:11434 (text) and node2:11435 (vision)
         let messages = [];
         let isStreaming = false;
-        let selectedModel = null;
+        let pendingImages = []; // Store {file, base64, dataUrl} objects
+        let selectedServer = 'main'; // Current server selection
+        let availableServers = {}; // Server info from backend
+        let temperature = 0.7; // Sampling temperature
 
-        // Load available models on startup
-        async function loadModels() {
-            try {
-                const response = await fetch('/api/ephemeral/models');
-                const data = await response.json();
+        function updateTempDisplay() {
+            const slider = document.getElementById('tempSlider');
+            const display = document.getElementById('tempValue');
+            temperature = parseFloat(slider.value);
+            display.textContent = temperature.toFixed(1);
+        }
 
-                if (data.success && data.models.length > 0) {
-                    const selector = document.getElementById('modelSelector');
-                    selector.innerHTML = '';
+        // Handle image file selection
+        function handleImageSelect(event) {
+            const files = event.target.files;
+            if (!files.length) return;
 
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.name;
-                        option.textContent = model.name;
-                        selector.appendChild(option);
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) continue;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const dataUrl = e.target.result;
+                    // Extract base64 without the data URI prefix for API
+                    const base64 = dataUrl.split(',')[1];
+
+                    pendingImages.push({
+                        file: file,
+                        base64: base64,
+                        dataUrl: dataUrl
                     });
 
-                    selectedModel = data.models[0].name;
-                    selector.disabled = false;
+                    updateImagePreviews();
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Clear input so same file can be selected again
+            event.target.value = '';
+        }
+
+        // Update the image preview display
+        function updateImagePreviews() {
+            const container = document.getElementById('imagePreviewContainer');
+            const wrapper = document.getElementById('imagePreviewWrapper');
+            const imageBtn = document.getElementById('imageBtn');
+
+            wrapper.innerHTML = '';
+
+            if (pendingImages.length === 0) {
+                container.classList.remove('visible');
+                imageBtn.classList.remove('has-image');
+                return;
+            }
+
+            container.classList.add('visible');
+            imageBtn.classList.add('has-image');
+
+            pendingImages.forEach((img, index) => {
+                const preview = document.createElement('div');
+                preview.className = 'image-preview';
+                preview.innerHTML = `
+                    <img src="${img.dataUrl}" alt="Preview">
+                    <button class="remove-btn" onclick="removeImage(${index})" title="Remove">&times;</button>
+                `;
+                wrapper.appendChild(preview);
+            });
+        }
+
+        // Remove a pending image
+        function removeImage(index) {
+            pendingImages.splice(index, 1);
+            updateImagePreviews();
+        }
+
+        // Clear all pending images
+        function clearPendingImages() {
+            pendingImages = [];
+            updateImagePreviews();
+        }
+
+        // Check server health and load available servers
+        async function checkServerHealth() {
+            try {
+                // Get available servers
+                const serversResponse = await fetch('/api/ephemeral/servers');
+                const serversData = await serversResponse.json();
+
+                if (serversData.success && serversData.servers) {
+                    const serverSelect = document.getElementById('serverSelect');
+                    serverSelect.innerHTML = '';
+
+                    for (const server of serversData.servers) {
+                        availableServers[server.id] = server;
+
+                        const option = document.createElement('option');
+                        option.value = server.id;
+                        option.textContent = server.ok
+                            ? `${server.name} ✓`
+                            : `${server.name} ✗`;
+                        option.disabled = !server.ok;
+                        serverSelect.appendChild(option);
+                    }
+
+                    // Select first available server
+                    const firstAvailable = serversData.servers.find(s => s.ok);
+                    if (firstAvailable) {
+                        serverSelect.value = firstAvailable.id;
+                        selectedServer = firstAvailable.id;
+                        updateModelIndicator(firstAvailable);
+                    }
+                }
+
+                // Also check vision health
+                const healthResponse = await fetch('/api/ephemeral/health');
+                const healthData = await healthResponse.json();
+
+                const currentServer = availableServers[selectedServer];
+                if (currentServer?.ok) {
                     document.getElementById('sendBtn').disabled = false;
                     document.getElementById('messageInput').disabled = false;
+                    updateStatus('Ready');
 
-                    updateStatus(`Ready • ${data.models.length} models available`);
-
-                    // Add system message
-                    addSystemMessage(`Loaded ${data.models.length} models. Selected: ${selectedModel}`);
+                    let msg = `✓ Connected to ${currentServer.name}`;
+                    if (healthData.vision?.ok) {
+                        msg += ' and vision model (images)';
+                    } else {
+                        msg += '. ⚠️ Vision server unavailable - image analysis disabled';
+                    }
+                    addSystemMessage(msg);
                 } else {
-                    updateStatus('No models available');
+                    updateStatus('Disconnected');
+                    addSystemMessage('⚠️ No inference servers available');
                 }
             } catch (error) {
-                console.error('Failed to load models:', error);
-                updateStatus('Error loading models');
-                addSystemMessage('⚠️ Could not connect to Ollama. Is it running?');
+                console.error('Failed to check server health:', error);
+                updateStatus('Error');
+                addSystemMessage('⚠️ Could not connect to backend');
             }
+        }
+
+        function updateModelIndicator(server) {
+            const modelIndicator = document.getElementById('modelIndicator');
+            modelIndicator.textContent = server?.model || server?.name || 'Unknown';
+            modelIndicator.style.background = server?.ok ? '#2a4a2e' : '#4a2a2e';
+            modelIndicator.style.borderColor = server?.ok ? '#3a5a3e' : '#5a3a3e';
+            modelIndicator.style.color = server?.ok ? '#8f8' : '#f88';
+        }
+
+        function onServerChange() {
+            const serverSelect = document.getElementById('serverSelect');
+            selectedServer = serverSelect.value;
+            const server = availableServers[selectedServer];
+            updateModelIndicator(server);
+
+            // Disable tools for non-main servers
+            const toolsToggle = document.getElementById('toolsToggle');
+            if (selectedServer !== 'main') {
+                toolsToggle.checked = false;
+                toolsToggle.disabled = true;
+                toolsToggle.parentElement.style.opacity = '0.5';
+                toolsToggle.parentElement.title = 'Tools only available on main server';
+            } else {
+                toolsToggle.disabled = false;
+                toolsToggle.parentElement.style.opacity = '1';
+                toolsToggle.parentElement.title = '';
+            }
+
+            addSystemMessage(`Switched to ${server?.name || selectedServer}`);
         }
 
         function updateStatus(text) {
@@ -459,7 +752,7 @@
             scrollToBottom();
         }
 
-        function addMessage(role, content) {
+        function addMessage(role, content, images = []) {
             const container = document.getElementById('messagesContainer');
             const emptyState = container.querySelector('.empty-state');
             if (emptyState) {
@@ -468,7 +761,18 @@
 
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
-            messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+
+            let html = `<div class="message-content">${escapeHtml(content)}`;
+
+            // Add images if present
+            if (images && images.length > 0) {
+                for (const img of images) {
+                    html += `<img class="message-image" src="${img.dataUrl || img}" alt="Attached image">`;
+                }
+            }
+
+            html += '</div>';
+            messageDiv.innerHTML = html;
             container.appendChild(messageDiv);
             scrollToBottom();
 
@@ -496,24 +800,84 @@
             container.scrollTop = container.scrollHeight;
         }
 
+        // Send message with images to vision endpoint via backend
+        async function sendVisionMessage(userMessage, images, systemPrompt) {
+            console.log('[Vision] Sending to backend vision endpoint with', images.length, 'image(s)');
+
+            // Build messages for vision API
+            const visionMessages = [];
+
+            if (systemPrompt) {
+                visionMessages.push({ role: 'system', content: systemPrompt });
+            }
+
+            // Add previous conversation context (text only)
+            for (const msg of messages.slice(0, -1)) { // Exclude the just-added user message
+                if (msg.content && typeof msg.content === 'string') {
+                    visionMessages.push({ role: msg.role, content: msg.content });
+                }
+            }
+
+            // Add current user message
+            visionMessages.push({
+                role: 'user',
+                content: userMessage || 'What do you see in this image?'
+            });
+
+            // Build request for backend vision endpoint
+            const requestBody = {
+                messages: visionMessages,
+                images: images.map(img => img.base64)  // Base64 without data URI prefix
+            };
+
+            try {
+                const response = await fetch('/api/ephemeral/vision', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `Vision API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const content = data.content || 'No response from vision model';
+                console.log('[Vision] Response received:', content.substring(0, 100) + '...');
+                return content;
+
+            } catch (error) {
+                console.error('[Vision] Error:', error);
+                throw error;
+            }
+        }
+
         async function sendMessage() {
             if (isStreaming) return;
 
             const input = document.getElementById('messageInput');
             const userMessage = input.value.trim();
 
-            if (!userMessage) return;
+            if (!userMessage && pendingImages.length === 0) return;
 
-            // Update selected model
-            selectedModel = document.getElementById('modelSelector').value;
             const toolsEnabled = document.getElementById('toolsToggle').checked;
             const systemPrompt = document.getElementById('systemPromptInput').value.trim();
 
-            // Add user message
-            messages.push({ role: 'user', content: userMessage });
-            addMessage('user', userMessage);
+            // Capture images before clearing
+            const imagesToSend = [...pendingImages];
+            const hasImages = imagesToSend.length > 0;
+
+            // Store user message content for history (text only)
+            messages.push({ role: 'user', content: userMessage || '[Image attached]' });
+            addMessage('user', userMessage || '[Image]', imagesToSend);
+
+            // Clear inputs
             input.value = '';
             autoResizeTextarea(input);
+            clearPendingImages();
 
             // Disable input
             isStreaming = true;
@@ -524,98 +888,155 @@
             try {
                 let assistantContent = '';
                 let currentAssistantDiv = null;
+                let pendingToolCalls = [];
 
-                // Build messages array with system prompt if provided
-                let messagesToSend = [...messages];
-                if (systemPrompt) {
-                    // Prepend system message at the beginning
-                    messagesToSend = [
-                        { role: 'system', content: systemPrompt },
-                        ...messages
-                    ];
-                }
+                // Route based on whether images are present
+                if (hasImages) {
+                    // VISION PATH: Use Ollama vision endpoint
+                    assistantContent = await sendVisionMessage(userMessage, imagesToSend, systemPrompt);
+                    addMessage('assistant', assistantContent);
+                    messages.push({ role: 'assistant', content: assistantContent });
+                } else {
+                    // TEXT PATH: Use backend chat endpoint (proxies to llama.cpp)
 
-                // Stream response
-                const response = await fetch('/api/ephemeral/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: selectedModel,
+                    // Build messages array with system prompt if provided
+                    let messagesToSend = [...messages];
+                    if (systemPrompt) {
+                        messagesToSend = [
+                            { role: 'system', content: systemPrompt },
+                            ...messages
+                        ];
+                    }
+
+                    // Build request body for backend chat API
+                    const requestBody = {
                         messages: messagesToSend,
                         stream: true,
-                        tools_enabled: toolsEnabled
-                    })
-                });
+                        tools_enabled: toolsEnabled,
+                        server: selectedServer,
+                        temperature: temperature
+                    };
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
+                    // Stream response via backend (proxies to llama.cpp)
+                    const response = await fetch('/api/ephemeral/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
 
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const jsonStr = line.substring(6);
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep incomplete line in buffer
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+                            const jsonStr = trimmed.substring(6);
+                            if (jsonStr === '[DONE]') continue;
+
                             try {
                                 const data = JSON.parse(jsonStr);
+                                const choice = data.choices?.[0];
+                                if (!choice) continue;
 
-                                if (data.error) {
-                                    if (!currentAssistantDiv) {
-                                        currentAssistantDiv = addMessage('assistant', '');
+                                const delta = choice.delta;
+
+                                // Handle tool calls in delta
+                                if (delta?.tool_calls) {
+                                    for (const toolCall of delta.tool_calls) {
+                                        const idx = toolCall.index || 0;
+                                        if (!pendingToolCalls[idx]) {
+                                            pendingToolCalls[idx] = {
+                                                id: toolCall.id || `call_${idx}`,
+                                                function: { name: '', arguments: '' }
+                                            };
+                                        }
+                                        if (toolCall.function?.name) {
+                                            pendingToolCalls[idx].function.name += toolCall.function.name;
+                                        }
+                                        if (toolCall.function?.arguments) {
+                                            pendingToolCalls[idx].function.arguments += toolCall.function.arguments;
+                                        }
                                     }
-                                    assistantContent = `Error: ${data.error}`;
-                                    updateLastMessage(assistantContent);
-                                    break;
-                                }
-
-                                // Handle tool calls
-                                if (data.tool_calls) {
-                                    console.log('Tool calls requested:', data.tool_calls);
-                                    for (const toolCall of data.tool_calls) {
-                                        const func = toolCall.function;
-                                        addToolMessage(func.name, 'Executing...', null);
-                                    }
-                                }
-
-                                // Handle tool results
-                                if (data.tool_result) {
-                                    console.log('Tool result:', data.tool_result);
-                                    updateLastToolMessage(data.tool_result.name, data.tool_result.result);
                                 }
 
                                 // Handle content streaming
-                                if (data.content) {
+                                if (delta?.content) {
                                     if (!currentAssistantDiv) {
                                         currentAssistantDiv = addMessage('assistant', '');
                                     }
-                                    assistantContent += data.content;
+                                    assistantContent += delta.content;
                                     updateLastMessage(assistantContent);
                                 }
 
-                                if (data.done) {
-                                    break;
+                                // Handle finish reason
+                                if (choice.finish_reason === 'tool_calls' && pendingToolCalls.length > 0) {
+                                    // Execute tool calls
+                                    for (const toolCall of pendingToolCalls) {
+                                        if (toolCall.function.name) {
+                                            addToolMessage(toolCall.function.name, 'Executing...', null);
+
+                                            // Execute via backend
+                                            try {
+                                                const toolResult = await fetch('/api/ephemeral/execute_tool', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        name: toolCall.function.name,
+                                                        arguments: JSON.parse(toolCall.function.arguments || '{}')
+                                                    })
+                                                });
+                                                const result = await toolResult.json();
+                                                updateLastToolMessage(toolCall.function.name, result);
+
+                                                // Add tool result to messages for context
+                                                messages.push({
+                                                    role: 'assistant',
+                                                    content: null,
+                                                    tool_calls: [{
+                                                        id: toolCall.id,
+                                                        type: 'function',
+                                                        function: toolCall.function
+                                                    }]
+                                                });
+                                                messages.push({
+                                                    role: 'tool',
+                                                    tool_call_id: toolCall.id,
+                                                    content: JSON.stringify(result)
+                                                });
+                                            } catch (e) {
+                                                updateLastToolMessage(toolCall.function.name, { error: e.message });
+                                            }
+                                        }
+                                    }
                                 }
+
                             } catch (e) {
-                                console.error('Failed to parse SSE data:', e);
+                                console.error('Failed to parse SSE data:', e, jsonStr);
                             }
                         }
                     }
-                }
 
-                // Save assistant response
-                if (assistantContent) {
-                    messages.push({ role: 'assistant', content: assistantContent });
-                }
+                    // Save assistant response
+                    if (assistantContent) {
+                        messages.push({ role: 'assistant', content: assistantContent });
+                    }
+                } // End of else (text path)
 
             } catch (error) {
                 console.error('Error sending message:', error);
-                addSystemMessage('⚠️ Error communicating with model');
+                addSystemMessage('⚠️ Error: ' + error.message);
             } finally {
                 // Re-enable input
                 isStreaming = false;
@@ -670,6 +1091,7 @@
 
         function clearConversation() {
             messages = [];
+            clearPendingImages();
             const container = document.getElementById('messagesContainer');
             container.innerHTML = `
                 <div class="empty-state">
@@ -696,9 +1118,65 @@
             }
         }
 
+        // Drag and drop support for images
+        function setupDragAndDrop() {
+            const container = document.querySelector('.container');
+
+            container.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                container.style.outline = '2px dashed #4a9eff';
+            });
+
+            container.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                container.style.outline = 'none';
+            });
+
+            container.addEventListener('drop', (e) => {
+                e.preventDefault();
+                container.style.outline = 'none';
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    // Create a fake event to reuse handleImageSelect
+                    handleImageSelect({ target: { files: files, value: '' } });
+                }
+            });
+        }
+
+        // Paste image support
+        function setupPasteSupport() {
+            document.addEventListener('paste', (e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                                const dataUrl = ev.target.result;
+                                const base64 = dataUrl.split(',')[1];
+                                pendingImages.push({
+                                    file: file,
+                                    base64: base64,
+                                    dataUrl: dataUrl
+                                });
+                                updateImagePreviews();
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    }
+                }
+            });
+        }
+
         // Initialize on load
         window.addEventListener('load', () => {
-            loadModels();
+            checkServerHealth();
+            setupDragAndDrop();
+            setupPasteSupport();
         });
     </script>
 </body>

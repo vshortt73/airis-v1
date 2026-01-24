@@ -88,7 +88,11 @@ class MCPServerConnection:
             try:
                 result = await self.client.call_tool(tool_name, parameters)
             except Exception as e:
-                print(f"failed: {e}")
+                print(f"[MCPClient][call_tool] FastMCP call failed: {e}")
+                return {
+                    "success": False,
+                    "error": f"Tool execution failed: {str(e)}"
+                }
             
 
             # FastMCP returns CallToolResult object
@@ -272,7 +276,7 @@ async def test_mcp_client():
         print("[MCP_CLIENT][test_mcp_clien] ERROR: Info server config not found")
         return
     
-    print("\n[MCP_CLIENT][text_mcp_client] Initializing MCP Client (info server only)...")
+    print("\n[MCP_CLIENT][test_mcp_client] Initializing MCP Client (info server only)...")
     client = MCPClient(info_config)
     
     print("\nConnecting to info server...")
@@ -288,17 +292,16 @@ async def test_mcp_client():
         print(f"  {server_name}: {'✓ Connected' if info['connected'] else '✗ Disconnected'}")
         print(f"    Tools: {', '.join(info['tools'][:3])}...")  # Show first 3 tools
     
-    print("\nTesting weather_get tool...")
-    result = await client.call_tool("weather_get", {
-        "location": "Seattle",
-        "units": "imperial"
+    print("\nTesting web search tool...")
+    result = await client.call_tool("web_fetch", {
+        "search_term": "AI Data Structures",
     })
     
     if result.get("success"):
         print(f"✓ Success!")
-        print(f"  Temperature: {result.get('temperature')}°{result.get('units', 'F')}")
-        print(f"  Condition: {result.get('condition')}")
-        print(f"  Location: {result.get('nearest')}")
+       # print(f"  Temperature: {result.get('temperature')}°{result.get('units', 'F')}")
+       # print(f"  Condition: {result.get('condition')}")
+       # print(f"  Location: {result.get('nearest')}")
     else:
         print(f"✗ Failed: {result.get('error')}")
     

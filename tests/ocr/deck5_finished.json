@@ -1,0 +1,431 @@
+{
+  "image_size": {
+    "width": 500,
+    "height": 3333
+  },
+  "processing_params": {
+    "merge_y_threshold": 35,
+    "merge_x_threshold": 50,
+    "neighbor_distance_threshold": 200,
+    "port_x_ratio": 0.4,
+    "starboard_x_ratio": 0.6
+  },
+  "venues": [
+    {
+      "name": "VITALITY SPA",
+      "center": {
+        "x": 283.5,
+        "y": 402.0
+      },
+      "bbox": {
+        "x1": 221,
+        "y1": 391,
+        "x2": 346,
+        "y2": 413
+      },
+      "position": "center",
+      "neighbors": [],
+      "confidence": 0.9585
+    },
+    {
+      "name": "ROYAL THEATER",
+      "center": {
+        "x": 248.5,
+        "y": 644.5
+      },
+      "bbox": {
+        "x1": 207,
+        "y1": 624,
+        "x2": 290,
+        "y2": 665
+      },
+      "position": "center",
+      "neighbors": [],
+      "confidence": 0.9979
+    },
+    {
+      "name": "BOLEROS",
+      "center": {
+        "x": 378.0,
+        "y": 1170.0
+      },
+      "bbox": {
+        "x1": 335,
+        "y1": 1159,
+        "x2": 421,
+        "y2": 1181
+      },
+      "position": "starboard",
+      "neighbors": [
+        "STARBUCKS"
+      ],
+      "confidence": 0.9978
+    },
+    {
+      "name": "STARBUCKS",
+      "center": {
+        "x": 240.0,
+        "y": 1196.0
+      },
+      "bbox": {
+        "x1": 184,
+        "y1": 1185,
+        "x2": 296,
+        "y2": 1207
+      },
+      "position": "center",
+      "neighbors": [
+        "BOLEROS",
+        "SPOTLIGHT KARAOKE"
+      ],
+      "confidence": 0.996
+    },
+    {
+      "name": "SPOTLIGHT KARAOKE",
+      "center": {
+        "x": 110.0,
+        "y": 1263.0
+      },
+      "bbox": {
+        "x1": 59,
+        "y1": 1241,
+        "x2": 161,
+        "y2": 1285
+      },
+      "position": "port",
+      "neighbors": [
+        "SOLERA",
+        "STARBUCKS"
+      ],
+      "confidence": 0.9968
+    },
+    {
+      "name": "THE SHOP",
+      "center": {
+        "x": 384.0,
+        "y": 1399.0
+      },
+      "bbox": {
+        "x1": 357,
+        "y1": 1376,
+        "x2": 411,
+        "y2": 1422
+      },
+      "position": "starboard",
+      "neighbors": [
+        "RUNNING TRACK",
+        "SORRENTOS"
+      ],
+      "confidence": 0.999
+    },
+    {
+      "name": "SOLERA",
+      "center": {
+        "x": 135.5,
+        "y": 1403.0
+      },
+      "bbox": {
+        "x1": 98,
+        "y1": 1392,
+        "x2": 173,
+        "y2": 1414
+      },
+      "position": "port",
+      "neighbors": [
+        "PORT MERCHANTS",
+        "GLOBE AND ATLAS PUB",
+        "SPOTLIGHT KARAOKE"
+      ],
+      "confidence": 0.9984
+    },
+    {
+      "name": "PORT MERCHANTS",
+      "center": {
+        "x": 120.5,
+        "y": 1469.5
+      },
+      "bbox": {
+        "x1": 61,
+        "y1": 1448,
+        "x2": 180,
+        "y2": 1491
+      },
+      "position": "port",
+      "neighbors": [
+        "SOLERA",
+        "GLOBE AND ATLAS PUB",
+        "ISLAND MARKET"
+      ],
+      "confidence": 0.9969
+    },
+    {
+      "name": "RUNNING TRACK",
+      "center": {
+        "x": 454.5,
+        "y": 1475.0
+      },
+      "bbox": {
+        "x1": 440,
+        "y1": 1397,
+        "x2": 469,
+        "y2": 1553
+      },
+      "position": "starboard",
+      "neighbors": [
+        "THE SHOP",
+        "SORRENTOS"
+      ],
+      "confidence": 0.9923
+    },
+    {
+      "name": "SORRENTOS",
+      "center": {
+        "x": 353.0,
+        "y": 1540.0
+      },
+      "bbox": {
+        "x1": 297,
+        "y1": 1531,
+        "x2": 409,
+        "y2": 1549
+      },
+      "position": "starboard",
+      "neighbors": [
+        "RUNNING TRACK",
+        "PROMENADE ROYAL",
+        "THE SHOP",
+        "THE COLLECTION"
+      ],
+      "confidence": 0.997
+    },
+    {
+      "name": "GLOBE AND ATLAS PUB",
+      "center": {
+        "x": 133.0,
+        "y": 1541.0
+      },
+      "bbox": {
+        "x1": 81,
+        "y1": 1509,
+        "x2": 185,
+        "y2": 1573
+      },
+      "position": "port",
+      "neighbors": [
+        "PORT MERCHANTS",
+        "ISLAND MARKET",
+        "SOLERA",
+        "PROMENADE ROYAL"
+      ],
+      "confidence": 0.9804
+    },
+    {
+      "name": "ISLAND MARKET",
+      "center": {
+        "x": 172.5,
+        "y": 1635.0
+      },
+      "bbox": {
+        "x1": 133,
+        "y1": 1613,
+        "x2": 212,
+        "y2": 1657
+      },
+      "position": "port",
+      "neighbors": [
+        "PROMENADE ROYAL",
+        "GLOBE AND ATLAS PUB",
+        "CAFE PROMENADE",
+        "PORT MERCHANTS"
+      ],
+      "confidence": 0.9975
+    },
+    {
+      "name": "PROMENADE ROYAL",
+      "center": {
+        "x": 256.0,
+        "y": 1638.5
+      },
+      "bbox": {
+        "x1": 245,
+        "y1": 1549,
+        "x2": 267,
+        "y2": 1728
+      },
+      "position": "center",
+      "neighbors": [
+        "ISLAND MARKET",
+        "SORRENTOS",
+        "THE COLLECTION",
+        "GLOBE AND ATLAS PUB",
+        "CAFE PROMENADE"
+      ],
+      "confidence": 0.9719
+    },
+    {
+      "name": "THE COLLECTION",
+      "center": {
+        "x": 385.0,
+        "y": 1691.0
+      },
+      "bbox": {
+        "x1": 329,
+        "y1": 1669,
+        "x2": 441,
+        "y2": 1713
+      },
+      "position": "starboard",
+      "neighbors": [
+        "REGALIA",
+        "PROMENADE ROYAL",
+        "SORRENTOS"
+      ],
+      "confidence": 0.9981
+    },
+    {
+      "name": "CAFE PROMENADE",
+      "center": {
+        "x": 142.5,
+        "y": 1754.0
+      },
+      "bbox": {
+        "x1": 82,
+        "y1": 1730,
+        "x2": 203,
+        "y2": 1778
+      },
+      "position": "port",
+      "neighbors": [
+        "ISLAND MARKET",
+        "GUEST SERVICES",
+        "PROMENADE ROYAL",
+        "RISING TIDE BAR"
+      ],
+      "confidence": 0.998
+    },
+    {
+      "name": "REGALIA",
+      "center": {
+        "x": 394.0,
+        "y": 1812.0
+      },
+      "bbox": {
+        "x1": 354,
+        "y1": 1803,
+        "x2": 434,
+        "y2": 1821
+      },
+      "position": "starboard",
+      "neighbors": [
+        "THE COLLECTION",
+        "RISING TIDE BAR",
+        "BIONIC BAR"
+      ],
+      "confidence": 0.9975
+    },
+    {
+      "name": "GUEST SERVICES",
+      "center": {
+        "x": 122.5,
+        "y": 1882.5
+      },
+      "bbox": {
+        "x1": 78,
+        "y1": 1862,
+        "x2": 167,
+        "y2": 1903
+      },
+      "position": "port",
+      "neighbors": [
+        "RISING TIDE BAR",
+        "CAFE PROMENADE",
+        "REGALIA FINE WATCHES"
+      ],
+      "confidence": 0.9978
+    },
+    {
+      "name": "RISING TIDE BAR",
+      "center": {
+        "x": 250.0,
+        "y": 1890.0
+      },
+      "bbox": {
+        "x1": 216,
+        "y1": 1857,
+        "x2": 284,
+        "y2": 1923
+      },
+      "position": "center",
+      "neighbors": [
+        "GUEST SERVICES",
+        "REGALIA",
+        "CAFE PROMENADE",
+        "BIONIC BAR",
+        "REGALIA FINE WATCHES"
+      ],
+      "confidence": 0.9983
+    },
+    {
+      "name": "BIONIC BAR",
+      "center": {
+        "x": 385.0,
+        "y": 2009.5
+      },
+      "bbox": {
+        "x1": 349,
+        "y1": 1985,
+        "x2": 421,
+        "y2": 2034
+      },
+      "position": "starboard",
+      "neighbors": [
+        "RISING TIDE BAR",
+        "REGALIA"
+      ],
+      "confidence": 0.9986
+    },
+    {
+      "name": "REGALIA FINE WATCHES",
+      "center": {
+        "x": 129.5,
+        "y": 2034.5
+      },
+      "bbox": {
+        "x1": 61,
+        "y1": 2012,
+        "x2": 198,
+        "y2": 2057
+      },
+      "position": "port",
+      "neighbors": [
+        "GUEST SERVICES",
+        "RISING TIDE BAR"
+      ],
+      "confidence": 0.979
+    },
+    {
+      "name": "MAIN DINING ROOM",
+      "center": {
+        "x": 250.0,
+        "y": 2520.5
+      },
+      "bbox": {
+        "x1": 165,
+        "y1": 2510,
+        "x2": 335,
+        "y2": 2531
+      },
+      "position": "center",
+      "neighbors": [],
+      "confidence": 0.9404
+    }
+  ],
+  "summary": {
+    "total_venues": 21,
+    "by_position": {
+      "port": 8,
+      "center": 6,
+      "starboard": 7
+    }
+  }
+}

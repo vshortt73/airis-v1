@@ -1,0 +1,2797 @@
+{
+  "ship": "Oasis of the Seas",
+  "decks": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "note": "No deck 13 (superstition). Deck 18 has no public venues.",
+  "elevator_banks": {
+    "forward": {
+      "decks": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ],
+      "position": "forward"
+    },
+    "aft": {
+      "decks": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ],
+      "position": "mid-aft"
+    }
+  },
+  "venues": [
+    {
+      "id": "deck3-royal-theater",
+      "name": "Royal Theater",
+      "deck": 3,
+      "position": "forward",
+      "side": "center",
+      "category": "entertainment",
+      "spans_decks": [
+        3,
+        4,
+        5
+      ],
+      "neighbors": {
+        "south": "deck3-conference-center",
+        "vertical": [
+          "deck4-royal-theater",
+          "deck5-royal-theater"
+        ],
+        "north": "deck3-staircase1"
+      }
+    },
+    {
+      "id": "deck3-conference-center",
+      "name": "Conference Center",
+      "deck": 3,
+      "position": "mid-forward",
+      "side": "center",
+      "category": "meeting",
+      "neighbors": {
+        "north": "deck3-royal-theater",
+        "south": "deck3-main-dining-room",
+        "west": "deck3-staircase6",
+        "east": "deck3-staircase7"
+      }
+    },
+    {
+      "id": "deck3-main-dining-room",
+      "name": "Main Dining Room",
+      "deck": 3,
+      "position": "aft",
+      "side": "center",
+      "category": "dining",
+      "spans_decks": [
+        3,
+        4,
+        5
+      ],
+      "neighbors": {
+        "north": "deck3-conference-center",
+        "vertical": [
+          "deck4-main-dining-room",
+          "deck5-main-dining-room"
+        ],
+        "west": "deck3-staircase6",
+        "east": "deck3-staircase7"
+      }
+    },
+    {
+      "id": "deck4-royal-theater",
+      "name": "Royal Theater",
+      "deck": 4,
+      "position": "forward",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "south": "deck4-entertainment-place",
+        "vertical": [
+          "deck3-royal-theater",
+          "deck5-royal-theater"
+        ],
+        "north": "deck4-staircase1"
+      }
+    },
+    {
+      "id": "deck4-entertainment-place",
+      "name": "Entertainment Place",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "north": "deck4-royal-theater",
+        "east": "deck4-casino-royale-non-smoking",
+        "west": "deck4-blaze",
+        "south": "deck4-studio-b"
+      }
+    },
+    {
+      "id": "deck4-blaze",
+      "name": "Blaze",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "nightlife",
+      "neighbors": {
+        "east": "deck4-entertainment-place",
+        "south": "deck4-comedy",
+        "north": "deck4-staircase2"
+      }
+    },
+    {
+      "id": "deck4-comedy",
+      "name": "Comedy",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "entertainment",
+      "neighbors": {
+        "north": "deck4-blaze",
+        "east": "deck4-studio-b",
+        "south": "deck4-staircase2"
+      }
+    },
+    {
+      "id": "deck4-casino-royale-non-smoking",
+      "name": "Casino Royale Non Smoking",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "casino",
+      "neighbors": {
+        "west": "deck4-entertainment-place",
+        "south": "deck4-crown-lounge",
+        "north": "deck4-staircase3"
+      }
+    },
+    {
+      "id": "deck4-crown-lounge",
+      "name": "Crown Lounge",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "lounge",
+      "neighbors": {
+        "north": "deck4-casino-royale-non-smoking",
+        "west": "deck4-studio-b",
+        "south": "deck4-art-gallery"
+      }
+    },
+    {
+      "id": "deck4-studio-b",
+      "name": "Studio B",
+      "deck": 4,
+      "position": "mid",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "north": "deck4-entertainment-place",
+        "east": "deck4-crown-lounge",
+        "west": "deck4-comedy",
+        "south": "deck4-center-ice-rink"
+      }
+    },
+    {
+      "id": "deck4-center-ice-rink",
+      "name": "Center Ice Rink",
+      "deck": 4,
+      "position": "mid",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck4-studio-b",
+        "east": "deck4-art-gallery",
+        "south": "deck4-casino-royale"
+      }
+    },
+    {
+      "id": "deck4-art-gallery",
+      "name": "Art Gallery",
+      "deck": 4,
+      "position": "mid",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck4-crown-lounge",
+        "west": "deck4-center-ice-rink"
+      }
+    },
+    {
+      "id": "deck4-casino-royale",
+      "name": "Casino Royale",
+      "deck": 4,
+      "position": "mid-aft",
+      "side": "center",
+      "category": "casino",
+      "neighbors": {
+        "north": "deck4-center-ice-rink",
+        "south": "deck4-izumi",
+        "west": "deck4-staircase6",
+        "east": "deck4-staircase7"
+      }
+    },
+    {
+      "id": "deck4-izumi",
+      "name": "Izumi",
+      "deck": 4,
+      "position": "aft",
+      "side": "port",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck4-casino-royale",
+        "east": "deck4-main-dining-room",
+        "south": "deck4-staircase6"
+      }
+    },
+    {
+      "id": "deck4-main-dining-room",
+      "name": "Main Dining Room",
+      "deck": 4,
+      "position": "aft",
+      "side": "center",
+      "category": "dining",
+      "neighbors": {
+        "west": "deck4-izumi",
+        "vertical": [
+          "deck3-main-dining-room",
+          "deck5-main-dining-room"
+        ],
+        "east": "deck4-staircase7"
+      }
+    },
+    {
+      "id": "deck5-vitality-spa",
+      "name": "Vitality Spa",
+      "deck": 5,
+      "position": "forward",
+      "side": "center",
+      "category": "spa",
+      "neighbors": {
+        "south": "deck5-royal-theater"
+      }
+    },
+    {
+      "id": "deck5-royal-theater",
+      "name": "Royal Theater",
+      "deck": 5,
+      "position": "mid-forward",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "north": "deck5-vitality-spa",
+        "south": "deck5-starbucks",
+        "vertical": [
+          "deck3-royal-theater",
+          "deck4-royal-theater"
+        ]
+      }
+    },
+    {
+      "id": "deck5-boleros",
+      "name": "Boleros",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "nightlife",
+      "neighbors": {
+        "north": "deck5-royal-theater",
+        "west": "deck5-starbucks",
+        "south": "deck5-the-shop",
+        "east": "deck5-staircase3"
+      }
+    },
+    {
+      "id": "deck5-starbucks",
+      "name": "Starbucks",
+      "deck": 5,
+      "position": "mid",
+      "side": "center",
+      "category": "cafe",
+      "neighbors": {
+        "north": "deck5-royal-theater",
+        "east": "deck5-boleros",
+        "west": "deck5-spotlight-karaoke",
+        "south": "deck5-royal-promenade"
+      }
+    },
+    {
+      "id": "deck5-spotlight-karaoke",
+      "name": "Spotlight Karaoke",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "entertainment",
+      "neighbors": {
+        "east": "deck5-starbucks",
+        "south": "deck5-solera",
+        "west": "deck5-staircase2"
+      }
+    },
+    {
+      "id": "deck5-solera",
+      "name": "Solera",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck5-spotlight-karaoke",
+        "east": "deck5-royal-promenade",
+        "south": "deck5-port-merchants"
+      }
+    },
+    {
+      "id": "deck5-the-shop",
+      "name": "The Shop",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-boleros",
+        "west": "deck5-royal-promenade",
+        "south": "deck5-sorrentos"
+      }
+    },
+    {
+      "id": "deck5-port-merchants",
+      "name": "Port Merchants",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-solera",
+        "east": "deck5-royal-promenade",
+        "south": "deck5-globe-and-atlas-pub",
+        "west": "deck5-staircase4"
+      }
+    },
+    {
+      "id": "deck5-globe-and-atlas-pub",
+      "name": "Globe and Atlas Pub",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck5-port-merchants",
+        "east": "deck5-royal-promenade",
+        "south": "deck5-island-market",
+        "west": "deck5-staircase4"
+      }
+    },
+    {
+      "id": "deck5-sorrentos",
+      "name": "Sorrentos",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck5-the-shop",
+        "west": "deck5-royal-promenade",
+        "south": "deck5-the-collection",
+        "east": "deck5-staircase5"
+      }
+    },
+    {
+      "id": "deck5-royal-promenade",
+      "name": "Royal Promenade",
+      "deck": 5,
+      "position": "mid",
+      "side": "center",
+      "category": "promenade",
+      "neighbors": {
+        "north": "deck5-starbucks",
+        "east": "deck5-sorrentos",
+        "west": "deck5-globe-and-atlas-pub",
+        "south": "deck5-rising-tide-bar"
+      }
+    },
+    {
+      "id": "deck5-island-market",
+      "name": "Island Market",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-globe-and-atlas-pub",
+        "east": "deck5-royal-promenade",
+        "south": "deck5-cafe-promenade",
+        "west": "deck5-staircase4"
+      }
+    },
+    {
+      "id": "deck5-the-collection",
+      "name": "The Collection",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-sorrentos",
+        "west": "deck5-royal-promenade",
+        "south": "deck5-regalia",
+        "east": "deck5-staircase5"
+      }
+    },
+    {
+      "id": "deck5-cafe-promenade",
+      "name": "Cafe Promenade",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "cafe",
+      "neighbors": {
+        "north": "deck5-island-market",
+        "east": "deck5-rising-tide-bar",
+        "south": "deck5-guest-services",
+        "west": "deck5-staircase4"
+      }
+    },
+    {
+      "id": "deck5-regalia",
+      "name": "Regalia",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-the-collection",
+        "west": "deck5-rising-tide-bar",
+        "south": "deck5-bionic-bar"
+      }
+    },
+    {
+      "id": "deck5-guest-services",
+      "name": "Guest Services",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "services",
+      "neighbors": {
+        "north": "deck5-cafe-promenade",
+        "east": "deck5-rising-tide-bar",
+        "south": "deck5-regalia-fine-watches"
+      }
+    },
+    {
+      "id": "deck5-rising-tide-bar",
+      "name": "Rising Tide Bar",
+      "deck": 5,
+      "position": "mid",
+      "side": "center",
+      "category": "bar",
+      "spans_decks": [
+        5,
+        8
+      ],
+      "neighbors": {
+        "north": "deck5-royal-promenade",
+        "east": "deck5-regalia",
+        "west": "deck5-guest-services",
+        "south": "deck5-bionic-bar",
+        "vertical": [
+          "deck8-rising-tide-bar"
+        ]
+      }
+    },
+    {
+      "id": "deck5-bionic-bar",
+      "name": "Bionic Bar",
+      "deck": 5,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck5-regalia",
+        "west": "deck5-rising-tide-bar",
+        "east": "deck5-staircase7"
+      }
+    },
+    {
+      "id": "deck5-regalia-fine-watches",
+      "name": "Regalia Fine Watches",
+      "deck": 5,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck5-guest-services",
+        "south": "deck5-main-dining-room",
+        "west": "deck5-staircase6"
+      }
+    },
+    {
+      "id": "deck5-main-dining-room",
+      "name": "Main Dining Room",
+      "deck": 5,
+      "position": "aft",
+      "side": "center",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck5-regalia-fine-watches",
+        "vertical": [
+          "deck3-main-dining-room",
+          "deck4-main-dining-room"
+        ],
+        "west": "deck5-staircase6",
+        "east": "deck5-staircase7",
+        "south": "deck5-staircase8"
+      }
+    },
+    {
+      "id": "deck5-running-track",
+      "name": "Running Track",
+      "deck": 5,
+      "position": "aft",
+      "side": "both",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck5-main-dining-room"
+      }
+    },
+    {
+      "id": "deck6-vitality-fitness-center",
+      "name": "Vitality Fitness Center",
+      "deck": 6,
+      "position": "forward",
+      "side": "center",
+      "category": "fitness",
+      "neighbors": {
+        "south": "deck6-schooner-bar"
+      }
+    },
+    {
+      "id": "deck6-picture-this",
+      "name": "Picture This",
+      "deck": 6,
+      "position": "mid",
+      "side": "starboard",
+      "category": "services",
+      "neighbors": {
+        "west": "deck6-schooner-bar",
+        "south": "deck6-focus",
+        "east": "deck6-staircase5"
+      }
+    },
+    {
+      "id": "deck6-schooner-bar",
+      "name": "Schooner Bar",
+      "deck": 6,
+      "position": "mid",
+      "side": "port",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck6-vitality-fitness-center",
+        "east": "deck6-picture-this",
+        "south": "deck6-next-cruise",
+        "west": "deck6-staircase4"
+      }
+    },
+    {
+      "id": "deck6-focus",
+      "name": "Focus",
+      "deck": 6,
+      "position": "mid",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck6-picture-this",
+        "south": "deck6-shore-excursions",
+        "east": "deck6-staircase5"
+      }
+    },
+    {
+      "id": "deck6-shore-excursions",
+      "name": "Shore Excursions",
+      "deck": 6,
+      "position": "mid",
+      "side": "starboard",
+      "category": "services",
+      "neighbors": {
+        "north": "deck6-focus",
+        "east": "deck6-staircase5"
+      }
+    },
+    {
+      "id": "deck6-next-cruise",
+      "name": "Next Cruise",
+      "deck": 6,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "services",
+      "neighbors": {
+        "north": "deck6-schooner-bar",
+        "south": "deck6-playmakers",
+        "west": "deck6-staircase6"
+      }
+    },
+    {
+      "id": "deck6-playmakers",
+      "name": "Playmakers Sports Bar & Arcade",
+      "deck": 6,
+      "position": "aft",
+      "side": "port",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck6-next-cruise",
+        "east": "deck6-carousel",
+        "south": "deck6-staircase6"
+      }
+    },
+    {
+      "id": "deck6-boardwalk-dog-house",
+      "name": "Boardwalk Dog House",
+      "deck": 6,
+      "position": "aft",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "west": "deck6-carousel",
+        "south": "deck6-sugar-beach"
+      }
+    },
+    {
+      "id": "deck6-sugar-beach",
+      "name": "Sugar Beach",
+      "deck": 6,
+      "position": "aft",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck6-boardwalk-dog-house",
+        "south": "deck6-beach-shop"
+      }
+    },
+    {
+      "id": "deck6-carousel",
+      "name": "Carousel",
+      "deck": 6,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "east": "deck6-boardwalk-dog-house",
+        "west": "deck6-playmakers",
+        "south": "deck6-johnny-rockets"
+      }
+    },
+    {
+      "id": "deck6-beach-shop",
+      "name": "Beach Shop",
+      "deck": 6,
+      "position": "aft",
+      "side": "starboard",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck6-sugar-beach"
+      }
+    },
+    {
+      "id": "deck6-johnny-rockets",
+      "name": "Johnny Rockets",
+      "deck": 6,
+      "position": "aft",
+      "side": "center",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck6-carousel",
+        "south": "deck6-ultimate-abyss-landing",
+        "east": "deck6-staircase7"
+      }
+    },
+    {
+      "id": "deck6-ultimate-abyss-landing",
+      "name": "Ultimate Abyss Landing",
+      "deck": 6,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck6-johnny-rockets",
+        "south": "deck6-aquatheater"
+      }
+    },
+    {
+      "id": "deck6-aquatheater",
+      "name": "AquaTheater",
+      "deck": 6,
+      "position": "aft",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "north": "deck6-ultimate-abyss-landing"
+      }
+    },
+    {
+      "id": "deck7-rock-climbing-wall",
+      "name": "Rock Climbing Wall",
+      "deck": 7,
+      "position": "aft",
+      "side": "both",
+      "category": "recreation",
+      "neighbors": {
+        "west": "deck7-staircase6",
+        "east": "deck7-staircase7",
+        "north": "deck7-staircase8"
+      }
+    },
+    {
+      "id": "deck8-vintages",
+      "name": "Vintages",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "bar",
+      "neighbors": {
+        "west": "deck8-trend",
+        "south": "deck8-giovannis-table"
+      }
+    },
+    {
+      "id": "deck8-tiffany",
+      "name": "Tiffany & Co.",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "shopping",
+      "neighbors": {
+        "south": "deck8-john-hardy"
+      }
+    },
+    {
+      "id": "deck8-john-hardy",
+      "name": "John Hardy",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "shopping",
+      "neighbors": {
+        "north": "deck8-tiffany",
+        "south": "deck8-central-park-library"
+      }
+    },
+    {
+      "id": "deck8-trend",
+      "name": "Trend",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "center",
+      "category": "shopping",
+      "neighbors": {
+        "east": "deck8-vintages",
+        "south": "deck8-central-park",
+        "west": "deck8-staircase2"
+      }
+    },
+    {
+      "id": "deck8-central-park-library",
+      "name": "Central Park Library",
+      "deck": 8,
+      "position": "mid",
+      "side": "port",
+      "category": "library",
+      "neighbors": {
+        "north": "deck8-john-hardy",
+        "east": "deck8-central-park",
+        "south": "deck8-park-cafe"
+      }
+    },
+    {
+      "id": "deck8-park-cafe",
+      "name": "Park Cafe",
+      "deck": 8,
+      "position": "mid",
+      "side": "port",
+      "category": "cafe",
+      "neighbors": {
+        "north": "deck8-central-park-library",
+        "east": "deck8-central-park",
+        "south": "deck8-chops-grille"
+      }
+    },
+    {
+      "id": "deck8-central-park",
+      "name": "Central Park",
+      "deck": 8,
+      "position": "mid",
+      "side": "center",
+      "category": "outdoor",
+      "neighbors": {
+        "north": "deck8-trend",
+        "east": "deck8-giovannis-table",
+        "west": "deck8-park-cafe",
+        "south": "deck8-trellis-bar"
+      }
+    },
+    {
+      "id": "deck8-giovannis-table",
+      "name": "Giovanni's Table",
+      "deck": 8,
+      "position": "mid",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck8-vintages",
+        "west": "deck8-central-park",
+        "south": "deck8-150-central-park",
+        "east": "deck8-staircase5"
+      }
+    },
+    {
+      "id": "deck8-trellis-bar",
+      "name": "Trellis Bar",
+      "deck": 8,
+      "position": "mid",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck8-central-park",
+        "south": "deck8-rising-tide-bar",
+        "east": "deck8-staircase4",
+        "west": "deck8-staircase5"
+      }
+    },
+    {
+      "id": "deck8-rising-tide-bar",
+      "name": "Rising Tide Bar",
+      "deck": 8,
+      "position": "mid",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck8-trellis-bar",
+        "east": "deck8-150-central-park",
+        "west": "deck8-chops-grille",
+        "vertical": [
+          "deck5-rising-tide-bar"
+        ]
+      }
+    },
+    {
+      "id": "deck8-150-central-park",
+      "name": "150 Central Park",
+      "deck": 8,
+      "position": "mid",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck8-giovannis-table",
+        "west": "deck8-rising-tide-bar",
+        "east": "deck8-staircase5"
+      }
+    },
+    {
+      "id": "deck8-chops-grille",
+      "name": "Chops Grille",
+      "deck": 8,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck8-park-cafe",
+        "east": "deck8-rising-tide-bar",
+        "south": "deck8-music-hall",
+        "west": "deck8-staircase6"
+      }
+    },
+    {
+      "id": "deck8-music-hall",
+      "name": "Music Hall",
+      "deck": 8,
+      "position": "aft",
+      "side": "center",
+      "category": "entertainment",
+      "spans_decks": [
+        8,
+        9
+      ],
+      "neighbors": {
+        "north": "deck8-chops-grille",
+        "vertical": [
+          "deck9-music-hall"
+        ],
+        "east": "deck8-staircase6",
+        "west": "deck8-staircase7"
+      }
+    },
+    {
+      "id": "deck9-music-hall",
+      "name": "Music Hall",
+      "deck": 9,
+      "position": "aft",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "vertical": [
+          "deck8-music-hall"
+        ],
+        "east": "deck9-staircase6",
+        "west": "deck9-staircase7"
+      }
+    },
+    {
+      "id": "deck11-card-room",
+      "name": "Card Room",
+      "deck": 11,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "vertical": [
+          "deck12-card-room"
+        ],
+        "east": "deck11-staircase6",
+        "west": "deck11-staircase7"
+      }
+    },
+    {
+      "id": "deck12-card-room",
+      "name": "Card Room",
+      "deck": 12,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "vertical": [
+          "deck11-card-room"
+        ],
+        "east": "deck12-staircase6",
+        "west": "deck12-staircase7"
+      }
+    },
+    {
+      "id": "deck14-adventure-ocean",
+      "name": "Adventure Ocean",
+      "deck": 14,
+      "position": "forward",
+      "side": "center",
+      "category": "kids",
+      "neighbors": {
+        "east": "deck14-nursery",
+        "south": "deck14-staircase1"
+      }
+    },
+    {
+      "id": "deck14-nursery",
+      "name": "Nursery",
+      "deck": 14,
+      "position": "forward",
+      "side": "starboard",
+      "category": "kids",
+      "neighbors": {
+        "west": "deck14-adventure-ocean",
+        "south": "deck14-staircase1"
+      }
+    },
+    {
+      "id": "deck14-royal-escape-room",
+      "name": "Royal Escape Room",
+      "deck": 14,
+      "position": "mid-aft",
+      "side": "center",
+      "category": "entertainment",
+      "neighbors": {
+        "east": "deck14-staircase6",
+        "west": "deck14-staircase7"
+      }
+    },
+    {
+      "id": "deck15-solarium",
+      "name": "Solarium",
+      "deck": 15,
+      "position": "forward",
+      "side": "center",
+      "category": "pool",
+      "neighbors": {
+        "south": "deck15-solarium-bistro"
+      }
+    },
+    {
+      "id": "deck15-solarium-bistro",
+      "name": "Solarium Bistro",
+      "deck": 15,
+      "position": "forward",
+      "side": "center",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck15-solarium",
+        "south": "deck15-whirlpool-forward"
+      }
+    },
+    {
+      "id": "deck15-whirlpool-forward",
+      "name": "Whirlpool",
+      "deck": 15,
+      "position": "forward",
+      "side": "both",
+      "category": "pool",
+      "neighbors": {
+        "north": "deck15-solarium-bistro",
+        "south": "deck15-the-perfect-storm"
+      }
+    },
+    {
+      "id": "deck15-the-perfect-storm",
+      "name": "The Perfect Storm",
+      "deck": 15,
+      "position": "mid-forward",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck15-whirlpool-forward",
+        "south": "deck15-main-pool",
+        "east": "deck15-staircase4",
+        "west": "deck15-staircase5"
+      }
+    },
+    {
+      "id": "deck15-main-pool",
+      "name": "Main Pool",
+      "deck": 15,
+      "position": "mid",
+      "side": "port",
+      "category": "pool",
+      "neighbors": {
+        "north": "deck15-the-perfect-storm",
+        "east": "deck15-lime-and-coconut",
+        "south": "deck15-sports-pool"
+      }
+    },
+    {
+      "id": "deck15-beach-pool",
+      "name": "Beach Pool",
+      "deck": 15,
+      "position": "mid",
+      "side": "starboard",
+      "category": "pool",
+      "neighbors": {
+        "west": "deck15-lime-and-coconut",
+        "south": "deck15-splashaway-bay"
+      }
+    },
+    {
+      "id": "deck15-lime-and-coconut",
+      "name": "The Lime & Coconut",
+      "deck": 15,
+      "position": "mid",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "east": "deck15-beach-pool",
+        "west": "deck15-main-pool",
+        "south": "deck15-splashaway-bay"
+      }
+    },
+    {
+      "id": "deck15-splashaway-bay",
+      "name": "Splashaway Bay",
+      "deck": 15,
+      "position": "mid",
+      "side": "starboard",
+      "category": "pool",
+      "neighbors": {
+        "north": "deck15-beach-pool",
+        "west": "deck15-lime-and-coconut",
+        "east": "deck15-staircase5"
+      }
+    },
+    {
+      "id": "deck15-sports-pool",
+      "name": "Sports Pool",
+      "deck": 15,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "pool",
+      "neighbors": {
+        "north": "deck15-main-pool",
+        "south": "deck15-padi",
+        "west": "deck15-staircase6"
+      }
+    },
+    {
+      "id": "deck15-padi",
+      "name": "PADI",
+      "deck": 15,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "services",
+      "neighbors": {
+        "north": "deck15-sports-pool",
+        "south": "deck15-portside-bbq",
+        "west": "deck15-staircase6"
+      }
+    },
+    {
+      "id": "deck15-portside-bbq",
+      "name": "Portside BBQ",
+      "deck": 15,
+      "position": "aft",
+      "side": "port",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck15-padi",
+        "east": "deck15-teen"
+      }
+    },
+    {
+      "id": "deck15-challengers-arcade",
+      "name": "Challenger's Arcade",
+      "deck": 15,
+      "position": "aft",
+      "side": "starboard",
+      "category": "recreation",
+      "neighbors": {
+        "west": "deck15-teen",
+        "south": "deck15-el-loco-fresh",
+        "north": "deck15-staircase7"
+      }
+    },
+    {
+      "id": "deck15-teen",
+      "name": "Teen",
+      "deck": 15,
+      "position": "aft",
+      "side": "center",
+      "category": "kids",
+      "neighbors": {
+        "east": "deck15-challengers-arcade",
+        "west": "deck15-portside-bbq"
+      }
+    },
+    {
+      "id": "deck15-el-loco-fresh",
+      "name": "El Loco Fresh",
+      "deck": 15,
+      "position": "aft",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck15-challengers-arcade",
+        "west": "deck15-sports-court",
+        "east": "deck15-staircase8"
+      }
+    },
+    {
+      "id": "deck15-oasis-dunes",
+      "name": "Oasis Dunes",
+      "deck": 15,
+      "position": "aft",
+      "side": "port",
+      "category": "recreation",
+      "neighbors": {
+        "east": "deck15-sports-court",
+        "west": "deck15-staircase8"
+      }
+    },
+    {
+      "id": "deck15-sports-court",
+      "name": "Sports Court",
+      "deck": 15,
+      "position": "aft",
+      "side": "starboard",
+      "category": "recreation",
+      "neighbors": {
+        "west": "deck15-oasis-dunes",
+        "east": "deck15-el-loco-fresh",
+        "north": "deck15-staircase8"
+      }
+    },
+    {
+      "id": "deck16-solarium-bar",
+      "name": "Solarium Bar",
+      "deck": 16,
+      "position": "forward",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "south": "deck16-lime-and-coconut"
+      }
+    },
+    {
+      "id": "deck16-lime-and-coconut",
+      "name": "The Lime & Coconut",
+      "deck": 16,
+      "position": "mid",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck16-solarium-bar",
+        "east": "deck16-whirlpool-starboard",
+        "west": "deck16-whirlpool-port",
+        "south": "deck16-windjammer"
+      }
+    },
+    {
+      "id": "deck16-whirlpool-port",
+      "name": "Whirlpool",
+      "deck": 16,
+      "position": "mid",
+      "side": "port",
+      "category": "pool",
+      "neighbors": {
+        "east": "deck16-lime-and-coconut"
+      }
+    },
+    {
+      "id": "deck16-whirlpool-starboard",
+      "name": "Whirlpool",
+      "deck": 16,
+      "position": "mid",
+      "side": "starboard",
+      "category": "pool",
+      "neighbors": {
+        "west": "deck16-lime-and-coconut"
+      }
+    },
+    {
+      "id": "deck16-windjammer",
+      "name": "Windjammer Marketplace",
+      "deck": 16,
+      "position": "aft",
+      "side": "center",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck16-lime-and-coconut",
+        "south": "deck16-zip-line"
+      }
+    },
+    {
+      "id": "deck16-zip-line",
+      "name": "Zip-Line",
+      "deck": 16,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck16-windjammer",
+        "south": "deck16-wipeout-bar"
+      }
+    },
+    {
+      "id": "deck16-flowrider-port",
+      "name": "FlowRider",
+      "deck": 16,
+      "position": "aft",
+      "side": "port",
+      "category": "recreation",
+      "neighbors": {
+        "east": "deck16-wipeout-bar",
+        "south": "deck16-staircase6"
+      }
+    },
+    {
+      "id": "deck16-flowrider-starboard",
+      "name": "FlowRider",
+      "deck": 16,
+      "position": "aft",
+      "side": "starboard",
+      "category": "recreation",
+      "neighbors": {
+        "west": "deck16-wipeout-bar",
+        "south": "deck16-staircase7"
+      }
+    },
+    {
+      "id": "deck16-wipeout-bar",
+      "name": "Wipeout Bar",
+      "deck": 16,
+      "position": "aft",
+      "side": "center",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck16-zip-line",
+        "east": "deck16-flowrider-starboard",
+        "west": "deck16-flowrider-port",
+        "south": "deck16-ultimate-abyss-slide"
+      }
+    },
+    {
+      "id": "deck16-ultimate-abyss-slide",
+      "name": "The Ultimate Abyss Slide",
+      "deck": 16,
+      "position": "aft",
+      "side": "center",
+      "category": "recreation",
+      "neighbors": {
+        "north": "deck16-wipeout-bar",
+        "south": "deck16-staircase8"
+      }
+    },
+    {
+      "id": "deck17-suite-sun-deck",
+      "name": "Suite Sun Deck",
+      "deck": 17,
+      "position": "forward",
+      "side": "center",
+      "category": "outdoor",
+      "neighbors": {
+        "south": "deck17-bar"
+      }
+    },
+    {
+      "id": "deck17-bar",
+      "name": "Bar",
+      "deck": 17,
+      "position": "forward",
+      "side": "port",
+      "category": "bar",
+      "neighbors": {
+        "north": "deck17-suite-sun-deck",
+        "east": "deck17-lounge",
+        "south": "deck17-suite-lounge"
+      }
+    },
+    {
+      "id": "deck17-lounge",
+      "name": "Lounge",
+      "deck": 17,
+      "position": "forward",
+      "side": "starboard",
+      "category": "lounge",
+      "neighbors": {
+        "west": "deck17-bar",
+        "south": "deck17-coastal-kitchen",
+        "north": "deck17-staircase7"
+      }
+    },
+    {
+      "id": "deck17-suite-lounge",
+      "name": "Suite Lounge",
+      "deck": 17,
+      "position": "mid",
+      "side": "port",
+      "category": "lounge",
+      "neighbors": {
+        "north": "deck17-bar",
+        "east": "deck17-coastal-kitchen"
+      }
+    },
+    {
+      "id": "deck17-coastal-kitchen",
+      "name": "Coastal Kitchen",
+      "deck": 17,
+      "position": "mid",
+      "side": "starboard",
+      "category": "dining",
+      "neighbors": {
+        "north": "deck17-lounge",
+        "west": "deck17-suite-lounge"
+      }
+    },
+    {
+      "id": "deck3-staircase1",
+      "name": "Forward Staircase",
+      "deck": 3,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase1"
+        ],
+        "south": "deck3-royal-theater"
+      }
+    },
+    {
+      "id": "deck4-staircase1",
+      "name": "Forward Staircase",
+      "deck": 4,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck3-staircase1",
+          "deck5-staircase1"
+        ],
+        "south": "deck4-royal-theater"
+      }
+    },
+    {
+      "id": "deck5-staircase1",
+      "name": "Forward Staircase",
+      "deck": 5,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase1",
+          "deck6-staircase1"
+        ],
+        "north": "deck5-vitality-spa",
+        "south": "deck5-royal-theater"
+      }
+    },
+    {
+      "id": "deck6-staircase1",
+      "name": "Forward Staircase",
+      "deck": 6,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase1",
+          "deck7-staircase1"
+        ],
+        "north": "deck6-vitality-fitness-center"
+      }
+    },
+    {
+      "id": "deck7-staircase1",
+      "name": "Forward Staircase",
+      "deck": 7,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase1",
+          "deck8-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck8-staircase1",
+      "name": "Forward Staircase",
+      "deck": 8,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase1",
+          "deck9-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck9-staircase1",
+      "name": "Forward Staircase",
+      "deck": 9,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase1",
+          "deck10-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck10-staircase1",
+      "name": "Forward Staircase",
+      "deck": 10,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck9-staircase1",
+          "deck11-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck11-staircase1",
+      "name": "Forward Staircase",
+      "deck": 11,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck10-staircase1",
+          "deck12-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck12-staircase1",
+      "name": "Forward Staircase",
+      "deck": 12,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck11-staircase1",
+          "deck14-staircase1"
+        ]
+      }
+    },
+    {
+      "id": "deck14-staircase1",
+      "name": "Forward Staircase",
+      "deck": 14,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck12-staircase1",
+          "deck15-staircase1"
+        ],
+        "north": "deck14-adventure-ocean"
+      }
+    },
+    {
+      "id": "deck15-staircase1",
+      "name": "Forward Staircase",
+      "deck": 15,
+      "position": "forward",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 1,
+      "neighbors": {
+        "vertical": [
+          "deck14-staircase1"
+        ],
+        "north": "deck15-solarium",
+        "south": "deck15-whirlpool-forward"
+      }
+    },
+    {
+      "id": "deck4-staircase2",
+      "name": "Royal Promenade Staircase Port",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 2,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase2"
+        ],
+        "east": "deck4-entertainment-place",
+        "south": "deck4-blaze",
+        "north": "deck4-comedy",
+        "west": "deck4-studio-b"
+      }
+    },
+    {
+      "id": "deck5-staircase2",
+      "name": "Royal Promenade Staircase Port",
+      "deck": 5,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 2,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase2",
+          "deck6-staircase2"
+        ],
+        "east": "deck5-starbucks",
+        "north": "deck5-solera"
+      }
+    },
+    {
+      "id": "deck6-staircase2",
+      "name": "Royal Promenade Staircase Port",
+      "deck": 6,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 2,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase2",
+          "deck7-staircase2"
+        ]
+      }
+    },
+    {
+      "id": "deck7-staircase2",
+      "name": "Royal Promenade Staircase Port",
+      "deck": 7,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 2,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase2",
+          "deck8-staircase2"
+        ]
+      }
+    },
+    {
+      "id": "deck8-staircase2",
+      "name": "Royal Promenade Staircase Port",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 2,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase2"
+        ],
+        "east": "deck8-trend",
+        "north": "deck8-tiffany"
+      }
+    },
+    {
+      "id": "deck4-staircase3",
+      "name": "Royal Promenade Staircase Starboard",
+      "deck": 4,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 3,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase3"
+        ],
+        "west": "deck4-entertainment-place",
+        "south": "deck4-casino-royale-non-smoking",
+        "north": "deck4-crown-lounge",
+        "east": "deck4-studio-b"
+      }
+    },
+    {
+      "id": "deck5-staircase3",
+      "name": "Royal Promenade Staircase Starboard",
+      "deck": 5,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 3,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase3",
+          "deck6-staircase3"
+        ],
+        "west": "deck5-starbucks",
+        "north": "deck5-the-shop"
+      }
+    },
+    {
+      "id": "deck6-staircase3",
+      "name": "Royal Promenade Staircase Starboard",
+      "deck": 6,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 3,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase3",
+          "deck7-staircase3"
+        ]
+      }
+    },
+    {
+      "id": "deck7-staircase3",
+      "name": "Royal Promenade Staircase Starboard",
+      "deck": 7,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 3,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase3",
+          "deck8-staircase3"
+        ]
+      }
+    },
+    {
+      "id": "deck8-staircase3",
+      "name": "Royal Promenade Staircase Starboard",
+      "deck": 8,
+      "position": "mid-forward",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 3,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase3"
+        ],
+        "west": "deck8-trend",
+        "north": "deck8-vintages"
+      }
+    },
+    {
+      "id": "deck5-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 5,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase4"
+        ],
+        "east": "deck5-port-merchants",
+        "north": "deck5-guest-services"
+      }
+    },
+    {
+      "id": "deck6-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 6,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase4",
+          "deck7-staircase4"
+        ],
+        "east": "deck6-schooner-bar"
+      }
+    },
+    {
+      "id": "deck7-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 7,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase4",
+          "deck8-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck8-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 8,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase4",
+          "deck9-staircase4"
+        ],
+        "east": "deck8-central-park",
+        "west": "deck8-trellis-bar",
+        "north": "deck8-central-park-library"
+      }
+    },
+    {
+      "id": "deck9-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 9,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase4",
+          "deck10-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck10-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 10,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck9-staircase4",
+          "deck11-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck11-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 11,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck10-staircase4",
+          "deck12-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck12-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 12,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck11-staircase4",
+          "deck14-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck14-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 14,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck12-staircase4",
+          "deck15-staircase4"
+        ]
+      }
+    },
+    {
+      "id": "deck15-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 15,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck14-staircase4",
+          "deck16-staircase4"
+        ],
+        "west": "deck15-the-perfect-storm"
+      }
+    },
+    {
+      "id": "deck16-staircase4",
+      "name": "Central Park Staircase Port",
+      "deck": 16,
+      "position": "mid",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 4,
+      "neighbors": {
+        "vertical": [
+          "deck15-staircase4"
+        ],
+        "north": "deck16-solarium-bar",
+        "west": "deck16-lime-and-coconut"
+      }
+    },
+    {
+      "id": "deck5-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 5,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase5"
+        ],
+        "west": "deck5-sorrentos",
+        "north": "deck5-guest-services"
+      }
+    },
+    {
+      "id": "deck6-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 6,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase5",
+          "deck7-staircase5"
+        ],
+        "west": "deck6-picture-this"
+      }
+    },
+    {
+      "id": "deck7-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 7,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase5",
+          "deck8-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck8-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 8,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase5",
+          "deck9-staircase5"
+        ],
+        "west": "deck8-central-park",
+        "east": "deck8-trellis-bar"
+      }
+    },
+    {
+      "id": "deck9-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 9,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase5",
+          "deck10-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck10-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 10,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck9-staircase5",
+          "deck11-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck11-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 11,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck10-staircase5",
+          "deck12-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck12-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 12,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck11-staircase5",
+          "deck14-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck14-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 14,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck12-staircase5",
+          "deck15-staircase5"
+        ]
+      }
+    },
+    {
+      "id": "deck15-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 15,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck14-staircase5",
+          "deck16-staircase5"
+        ],
+        "east": "deck15-the-perfect-storm",
+        "west": "deck15-splashaway-bay"
+      }
+    },
+    {
+      "id": "deck16-staircase5",
+      "name": "Boardwalk Staircase Starboard",
+      "deck": 16,
+      "position": "mid",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 5,
+      "neighbors": {
+        "vertical": [
+          "deck15-staircase5"
+        ],
+        "north": "deck16-solarium-bar",
+        "east": "deck16-lime-and-coconut"
+      }
+    },
+    {
+      "id": "deck3-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 3,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase6"
+        ],
+        "east": "deck3-conference-center"
+      }
+    },
+    {
+      "id": "deck4-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 4,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck3-staircase6",
+          "deck5-staircase6"
+        ],
+        "east": "deck4-casino-royale",
+        "north": "deck4-izumi"
+      }
+    },
+    {
+      "id": "deck5-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 5,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase6",
+          "deck6-staircase6"
+        ],
+        "east": "deck5-regalia-fine-watches"
+      }
+    },
+    {
+      "id": "deck6-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 6,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase6",
+          "deck7-staircase6"
+        ],
+        "east": "deck6-next-cruise",
+        "north": "deck6-playmakers",
+        "west": "deck6-carousel"
+      }
+    },
+    {
+      "id": "deck7-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 7,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase6",
+          "deck8-staircase6"
+        ],
+        "east": "deck7-rock-climbing-wall"
+      }
+    },
+    {
+      "id": "deck8-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 8,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase6",
+          "deck9-staircase6"
+        ],
+        "east": "deck8-chops-grille",
+        "west": "deck8-music-hall"
+      }
+    },
+    {
+      "id": "deck9-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 9,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase6",
+          "deck10-staircase6"
+        ],
+        "west": "deck9-music-hall"
+      }
+    },
+    {
+      "id": "deck10-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 10,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck9-staircase6",
+          "deck11-staircase6"
+        ]
+      }
+    },
+    {
+      "id": "deck11-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 11,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck10-staircase6",
+          "deck12-staircase6"
+        ],
+        "west": "deck11-card-room"
+      }
+    },
+    {
+      "id": "deck12-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 12,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck11-staircase6",
+          "deck14-staircase6"
+        ],
+        "west": "deck12-card-room"
+      }
+    },
+    {
+      "id": "deck14-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 14,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck12-staircase6",
+          "deck15-staircase6"
+        ],
+        "west": "deck14-royal-escape-room"
+      }
+    },
+    {
+      "id": "deck15-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 15,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck14-staircase6",
+          "deck16-staircase6"
+        ],
+        "east": "deck15-sports-pool",
+        "south": "deck15-portside-bbq",
+        "west": "deck15-teen"
+      }
+    },
+    {
+      "id": "deck16-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 16,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck15-staircase6",
+          "deck17-staircase6"
+        ],
+        "south": "deck16-windjammer",
+        "north": "deck16-zip-line"
+      }
+    },
+    {
+      "id": "deck17-staircase6",
+      "name": "Aft Staircase Port",
+      "deck": 17,
+      "position": "mid-aft",
+      "side": "port",
+      "category": "stairs",
+      "staircase_id": 6,
+      "neighbors": {
+        "vertical": [
+          "deck16-staircase6"
+        ],
+        "north": "deck17-suite-sun-deck",
+        "south": "deck17-bar",
+        "west": "deck17-suite-lounge"
+      }
+    },
+    {
+      "id": "deck3-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 3,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase7"
+        ],
+        "west": "deck3-conference-center"
+      }
+    },
+    {
+      "id": "deck4-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 4,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck3-staircase7",
+          "deck5-staircase7"
+        ],
+        "west": "deck4-casino-royale"
+      }
+    },
+    {
+      "id": "deck5-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 5,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck4-staircase7",
+          "deck6-staircase7"
+        ],
+        "west": "deck5-bionic-bar"
+      }
+    },
+    {
+      "id": "deck6-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 6,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase7",
+          "deck7-staircase7"
+        ],
+        "east": "deck6-carousel",
+        "west": "deck6-johnny-rockets",
+        "north": "deck6-boardwalk-dog-house"
+      }
+    },
+    {
+      "id": "deck7-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 7,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase7",
+          "deck8-staircase7"
+        ],
+        "west": "deck7-rock-climbing-wall"
+      }
+    },
+    {
+      "id": "deck8-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 8,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase7",
+          "deck9-staircase7"
+        ],
+        "east": "deck8-music-hall"
+      }
+    },
+    {
+      "id": "deck9-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 9,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase7",
+          "deck10-staircase7"
+        ],
+        "east": "deck9-music-hall"
+      }
+    },
+    {
+      "id": "deck10-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 10,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck9-staircase7",
+          "deck11-staircase7"
+        ]
+      }
+    },
+    {
+      "id": "deck11-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 11,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck10-staircase7",
+          "deck12-staircase7"
+        ],
+        "east": "deck11-card-room"
+      }
+    },
+    {
+      "id": "deck12-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 12,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck11-staircase7",
+          "deck14-staircase7"
+        ],
+        "east": "deck12-card-room"
+      }
+    },
+    {
+      "id": "deck14-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 14,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck12-staircase7",
+          "deck15-staircase7"
+        ],
+        "east": "deck14-royal-escape-room"
+      }
+    },
+    {
+      "id": "deck15-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 15,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck14-staircase7",
+          "deck16-staircase7"
+        ],
+        "east": "deck15-teen",
+        "south": "deck15-challengers-arcade"
+      }
+    },
+    {
+      "id": "deck16-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 16,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck15-staircase7",
+          "deck17-staircase7"
+        ],
+        "south": "deck16-windjammer",
+        "north": "deck16-zip-line"
+      }
+    },
+    {
+      "id": "deck17-staircase7",
+      "name": "Aft Staircase Starboard",
+      "deck": 17,
+      "position": "mid-aft",
+      "side": "starboard",
+      "category": "stairs",
+      "staircase_id": 7,
+      "neighbors": {
+        "vertical": [
+          "deck16-staircase7"
+        ],
+        "north": "deck17-suite-sun-deck",
+        "south": "deck17-lounge",
+        "east": "deck17-coastal-kitchen"
+      }
+    },
+    {
+      "id": "deck5-staircase8",
+      "name": "Stern Staircase",
+      "deck": 5,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase8"
+        ],
+        "north": "deck5-main-dining-room",
+        "south": "deck5-running-track"
+      }
+    },
+    {
+      "id": "deck6-staircase8",
+      "name": "Stern Staircase",
+      "deck": 6,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck5-staircase8",
+          "deck7-staircase8"
+        ],
+        "south": "deck6-aquatheater"
+      }
+    },
+    {
+      "id": "deck7-staircase8",
+      "name": "Stern Staircase",
+      "deck": 7,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck6-staircase8",
+          "deck8-staircase8"
+        ],
+        "south": "deck7-rock-climbing-wall"
+      }
+    },
+    {
+      "id": "deck8-staircase8",
+      "name": "Stern Staircase",
+      "deck": 8,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck7-staircase8",
+          "deck15-staircase8"
+        ]
+      }
+    },
+    {
+      "id": "deck15-staircase8",
+      "name": "Stern Staircase",
+      "deck": 15,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck8-staircase8",
+          "deck16-staircase8"
+        ],
+        "west": "deck15-el-loco-fresh",
+        "east": "deck15-oasis-dunes",
+        "south": "deck15-sports-court"
+      }
+    },
+    {
+      "id": "deck16-staircase8",
+      "name": "Stern Staircase",
+      "deck": 16,
+      "position": "aft",
+      "side": "center",
+      "category": "stairs",
+      "staircase_id": 8,
+      "neighbors": {
+        "vertical": [
+          "deck15-staircase8"
+        ],
+        "south": "deck16-wipeout-bar",
+        "north": "deck16-ultimate-abyss-slide"
+      }
+    }
+  ],
+  "staircases": [
+    {
+      "id": 1,
+      "name": "Forward Staircase",
+      "position": "forward",
+      "side": "center",
+      "decks": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Royal Promenade Staircase Port",
+      "position": "mid-forward",
+      "side": "port",
+      "decks": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Royal Promenade Staircase Starboard",
+      "position": "mid-forward",
+      "side": "starboard",
+      "decks": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Central Park Staircase Port",
+      "position": "mid",
+      "side": "port",
+      "decks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Boardwalk Staircase Starboard",
+      "position": "mid",
+      "side": "starboard",
+      "decks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Aft Staircase Port",
+      "position": "mid-aft",
+      "side": "port",
+      "decks": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Aft Staircase Starboard",
+      "position": "mid-aft",
+      "side": "starboard",
+      "decks": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Stern Staircase",
+      "position": "aft",
+      "side": "center",
+      "decks": [
+        5,
+        6,
+        7,
+        8,
+        15,
+        16
+      ]
+    }
+  ]
+}

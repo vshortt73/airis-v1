@@ -68,26 +68,26 @@ async def test_traits_server():
     #     print(f"✗ Error: {result['error']}")
     # #############################################################
 
-    # # Test 3: Modify a trait
-    # print("\n" + "-"*60)
-    # print("TEST 3: Modify trait (Curiosity: 8 → 9)")
-    # print("-"*60)
+     # Test 3: Modify a trait
+    print("\n" + "-"*60)
+    print("TEST 3: Modify trait (Curiosity: 8 → 9)")
+    print("-"*60)
+   # {"type":"object","title":"trait_modifyArguments","required":["trait_name","value","reason"],"properties":{"value":{"title":"Value"},"reason":{"type":"string","title":"reason"},"trait_name":{"type":"string","title":"Trait Name"}}}
+    result = await tool_manager.execute_tool("trait_modify", {
+         "trait_name": "Curiosity",
+         "value": "4",
+         "reason": "Testing trait modification system - increasing curiosity after successful tool implementation"
+    })
     
-    # result = await tool_manager.execute_tool("trait_list", {
-    #     "trait_name": "Curiosity",
-    #     "value": "4",
-    #     "reason": "Testing trait modification system - increasing curiosity after successful tool implementation"
-    # })
-    
-    # if result["success"]:
-    #     result = result["result"]
-    #     print(f"✓ {result['message']}")
-    #     print(f"  Old value: {result['old_value']}")
-    #     print(f"  New value: {result['new_value']}")
-    #     print(f"  Reason: {result['reason']}")
-    #     print(f"  Log ID: {result['log_id']}")
-    # else:
-    #     print(f"✗ Error: {result['error']}")
+    if result["success"]:
+         result = result["result"]
+         print(f"✓ {result['message']}")
+         print(f"  Old value: {result['old_value']}")
+         print(f"  New value: {result['new_value']}")
+         print(f"  Reason: {result['reason']}")
+         print(f"  Log ID: {result['log_id']}")
+    else:
+         print(f"✗ Error: {result['error']}")
     
     # # Test 4: View trait log
     # print("\n" + "-"*60)

@@ -3,6 +3,18 @@ Tool Loader - Load enabled tools from database and format for Ollama
 
 This module queries the mcp_tools table and returns tool definitions
 in the format Ollama expects for function calling.
+
+!! CLAUDE: CRITICAL ARCHITECTURE NOTE !!
+Tool parameters come from mcp_tools.input_schema in the DATABASE,
+NOT from Python function signatures!
+
+When adding/modifying tools:
+1. Python code defines the implementation
+2. Database schema defines what the MODEL SEES
+3. Both must be kept in sync manually via SQL updates
+
+If a tool parameter isn't working, check:
+  SELECT input_schema FROM mcp_tools WHERE tool_name = 'your_tool';
 """
 
 import psycopg2

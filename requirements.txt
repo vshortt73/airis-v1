@@ -13,14 +13,23 @@ psycopg2-binary==2.9.9
 tiktoken==0.5.2
 sentence-transformers>=2.2.0
 
+# Document Processing (for RAG/Knowledge system)
+pypdf>=4.0.0
+
 # MCP (Model Context Protocol)
 fastmcp>=0.1.0
 
 # WebSocket support
 websockets>=12.0
 
+# System Monitoring
+psutil>=5.9.0
+
 # Vision (llama.cpp Python bindings)
 # NOTE: Must be installed with CUDA support for GPU acceleration
 # Installation command: CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 llama-cpp-python>=0.2.0
 bcrypt==4.1.2
+wsproto
+python-docx
+odfpy

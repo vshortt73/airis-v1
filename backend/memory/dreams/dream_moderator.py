@@ -224,10 +224,36 @@ class DreamModerator:
         print(f"  ✓ Reflection phase complete")
         print(f"  Final: {reflection_tracker.get_progress_summary()}")
 
+        # Attach tracker's collected data to conversation for later use
+        conversation.reflection_tracker_data = reflection_tracker.get_collected_data()
+
         return conversation
 
     def _extract_reflection(self, conversation: DreamConversation) -> Optional[Dict]:
         """Extract reflection data from conversation"""
+
+        # First, try to use data from the ReflectionTracker (collected in real-time)
+        tracker_data = getattr(conversation, 'reflection_tracker_data', None)
+
+        if tracker_data:
+            # Count how many fields the tracker collected
+            tracker_fields = [f for f, v in tracker_data.items() if v]
+            print(f"[DreamModerator] Using ReflectionTracker data ({len(tracker_fields)} fields collected)")
+
+            # Use tracker data as primary source
+            reflection_data = tracker_data.copy()
+
+            # Validate we got something
+            required_fields = ['summary', 'mood', 'theme', 'top_3_emotions', 'takeaway']
+            missing = [f for f in required_fields if not reflection_data.get(f)]
+
+            if missing:
+                print(f"[DreamModerator] ⚠ Missing fields: {missing}")
+
+            return reflection_data
+
+        # Fallback: Try JSON extraction from transcript (legacy method)
+        print(f"[DreamModerator] No tracker data, falling back to JSON extraction")
 
         # Get reflection transcript
         reflection_transcript_list = []

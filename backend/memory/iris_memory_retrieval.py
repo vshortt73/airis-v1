@@ -2,13 +2,21 @@
 # by default it fires every once for every 10 new transactions created in chat_history.
 # do not alter this file!
 
+import os
+import sys
 
+# Add project root and memory module to path FIRST (before other imports)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+MEMORY_DIR = os.path.dirname(__file__)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+if MEMORY_DIR not in sys.path:
+    sys.path.insert(0, MEMORY_DIR)
 
 import psycopg2
 from psycopg2.extras import DictCursor
 import json
 import torch
-from llama_cpp import Llama, LlamaGrammar
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from Colors import Colors
@@ -18,13 +26,18 @@ import requests
 import math
 import time
 import argparse
-from sentence_transformers import SentenceTransformer
-import os
 
 # ==============================
 # Database config
 # ==============================
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+# Use environment variable for password (same pattern as rest of codebase)
+DB_CFG = {
+    'dbname': 'irisdb',
+    'user': 'irisuser',
+    'password': os.environ.get('IRIS_DB_PASSWORD', ''),
+    'host': 'localhost',
+    'port': 5432
+}
 delete_flag = False
 # ==============================
 # Models and embedding
@@ -40,18 +53,76 @@ EMO_MODEL_DIR = "/models/Memory-models/emotion_model_balanced"  # <-- your balan
 VALENCE_MODEL_PATH = "/models/Memory-models/valence_model"
 AROUSAL_MODEL_PATH = "/models/Memory-models/arousal_model"
 MAX_LEN = 256
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+# Always use CPU for memory retrieval - this is a background job that shouldn't
+# compete with main inference (Qwen) or other GPU services for VRAM
+DEVICE = "cpu"
 
 
-import os
-from sentence_transformers import SentenceTransformer
+# Use shared embedding singleton (thread-safe, prevents race condition)
+from core.embeddings import get_embedding_model
+
+# Import config for LLM endpoints
+from app import config
+import httpx
+
 # Force offline mode
 os.environ["HF_HUB_OFFLINE"] = "1"
 
-# Load from local folder
-model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/", local_files_only=True)
-
+# Get shared model instance (thread-safe singleton)
+model = get_embedding_model()
 # model = SentenceTransformer("all-mpnet-base-v2")
+
+# ==============================
+# LLM API Helper (llama-server OpenAI-compatible)
+# ==============================
+def call_llm_json(prompt: str, max_tokens: int = 1024, temperature: float = 0.1, timeout: float = 60.0) -> dict:
+    """
+    Call llama-server with OpenAI-compatible API for JSON responses.
+
+    Args:
+        prompt: The prompt to send
+        max_tokens: Maximum tokens in response
+        temperature: Sampling temperature
+        timeout: Request timeout in seconds
+
+    Returns:
+        Parsed JSON dict, or empty dict on failure
+    """
+    url = f"{config.OLLAMA_BASE_URL}/v1/chat/completions"
+
+    payload = {
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+        "response_format": {"type": "json_object"}
+    }
+
+    try:
+        response = httpx.post(url, json=payload, timeout=timeout)
+
+        if response.status_code != 200:
+            print(f"[call_llm_json] HTTP error: {response.status_code}")
+            return {}
+
+        result = response.json()
+        raw_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        print(f"#################################")
+        print(raw_text)
+        print(f"#################################")
+
+        return json.loads(raw_text)
+
+    except json.JSONDecodeError as e:
+        print(f"[call_llm_json] JSON parse error: {e}")
+        return {}
+    except httpx.TimeoutException:
+        print(f"[call_llm_json] Timeout after {timeout}s")
+        return {}
+    except Exception as e:
+        print(f"[call_llm_json] Error: {e}")
+        return {}
 
 
 # ==============================
@@ -322,33 +393,11 @@ Topic: Recipe discussion
 Return as JSON with fields: orientation, intent, facets (array), keywords (array)"""
 
     try:
-        response = httpx.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "qwen3:32b",
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0.1,
-                    "num_ctx": 4096
-                }
-            },
-            timeout=30.0
-        )
+        lens_output = call_llm_json(prompt, max_tokens=512, temperature=0.1, timeout=30.0)
 
-        if response.status_code != 200:
-            print(f"[run_lens_stage] Ollama HTTP error: {response.status_code}")
+        if not lens_output:
+            print(f"[run_lens_stage] LLM returned empty response")
             return get_default_lens()
-
-        result = response.json()
-        raw_text = result["response"]
-        
-        print(f"#################################")
-        print(raw_text)
-        print(f"#################################")
-
-        lens_output = json.loads(raw_text)
 
         # Ensure required fields exist
         defaults = {
@@ -425,56 +474,28 @@ CRITICAL:
 Return as JSON with fields: TopicLabel, Context, Event, Significance, Takeaway, Tone"""
 
     try:
-        response = httpx.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "qwen3:32b",
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",  # Ollama's JSON mode
-                "options": {
-                    "temperature": 0.1,
-                    "num_ctx": 8192
-                }
-            },
-            timeout=60.0
-        )
+        data = call_llm_json(prompt, max_tokens=1024, temperature=0.1, timeout=60.0)
 
-        if response.status_code != 200:
-            print(f"[get_summaries] Ollama HTTP error: {response.status_code}")
+        if not data:
+            print(f"[get_summaries] LLM returned empty response")
             return get_empty_summary()
 
-        result = response.json()
-        raw_text = result["response"]
+        # Wrap in MemoryRecall structure
+        summary = {"MemoryRecall": data}
 
-        # Parse JSON
-        try:
-            data = json.loads(raw_text)
+        # Validate all fields present
+        required = ["TopicLabel", "Context", "Event", "Significance", "Takeaway", "Tone"]
+        mr = summary["MemoryRecall"]
+        missing = [f for f in required if f not in mr or not mr[f] or str(mr[f]).strip() == ""]
 
-            # Wrap in MemoryRecall structure (Ollama returns flat JSON)
-            summary = {"MemoryRecall": data}
+        if missing:
+            print(f"[get_summaries] Warning: Missing/empty fields {missing}, using fallback")
+            return get_summary_with_fallback(str(data), conversation)
 
-            # Validate all fields present
-            required = ["TopicLabel", "Context", "Event", "Significance", "Takeaway", "Tone"]
-            mr = summary["MemoryRecall"]
-            missing = [f for f in required if f not in mr or not mr[f] or mr[f].strip() == ""]
+        return summary
 
-            if missing:
-                print(f"[get_summaries] Warning: Missing/empty fields {missing}, using fallback")
-                return get_summary_with_fallback(raw_text, conversation)
-
-            return summary
-
-        except json.JSONDecodeError as e:
-            print(f"[get_summaries] JSON parse failed: {str(e)[:100]}")
-            print(f"[get_summaries] Raw text (first 200 chars): {raw_text[:200]}")
-            return get_summary_with_fallback(raw_text, conversation)
-
-    except httpx.TimeoutException:
-        print(f"[get_summaries] Ollama timeout after 60s")
-        return get_empty_summary()
     except Exception as e:
-        print(f"[get_summaries] Ollama error: {e}")
+        print(f"[get_summaries] Error: {e}")
         return get_empty_summary()
 
 def get_summary_with_fallback(raw_text: str, conversation: str):
@@ -994,12 +1015,7 @@ if __name__ == "__main__":
         convo += f"{message}\n"
     cur.close()
 
-    class Embedder:
-        def __init__(self, model_name="all-mpnet-base-v2"):
-            self.model = SentenceTransformer(model_name)
-        def embed(self, text: str):
-            return self.model.encode(text, normalize_embeddings=True).tolist()
-
-    embedder = Embedder("all-mpnet-base-v2")
-    injection = cognitive_recall(convo, embedder, DB_CFG, args.top_k, args.insert, args.show, args.mode, args.prompt)
+    # Embedder parameter is unused (cognitive_recall uses global 'model' variable)
+    # Removed redundant Embedder class that was causing CUDA OOM errors
+    injection = cognitive_recall(convo, None, DB_CFG, args.top_k, args.insert, args.show, args.mode, args.prompt)
     #print(injection)

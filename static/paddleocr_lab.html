@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaddleOCR Lab - Iris v3</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent: #06b6d4;
+            --accent-hover: #22d3ee;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: #2a2a35;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header h1 span {
+            color: var(--accent);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-loaded {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .status-unloaded {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 320px 1fr 380px;
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 65px);
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            background: var(--bg-tertiary);
+        }
+
+        .panel-content {
+            padding: 1rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        select, input[type="text"], input[type="range"] {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        input[type="range"] {
+            padding: 0.5rem 0;
+            background: transparent;
+            border: none;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .range-value {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-primary:disabled {
+            background: var(--border);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-full {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            border-radius: 0.5rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #imageCanvas {
+            max-width: 100%;
+            max-height: calc(100vh - 200px);
+            border-radius: 0.5rem;
+        }
+
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .result-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .result-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .result-content {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .detection-list {
+            list-style: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .detection-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            background: var(--bg-primary);
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .detection-item:hover {
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--accent);
+        }
+
+        .detection-item.highlighted {
+            background: rgba(6, 182, 212, 0.2);
+            border-left: 3px solid var(--accent);
+        }
+
+        .detection-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .detection-text {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .detection-confidence {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .detection-position {
+            color: var(--text-secondary);
+            font-size: 0.65rem;
+            font-family: monospace;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-item {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            max-width: 640px;
+            width: 100%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #webcamVideo {
+            width: 100%;
+            border-radius: 0.5rem;
+            background: #000;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .text-extract {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 0.25rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>
+            <span>PaddleOCR</span> Lab
+        </h1>
+        <div>
+            <span id="statusBadge" class="status-badge status-unloaded">Checking...</span>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Controls Panel -->
+        <div class="panel">
+            <div class="panel-header">Controls</div>
+            <div class="panel-content">
+                <div class="control-group">
+                    <label class="control-label">Image Source</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button id="uploadBtn" class="btn btn-secondary" style="flex: 1;">
+                            Upload
+                        </button>
+                        <button id="webcamBtn" class="btn btn-secondary" style="flex: 1;">
+                            Webcam
+                        </button>
+                        <button id="pasteBtn" class="btn btn-secondary" style="flex: 1;">
+                            Paste
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">
+                        Min Confidence
+                        <span class="range-value" id="confidenceValue">0.5</span>
+                    </label>
+                    <input type="range" id="confidenceSlider" min="0.1" max="0.9" step="0.1" value="0.5">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label checkbox-group">
+                        <input type="checkbox" id="showLabels" checked>
+                        Show text labels on image
+                    </label>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label checkbox-group">
+                        <input type="checkbox" id="showCenters">
+                        Show center points
+                    </label>
+                </div>
+
+                <button id="analyzeBtn" class="btn btn-primary btn-full" disabled>
+                    Run OCR
+                </button>
+
+                <div style="margin-top: 1rem;">
+                    <button id="spatialBtn" class="btn btn-secondary btn-full" disabled>
+                        Spatial Layout View
+                    </button>
+                </div>
+
+                <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <div class="control-group">
+                        <label class="control-label">Use Case</label>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.5;">
+                            Designed for deck plans and floor maps. Extract venue labels with positions for spatial analysis.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Panel -->
+        <div class="panel">
+            <div class="panel-header">Image</div>
+            <div class="panel-content" style="padding: 0; position: relative;">
+                <div id="dropZone" class="drop-zone" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div class="drop-zone-icon">📷</div>
+                    <div style="font-size: 1.1rem; margin-bottom: 0.5rem;">Drop deck plan here</div>
+                    <div style="color: var(--text-secondary);">or click to upload</div>
+                </div>
+
+                <div id="imageDisplay" class="canvas-container hidden">
+                    <canvas id="imageCanvas"></canvas>
+                    <canvas id="overlayCanvas"></canvas>
+                </div>
+
+                <div id="loadingOverlay" class="loading-overlay hidden">
+                    <div class="spinner"></div>
+                    <div id="loadingText">Processing OCR...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="panel">
+            <div class="panel-header">Results</div>
+            <div class="panel-content">
+                <div id="resultsPlaceholder" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                    Upload an image and run OCR to see results
+                </div>
+
+                <div id="resultsContent" class="hidden">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="detectionCount">-</div>
+                            <div class="stat-label">Detections</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="inferenceTime">-</div>
+                            <div class="stat-label">Time (s)</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="imageSize">-</div>
+                            <div class="stat-label">Image</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" data-tab="detections">Detections</button>
+                        <button class="tab-btn" data-tab="text">Text</button>
+                        <button class="tab-btn" data-tab="raw">Raw</button>
+                    </div>
+
+                    <div id="detectionsTab" class="tab-content active">
+                        <ul class="detection-list" id="detectionsList"></ul>
+                    </div>
+
+                    <div id="textTab" class="tab-content">
+                        <div class="text-extract" id="extractedText"></div>
+                        <button id="copyTextBtn" class="btn btn-secondary btn-full" style="margin-top: 0.5rem;">
+                            Copy Text
+                        </button>
+                    </div>
+
+                    <div id="rawTab" class="tab-content">
+                        <div class="result-content" id="rawText"></div>
+                        <button id="copyRawBtn" class="btn btn-secondary btn-full" style="margin-top: 0.5rem;">
+                            Copy JSON
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Webcam Modal -->
+    <div id="webcamModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Capture from Webcam</h3>
+                <button class="modal-close" id="closeWebcam">&times;</button>
+            </div>
+            <video id="webcamVideo" autoplay playsinline></video>
+            <div class="modal-actions">
+                <button id="captureBtn" class="btn btn-primary" style="flex: 1;">Capture</button>
+                <button id="cancelWebcam" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentImage = null;
+        let currentImageBase64 = null;
+        let currentDetections = [];
+        let ocrLoaded = false;
+
+        // Elements
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const imageDisplay = document.getElementById('imageDisplay');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const spatialBtn = document.getElementById('spatialBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const statusBadge = document.getElementById('statusBadge');
+        const confidenceSlider = document.getElementById('confidenceSlider');
+        const confidenceValue = document.getElementById('confidenceValue');
+
+        // Colors for bounding boxes
+        const COLORS = [
+            '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+            '#ec4899', '#14b8a6', '#3b82f6', '#f97316', '#a855f7',
+            '#84cc16', '#6366f1', '#d946ef', '#f43f5e'
+        ];
+
+        // Initialize
+        async function init() {
+            await checkStatus();
+            setupEventListeners();
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/ocr/status');
+                const status = await response.json();
+                ocrLoaded = status.loaded;
+                updateStatusBadge();
+            } catch (error) {
+                console.error('Failed to check OCR status:', error);
+                statusBadge.textContent = 'Connection Error';
+                statusBadge.className = 'status-badge status-unloaded';
+            }
+        }
+
+        function updateStatusBadge() {
+            if (ocrLoaded) {
+                statusBadge.textContent = 'OCR Ready';
+                statusBadge.className = 'status-badge status-loaded';
+            } else {
+                statusBadge.textContent = 'OCR Loading...';
+                statusBadge.className = 'status-badge status-unloaded';
+            }
+        }
+
+        function setupEventListeners() {
+            // File upload
+            document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+
+            // Drop zone
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', handleDrop);
+
+            // Paste
+            document.getElementById('pasteBtn').addEventListener('click', handlePaste);
+            document.addEventListener('paste', handlePasteEvent);
+
+            // Webcam
+            document.getElementById('webcamBtn').addEventListener('click', openWebcam);
+            document.getElementById('closeWebcam').addEventListener('click', closeWebcam);
+            document.getElementById('cancelWebcam').addEventListener('click', closeWebcam);
+            document.getElementById('captureBtn').addEventListener('click', captureWebcam);
+
+            // Confidence slider
+            confidenceSlider.addEventListener('input', (e) => {
+                confidenceValue.textContent = e.target.value;
+            });
+
+            // Options
+            document.getElementById('showLabels').addEventListener('change', redrawOverlay);
+            document.getElementById('showCenters').addEventListener('change', redrawOverlay);
+
+            // Analyze
+            analyzeBtn.addEventListener('click', runOCR);
+            spatialBtn.addEventListener('click', runSpatialOCR);
+
+            // Copy buttons
+            document.getElementById('copyTextBtn').addEventListener('click', () => {
+                navigator.clipboard.writeText(document.getElementById('extractedText').textContent);
+            });
+            document.getElementById('copyRawBtn').addEventListener('click', () => {
+                navigator.clipboard.writeText(document.getElementById('rawText').textContent);
+            });
+
+            // Tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
+                });
+            });
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) loadImage(file);
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        }
+
+        async function handlePaste() {
+            try {
+                const items = await navigator.clipboard.read();
+                for (const item of items) {
+                    for (const type of item.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await item.getType(type);
+                            loadImage(blob);
+                            return;
+                        }
+                    }
+                }
+                alert('No image found in clipboard');
+            } catch (error) {
+                console.error('Paste failed:', error);
+            }
+        }
+
+        function handlePasteEvent(e) {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) loadImage(file);
+                    break;
+                }
+            }
+        }
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    currentImageBase64 = e.target.result.split(',')[1];
+                    displayImage(img);
+                    analyzeBtn.disabled = false;
+                    spatialBtn.disabled = false;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function displayImage(img) {
+            dropZone.classList.add('hidden');
+            imageDisplay.classList.remove('hidden');
+
+            const maxWidth = imageDisplay.parentElement.clientWidth - 32;
+            const maxHeight = window.innerHeight - 200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            if (height > maxHeight) {
+                width = (maxHeight / height) * width;
+                height = maxHeight;
+            }
+
+            imageCanvas.width = width;
+            imageCanvas.height = height;
+            overlayCanvas.width = width;
+            overlayCanvas.height = height;
+
+            const ctx = imageCanvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Clear overlay
+            const overlayCtx = overlayCanvas.getContext('2d');
+            overlayCtx.clearRect(0, 0, width, height);
+        }
+
+        // Webcam functions
+        let webcamStream = null;
+
+        function openWebcam() {
+            document.getElementById('webcamModal').classList.remove('hidden');
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    webcamStream = stream;
+                    document.getElementById('webcamVideo').srcObject = stream;
+                })
+                .catch(err => {
+                    console.error('Webcam error:', err);
+                    alert('Could not access webcam');
+                    closeWebcam();
+                });
+        }
+
+        function closeWebcam() {
+            document.getElementById('webcamModal').classList.add('hidden');
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+        }
+
+        function captureWebcam() {
+            const video = document.getElementById('webcamVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(blob => {
+                loadImage(blob);
+                closeWebcam();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function showLoading(text = 'Processing OCR...') {
+            loadingText.textContent = text;
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        async function runOCR() {
+            if (!currentImage) return;
+
+            const minConfidence = parseFloat(confidenceSlider.value);
+            showLoading('Running OCR...');
+
+            try {
+                const response = await fetch('/api/ocr/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageBase64,
+                        min_confidence: minConfidence
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'OCR failed');
+                }
+
+                displayResults(result);
+
+            } catch (error) {
+                console.error('OCR failed:', error);
+                alert('OCR failed: ' + error.message);
+            }
+
+            hideLoading();
+        }
+
+        async function runSpatialOCR() {
+            if (!currentImage) return;
+
+            const minConfidence = parseFloat(confidenceSlider.value);
+            showLoading('Analyzing spatial layout...');
+
+            try {
+                const response = await fetch('/api/ocr/spatial', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: currentImageBase64,
+                        min_confidence: minConfidence
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'OCR failed');
+                }
+
+                // Flatten rows into detections for display
+                const detections = [];
+                result.rows.forEach(row => {
+                    row.forEach(det => detections.push(det));
+                });
+
+                displayResults({
+                    success: true,
+                    detections: detections,
+                    count: result.total_detections,
+                    image_size: result.image_size,
+                    inference_time: result.inference_time,
+                    rows: result.rows,
+                    row_count: result.row_count
+                });
+
+            } catch (error) {
+                console.error('Spatial OCR failed:', error);
+                alert('Spatial OCR failed: ' + error.message);
+            }
+
+            hideLoading();
+        }
+
+        function displayResults(result) {
+            document.getElementById('resultsPlaceholder').classList.add('hidden');
+            document.getElementById('resultsContent').classList.remove('hidden');
+
+            // Update stats
+            document.getElementById('detectionCount').textContent = result.count || 0;
+            document.getElementById('inferenceTime').textContent = result.inference_time?.toFixed(2) || '-';
+
+            if (result.image_size) {
+                document.getElementById('imageSize').textContent =
+                    `${result.image_size.width}x${result.image_size.height}`;
+            }
+
+            // Store detections for redraw
+            currentDetections = result.detections || [];
+
+            // Draw bounding boxes
+            redrawOverlay();
+
+            // Build detections list
+            const list = document.getElementById('detectionsList');
+            list.innerHTML = '';
+
+            currentDetections.forEach((det, i) => {
+                const li = document.createElement('li');
+                li.className = 'detection-item';
+                li.dataset.index = i;
+                li.innerHTML = `
+                    <span class="detection-color" style="background: ${COLORS[i % COLORS.length]}"></span>
+                    <div style="flex: 1;">
+                        <div class="detection-text">${det.text || '(no text)'}</div>
+                        <div class="detection-position">x: ${Math.round(det.center[0])}, y: ${Math.round(det.center[1])}</div>
+                    </div>
+                    <span class="detection-confidence">${(det.confidence * 100).toFixed(1)}%</span>
+                `;
+
+                // Highlight on hover
+                li.addEventListener('mouseenter', () => highlightDetection(i));
+                li.addEventListener('mouseleave', () => redrawOverlay());
+
+                list.appendChild(li);
+            });
+
+            // Build extracted text
+            const texts = currentDetections.map(d => d.text).filter(t => t);
+            document.getElementById('extractedText').textContent = texts.join('\n');
+
+            // Raw JSON
+            document.getElementById('rawText').textContent = JSON.stringify(result, null, 2);
+        }
+
+        function redrawOverlay() {
+            const ctx = overlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (!currentImage || currentDetections.length === 0) return;
+
+            const showLabels = document.getElementById('showLabels').checked;
+            const showCenters = document.getElementById('showCenters').checked;
+
+            const scaleX = overlayCanvas.width / currentImage.width;
+            const scaleY = overlayCanvas.height / currentImage.height;
+
+            currentDetections.forEach((det, i) => {
+                const color = COLORS[i % COLORS.length];
+                const bbox = det.bbox;
+
+                // Scale coordinates
+                const x1 = bbox[0] * scaleX;
+                const y1 = bbox[1] * scaleY;
+                const x2 = bbox[2] * scaleX;
+                const y2 = bbox[3] * scaleY;
+
+                // Draw box
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                // Draw label
+                if (showLabels && det.text) {
+                    ctx.font = '11px sans-serif';
+                    const textWidth = ctx.measureText(det.text).width;
+
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x1, y1 - 16, textWidth + 6, 16);
+
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(det.text, x1 + 3, y1 - 4);
+                }
+
+                // Draw center point
+                if (showCenters) {
+                    const cx = det.center[0] * scaleX;
+                    const cy = det.center[1] * scaleY;
+
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        function highlightDetection(index) {
+            const ctx = overlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (!currentImage || currentDetections.length === 0) return;
+
+            const scaleX = overlayCanvas.width / currentImage.width;
+            const scaleY = overlayCanvas.height / currentImage.height;
+
+            currentDetections.forEach((det, i) => {
+                const isHighlighted = i === index;
+                const color = COLORS[i % COLORS.length];
+                const bbox = det.bbox;
+
+                const x1 = bbox[0] * scaleX;
+                const y1 = bbox[1] * scaleY;
+                const x2 = bbox[2] * scaleX;
+                const y2 = bbox[3] * scaleY;
+
+                // Draw box
+                ctx.strokeStyle = isHighlighted ? '#ffffff' : color;
+                ctx.lineWidth = isHighlighted ? 3 : 1;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                // Fill highlight
+                if (isHighlighted) {
+                    ctx.fillStyle = 'rgba(6, 182, 212, 0.3)';
+                    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+                }
+
+                // Draw label
+                if (det.text) {
+                    ctx.font = isHighlighted ? 'bold 12px sans-serif' : '11px sans-serif';
+                    const textWidth = ctx.measureText(det.text).width;
+
+                    ctx.fillStyle = isHighlighted ? '#ffffff' : color;
+                    ctx.fillRect(x1, y1 - 16, textWidth + 6, 16);
+
+                    ctx.fillStyle = isHighlighted ? '#000000' : 'white';
+                    ctx.fillText(det.text, x1 + 3, y1 - 4);
+                }
+            });
+
+            // Highlight item in list
+            document.querySelectorAll('.detection-item').forEach((item, i) => {
+                item.classList.toggle('highlighted', i === index);
+            });
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Sudoers configuration for Iris services on localhost
+# Install with: sudo cp iris-sudoers /etc/sudoers.d/iris && sudo chmod 440 /etc/sudoers.d/iris
+
+# Allow captain to manage iris-llama service without password
+captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl start iris-llama
+captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop iris-llama
+captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart iris-llama
+captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl status iris-llama

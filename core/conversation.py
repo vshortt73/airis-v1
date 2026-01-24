@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 import os
 import sys
 import re
+import time
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, PROJECT_ROOT)
 from app import config
@@ -16,26 +17,54 @@ from core import attachments
 
 class ConversationHistory:
     """Manages conversation history with database persistence"""
-    
+
     def __init__(self, enable_persistence: bool = True):
         """
         Initialize conversation history
-        
+
         Loads recent conversation from database (across all sessions!)
-        
+
         Args:
             enable_persistence: If True, save/load from database
         """
         self.messages: List[Dict[str, str]] = []
         self.enable_persistence = enable_persistence
+
+        # System component cache for performance optimization
+        # Caches system prompt components that don't change during a conversation
+        self.system_cache = {
+            'protocol': None,
+            'instructions': None,
+            'traits': None,
+            'facts': None,
+            'dreams': None,
+            'dream_truths': None,
+            'last_refresh': None
+        }
+        self.cache_ttl = 300  # 5 minutes TTL for system components
+
+        # Fast reactive memory cache (per-turn)
+        # Prevents re-running expensive embedding generation within same turn
+        self.fast_memory_cache = {}
+        self.turn_id = 0  # Increment on each user message to invalidate cache
         
         if enable_persistence:
             # Get/create session (for analytics, not for loading!)
             self.session_id = persistence.get_or_create_session()
-            
+
             # Load recent conversation (ACROSS ALL SESSIONS!)
-            self.messages = persistence.load_recent_conversation()
-            
+            # Use tiered loading: verbose (recent) + summaries (older)
+            from app import config
+            verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+            summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
+            max_messages = getattr(config, 'MAX_TOTAL_MESSAGES', 50)
+
+            self.messages = persistence.load_recent_conversation(
+                verbose_budget=verbose_budget,
+                summary_budget=summary_budget,
+                max_messages=max_messages
+            )
+
             if self.messages:
                 print(f"[conversation.py][__init__] ✓ Loaded {len(self.messages)} messages into working memory")
             else:
@@ -53,6 +82,10 @@ class ConversationHistory:
             images: Optional list of base64-encoded images (with or without data URI)
             sender: Message sender identifier ('user' for Victor, 'claude_code' for Claude, etc.)
         """
+        # Increment turn ID to invalidate fast memory cache
+        self.turn_id += 1
+        self.fast_memory_cache = {}
+
         msg = {
             "role": "user",
             "content": content
@@ -95,7 +128,10 @@ class ConversationHistory:
                 attachments=attachment_metadata if attachment_metadata else None,
                 sender=sender
             )
-    
+
+            # Trigger background summary generation for long messages
+            self._trigger_summary_generation(content, "user")
+
     def add_assistant_message(self, content: str, tool_calls=None, images: Optional[List[str]] = None, sender: str = 'assistant') -> None:
         """
         Add an assistant message to history
@@ -148,7 +184,48 @@ class ConversationHistory:
                 attachments=attachment_metadata if attachment_metadata else None,
                 sender=sender
             )
-    
+
+            # Trigger background summary generation for long messages
+            self._trigger_summary_generation(content, "assistant")
+
+    def _trigger_summary_generation(self, content: str, role: str) -> None:
+        """
+        Trigger async summary generation in the background.
+        Does not block - summary is generated asynchronously.
+        """
+        try:
+            min_length = getattr(persistence.config, 'SUMMARY_MIN_LENGTH', 50)
+            if not content or len(content) < min_length:
+                return
+
+            # Get the message ID we just saved
+            message_id = persistence.get_last_message_id()
+            if not message_id:
+                return
+
+            # Spawn background task for summary generation
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're in an async context, create a task
+                loop.create_task(self._generate_summary_async(message_id, content, role))
+                print(f"[conversation.py] Spawned summary generation for message {message_id}")
+            except RuntimeError:
+                # No running loop - we're in sync context, skip for now
+                # Summaries will be backfilled later
+                pass
+
+        except Exception as e:
+            # Don't let summary generation errors affect the main flow
+            print(f"[conversation.py] Summary generation trigger error (non-fatal): {e}")
+
+    async def _generate_summary_async(self, message_id: int, content: str, role: str) -> None:
+        """Generate summary asynchronously"""
+        try:
+            await persistence.generate_and_save_summary(message_id, content, role)
+        except Exception as e:
+            print(f"[conversation.py] Background summary generation error: {e}")
+
     def add_tool_message(self, content: str, tool_name: str, tool_call_id: str = None, images: Optional[List[str]] = None) -> None:
         """
         Add a tool result message to history
@@ -210,7 +287,16 @@ class ConversationHistory:
     def reload_from_database(self) -> None:
         """Reload conversation history from database"""
         if self.enable_persistence:
-            self.messages = persistence.load_recent_conversation()
+            from app import config
+            verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+            summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
+            max_messages = getattr(config, 'MAX_TOTAL_MESSAGES', 50)
+
+            self.messages = persistence.load_recent_conversation(
+                verbose_budget=verbose_budget,
+                summary_budget=summary_budget,
+                max_messages=max_messages
+            )
             print(f"[conversation.py][reload_from_database] ✓ Reloaded {len(self.messages)} messages")
     
     def get_message_count(self) -> int:
@@ -220,3 +306,82 @@ class ConversationHistory:
     def get_session_id(self) -> Optional[str]:
         """Get current session ID (for analytics only)"""
         return self.session_id
+
+    def get_system_components(self, force_refresh: bool = False) -> Dict:
+        """
+        Get cached system prompt components or refresh if needed
+
+        Caches components that don't change frequently:
+        - Protocol settings
+        - System instructions
+        - Character traits
+        - Short-term facts
+        - Dreams
+        - Dream truths
+
+        Args:
+            force_refresh: Force reload from database
+
+        Returns:
+            Dictionary with cached system components
+        """
+        now = time.time()
+        cache_expired = (
+            force_refresh or
+            not self.system_cache['last_refresh'] or
+            (now - self.system_cache['last_refresh']) > self.cache_ttl
+        )
+
+        if cache_expired:
+            print(f"[conversation.py][get_system_components] Refreshing system component cache...")
+            # Import here to avoid circular dependency
+            from core.system_prompt import (
+                get_active_protocol,
+                get_system_prompt,
+                get_trait_list,
+                get_short_term_facts,
+                get_latest_dream,
+                get_dream_truths
+            )
+
+            self.system_cache = {
+                'protocol': get_active_protocol(),
+                'instructions': None,  # Will be loaded with protocol
+                'traits': get_trait_list(),
+                'facts': get_short_term_facts(limit=15),
+                'dreams': get_latest_dream(),
+                'dream_truths': get_dream_truths(limit=5, max_days=7),
+                'last_refresh': now
+            }
+
+            # Load instructions with the cached protocol
+            self.system_cache['instructions'] = get_system_prompt(self.system_cache['protocol'])
+
+            print(f"[conversation.py][get_system_components] ✓ System cache refreshed")
+        else:
+            cache_age = int(now - self.system_cache['last_refresh'])
+            print(f"[conversation.py][get_system_components] Using cached system components (age: {cache_age}s)")
+
+        return self.system_cache
+
+    def get_fast_memory_cache(self, key: str) -> Optional[str]:
+        """
+        Get cached fast reactive memory result for this turn
+
+        Args:
+            key: Cache key (typically the user message)
+
+        Returns:
+            Cached context string or None
+        """
+        return self.fast_memory_cache.get(key)
+
+    def set_fast_memory_cache(self, key: str, value: str) -> None:
+        """
+        Cache fast reactive memory result for this turn
+
+        Args:
+            key: Cache key (typically the user message)
+            value: Context string to cache
+        """
+        self.fast_memory_cache[key] = value

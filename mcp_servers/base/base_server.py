@@ -1,6 +1,20 @@
 """
 Base MCP Server for Iris v3
 Provides foundation for all MCP servers
+
+!! CLAUDE: TOOL PARAMETER SYNC !!
+Tool definitions come from TWO places that must stay in sync:
+1. Python function signatures (mcp_servers/*/server.py files)
+2. Database schema (mcp_tools.input_schema column)
+
+The MODEL ONLY SEES THE DATABASE SCHEMA - Python parameters are invisible!
+
+When adding/modifying tool parameters:
+1. Update Python function
+2. Create SQL to update mcp_tools.input_schema
+3. Run SQL and restart Iris
+
+See: database/sql/ for existing tool schema updates
 """
 
 from mcp.server.fastmcp import FastMCP
@@ -32,7 +46,7 @@ class IrisMCPServer:
         self.mcp = FastMCP(name)
         self._tools_registered = 0
         
-        print(f"[{self.name}] Initialized")
+        print(f"[{self.name}] Initialized", file=sys.stderr)
     
     def register_tool(self, func):
         """
@@ -46,12 +60,12 @@ class IrisMCPServer:
         """
         decorated = self.mcp.tool()(func)
         self._tools_registered += 1
-        print(f"[{self.name}] Registered tool: {func.__name__}")
+        print(f"[{self.name}] Registered tool: {func.__name__}", file=sys.stderr)
         return decorated
     
     def run(self):
         """Start the MCP server"""
-        print(f"[{self.name}] Starting server with {self._tools_registered} tools...")
+        print(f"[{self.name}] Starting server with {self._tools_registered} tools...", file=sys.stderr)
         self.mcp.run()
     
     @staticmethod

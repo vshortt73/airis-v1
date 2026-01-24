@@ -63,36 +63,46 @@ fi
 echo "" | tee -a "$LOG_FILE"
 
 # ============================================================================
-# CHECK OLLAMA SERVICES
+# CHECK LLAMA.CPP SERVERS & SWAP VISION FOR FREUD ON NODE2
 # ============================================================================
 
-echo "[2/4] Checking Ollama services..." | tee -a "$LOG_FILE"
+echo "[2/4] Setting up llama.cpp servers for dreaming..." | tee -a "$LOG_FILE"
 
-# Check Freud Ollama (CPU - gemma2:9b)
-if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "⚠ Main Ollama (port 11434) not responding - attempting to start..." | tee -a "$LOG_FILE"
-    sudo systemctl start ollama-vision
-    sleep 5
+# Node2 configuration
+NODE2_HOST="node2"
+NODE2_USER="captain"
 
-    if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "✗ Failed to start main Ollama" | tee -a "$LOG_FILE"
+# Check Iris server (port 11434 - Qwen 32B on local GPU 0)
+if ! curl -s http://localhost:11434/health > /dev/null 2>&1; then
+    echo "⚠ Iris server (port 11434) not responding - attempting to start via systemctl..." | tee -a "$LOG_FILE"
+    sudo systemctl start iris-llama
+    sleep 15  # Give the large model time to load
+
+    if ! curl -s http://localhost:11434/health > /dev/null 2>&1; then
+        echo "✗ Failed to start Iris llama.cpp server" | tee -a "$LOG_FILE"
         exit 1
     fi
 fi
-echo "✓ Freud Ollama running" | tee -a "$LOG_FILE"
+echo "✓ Iris llama.cpp server running (port 11434)" | tee -a "$LOG_FILE"
 
-# Check main Ollama (Iris - 72B both GPUs)
-if ! curl -s http://localhost:11435/api/tags > /dev/null 2>&1; then
-    echo "⚠ Vision Ollama (port 11435) not responding - attempting to start..." | tee -a "$LOG_FILE"
-    sudo systemctl start ollama
-    sleep 5
+# Swap Vision -> Freud on node2 using systemctl
+echo "Stopping Vision service on node2..." | tee -a "$LOG_FILE"
+ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-vision" 2>&1 | tee -a "$LOG_FILE"
+sleep 2
+echo "✓ Vision service stopped on node2" | tee -a "$LOG_FILE"
 
-    if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "✗ Failed to start Ollama" | tee -a "$LOG_FILE"
-        exit 1
-    fi
+# Start Freud service on node2 (gemma-3-4b on GPU 0, port 11435)
+echo "Starting Freud service on node2 (gemma-3-4b)..." | tee -a "$LOG_FILE"
+ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl start iris-freud" 2>&1 | tee -a "$LOG_FILE"
+sleep 10  # Give Freud time to load
+
+if ! curl -s http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
+    echo "✗ Failed to start Freud service on node2" | tee -a "$LOG_FILE"
+    # Try to restore vision
+    ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-freud; sudo systemctl start iris-vision" 2>&1 | tee -a "$LOG_FILE"
+    exit 1
 fi
-echo "✓ Main Ollama running (Iris)" | tee -a "$LOG_FILE"
+echo "✓ Freud service running on node2 (port 11435)" | tee -a "$LOG_FILE"
 
 echo "" | tee -a "$LOG_FILE"
 
@@ -128,10 +138,27 @@ fi
 echo "" | tee -a "$LOG_FILE"
 
 # ============================================================================
-# CLEANUP & SUMMARY
+# CLEANUP & RESTORE VISION SERVICE ON NODE2
 # ============================================================================
 
-echo "[4/4] Cleanup..." | tee -a "$LOG_FILE"
+echo "[4/4] Cleanup - restoring vision service on node2..." | tee -a "$LOG_FILE"
+
+# Swap Freud -> Vision on node2 using systemctl
+echo "Stopping Freud service on node2..." | tee -a "$LOG_FILE"
+ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-freud" 2>&1 | tee -a "$LOG_FILE"
+sleep 2
+echo "✓ Freud service stopped on node2" | tee -a "$LOG_FILE"
+
+# Restart vision service on node2
+echo "Starting Vision service on node2 (llava-phi-3)..." | tee -a "$LOG_FILE"
+ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl start iris-vision" 2>&1 | tee -a "$LOG_FILE"
+sleep 8
+
+if curl -s http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
+    echo "✓ Vision service restored on node2 (port 11435)" | tee -a "$LOG_FILE"
+else
+    echo "⚠ Vision service may not have started on node2 - check with: ssh node2 'sudo systemctl status iris-vision'" | tee -a "$LOG_FILE"
+fi
 
 # Deactivate virtual environment
 deactivate 2>/dev/null || true

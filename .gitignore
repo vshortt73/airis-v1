@@ -43,7 +43,19 @@ env/
 # Project-specific: User uploads and generated content
 attachments/user/
 attachments/generated/
-assets/audio/iris_temp.mp3
+attachments/face_training/
+
+# Generated audio (TTS output)
+assets/audio/*.wav
+assets/audio/*.mp3
+
+# Runtime/temp assets
+assets/temp/
+assets/3D/
+assets/video_references/
+
+# SSL certificates (sensitive)
+ssl/
 
 # Backup and old files
 *.save

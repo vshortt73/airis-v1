@@ -242,45 +242,202 @@ def save_message(session_id: str, role: str, message: str, tool_calls=None, tool
         print(f"[persistence.py][save_message] ✓ Saved {log_details} to session {session_id[:8]}...")
 
         return True
-        
+
     except Exception as e:
         print(f"[persistence.py][save_message] ✗ Error saving message: {e}")
         return False
 
+
+def save_summary(message_id: int, summary: str) -> bool:
+    """
+    Save a summary for an existing message.
+
+    Args:
+        message_id: The message ID in chat_history
+        summary: The generated summary text
+
+    Returns:
+        True if successful
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        chat_table = get_current_chat_table()
+
+        cursor.execute(f"""
+            UPDATE {chat_table}
+            SET summary = %s,
+                summary_generated_at = %s
+            WHERE id = %s
+        """, (summary, datetime.now(), message_id))
+
+        conn.commit()
+        rows_updated = cursor.rowcount
+        cursor.close()
+        conn.close()
+
+        if rows_updated > 0:
+            print(f"[persistence.py][save_summary] ✓ Saved summary for message {message_id}")
+            return True
+        else:
+            print(f"[persistence.py][save_summary] ✗ Message {message_id} not found")
+            return False
+
+    except Exception as e:
+        print(f"[persistence.py][save_summary] ✗ Error saving summary: {e}")
+        return False
+
+
+async def generate_and_save_summary(message_id: int, content: str, role: str) -> Optional[str]:
+    """
+    Generate a summary for a message and save it to the database.
+
+    Args:
+        message_id: The message ID in chat_history
+        content: The message content to summarize
+        role: The message role ('user' or 'assistant')
+
+    Returns:
+        The generated summary, or None if generation failed
+    """
+    try:
+        from core.summary_generator import generate_summary
+
+        summary = await generate_summary(content, role)
+
+        if summary:
+            save_summary(message_id, summary)
+            return summary
+
+        return None
+
+    except Exception as e:
+        print(f"[persistence.py][generate_and_save_summary] ✗ Error: {e}")
+        return None
+
+
+def get_last_message_id() -> Optional[int]:
+    """
+    Get the ID of the most recently saved message.
+
+    Returns:
+        Message ID or None
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        chat_table = get_current_chat_table()
+
+        cursor.execute(f"""
+            SELECT id FROM {chat_table}
+            ORDER BY c_timestamp DESC
+            LIMIT 1
+        """)
+
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        return row[0] if row else None
+
+    except Exception as e:
+        print(f"[persistence.py][get_last_message_id] ✗ Error: {e}")
+        return None
+
+
+def get_messages_needing_summaries(limit: int = 100) -> List[Dict]:
+    """
+    Get messages that need summaries generated.
+
+    Args:
+        limit: Maximum messages to return
+
+    Returns:
+        List of message dicts with id, content, role
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        chat_table = get_current_chat_table()
+        min_length = getattr(config, 'SUMMARY_MIN_LENGTH', 50)
+
+        cursor.execute(f"""
+            SELECT id, message, role
+            FROM {chat_table}
+            WHERE summary IS NULL
+              AND role IN ('user', 'assistant')
+              AND LENGTH(message) >= %s
+            ORDER BY c_timestamp DESC
+            LIMIT %s
+        """, (min_length, limit))
+
+        messages = []
+        for row in cursor.fetchall():
+            messages.append({
+                'id': row[0],
+                'content': row[1],
+                'role': row[2]
+            })
+
+        cursor.close()
+        conn.close()
+
+        return messages
+
+    except Exception as e:
+        print(f"[persistence.py][get_messages_needing_summaries] ✗ Error: {e}")
+        return []
+
+
 def load_recent_conversation(
     max_turns: int = None,
     max_tokens: int = None,
-    max_messages: int = None
+    max_messages: int = None,
+    verbose_budget: int = None,
+    summary_budget: int = None
 ) -> List[Dict[str, str]]:
     """
-    Load recent conversation history for context with DYNAMIC token budgeting
+    Load recent conversation history for context with TIERED token budgeting.
 
     CRITICAL: This loads across ALL sessions! Session boundaries don't limit memory.
 
-    NEW Strategy (Dynamic):
-    1. Load a large batch of recent messages (ignores turn limits)
-    2. Work backwards from newest, counting tokens as we go
-    3. Stop when token budget exhausted
-    4. This maximizes context utilization regardless of turn count
+    TIERED STRATEGY:
+    1. Load recent messages in FULL (verbose) up to verbose_budget
+    2. Load older messages as SUMMARIES up to summary_budget
+    3. This effectively doubles usable context while keeping recent detail
 
     Args:
-        max_turns: Ignored (kept for compatibility) - token budget controls loading now
-        max_tokens: Token budget to fill (REQUIRED for dynamic loading)
-        max_messages: Max total messages (safety brake, defaults to config.MAX_TOTAL_MESSAGES)
+        max_turns: Ignored (kept for compatibility)
+        max_tokens: Total token budget (fallback if verbose/summary not specified)
+        max_messages: Max total messages (safety brake)
+        verbose_budget: Token budget for recent full messages (uses VERBOSE_TOKEN_BUDGET config)
+        summary_budget: Token budget for older summarized messages (uses SUMMARY_TOKEN_BUDGET config)
 
     Returns:
         List of message dicts with 'role' and 'content'
     """
-    print(f"[persistence.py][load_recent_conversation] ┌── DYNAMIC CONVERSATION LOADING ──┐")
+    print(f"[persistence.py][load_recent_conversation] ┌── TIERED CONVERSATION LOADING ──┐")
 
-    if max_tokens is None:
-        max_tokens = config.MAX_CONTEXT_TOKENS
-        print(f"[persistence.py] WARNING: No token budget provided, using default: {max_tokens:,}")
+    # Get tiered budgets from config if not provided
+    if verbose_budget is None:
+        verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+    if summary_budget is None:
+        summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
+
+    # Fallback to old behavior if max_tokens specified but not tiered budgets
+    if max_tokens is not None and verbose_budget == 3000 and summary_budget == 17000:
+        # Old-style call, use max_tokens as total
+        verbose_budget = max_tokens
+        summary_budget = 0
+        print(f"[persistence.py] Legacy mode: {max_tokens:,} tokens (no summaries)")
     else:
-        print(f"[persistence.py] Token budget: {max_tokens:,}")
+        print(f"[persistence.py] Tiered budgets: {verbose_budget:,} verbose + {summary_budget:,} summary")
 
     if max_messages is None:
-        max_messages = config.MAX_TOTAL_MESSAGES
+        max_messages = getattr(config, 'MAX_TOTAL_MESSAGES', 50)
 
     try:
         conn = get_db_connection()
@@ -290,16 +447,15 @@ def load_recent_conversation(
         chat_table = get_current_chat_table()
         print(f"[persistence.py] Using chat table: {chat_table}")
 
-        # DYNAMIC LOADING: Load large batch of recent messages (across ALL sessions)
-        # We'll truncate by tokens, not turn count
-        batch_size = max_messages * 2  # Load plenty of messages, we'll truncate by tokens
+        # TIERED LOADING: Load large batch with summaries
+        batch_size = max_messages * 3  # Load more since summaries compress well
 
-        # Load messages in DESC order (newest first) so we can work backwards
+        # Load messages in DESC order (newest first) with summary column
         if chat_table == 'chat_history':
             cursor.execute("""
                 SELECT ch.role, ch.message, ch.tool_calls, ch.tool_call_id, ch.tool_name,
                        ct.temporal_description, ch.attachments, ct.emotion_bias, ct.display_priority,
-                       ch.c_timestamp
+                       ch.c_timestamp, ch.summary
                 FROM chat_history ch
                 LEFT JOIN chat_history_with_temporal ct ON ct.id = ch.id
                 ORDER BY ch.c_timestamp DESC
@@ -310,7 +466,7 @@ def load_recent_conversation(
             cursor.execute(f"""
                 SELECT role, message, tool_calls, tool_call_id, tool_name,
                        NULL as temporal_description, attachments, NULL as emotion_bias, NULL as display_priority,
-                       c_timestamp
+                       c_timestamp, summary
                 FROM {chat_table}
                 ORDER BY c_timestamp DESC
                 LIMIT %s
@@ -326,21 +482,36 @@ def load_recent_conversation(
 
         print(f"[persistence.py] Fetched {len(all_messages)} recent messages from DB")
 
-        # DYNAMIC LOADING: Work backwards from newest, counting tokens
-        # Stop when we hit the token budget
-        selected_messages = []
-        current_tokens = 0
+        # TIERED LOADING: Phase 1 - Verbose (full messages)
+        # Phase 2 - Summaries (older messages as summaries)
+        verbose_messages = []
+        summary_messages = []
+        verbose_tokens = 0
+        summary_tokens = 0
+        verbose_phase = True  # Start with verbose phase
+
+        # SMART TRUNCATION: Tool-specific limits
+        TOOL_CONTENT_LIMITS = {
+            "web_search": 20000,
+            "document_search": 30000,
+            "pubmed_search": 20000,
+            "arxiv_search": 30000,
+            "url_fetch": 20000,
+            "news_headlines": 15000,
+            "comfyui_render": 2000,
+            "vision_analysis": 5000,
+        }
+        DEFAULT_TOOL_CONTENT_LIMIT = 1000
 
         for row in all_messages:
-            role, content, tool_calls, tool_call_id, tool_name, temporal_description, attachments_json, emotion_bias, display_priority, c_timestamp = row
+            role, content, tool_calls, tool_call_id, tool_name, temporal_description, attachments_json, emotion_bias, display_priority, c_timestamp, summary = row
 
-            # CRITICAL FIX: Truncate tool message content to prevent budget bloat
-            # Tool results can be 600KB+, which poisons context loading
-            # Keep first 1000 chars so Iris can learn from examples without consuming huge token budget
-            MAX_TOOL_CONTENT_LENGTH = 1000
-            if role == "tool" and content and len(content) > MAX_TOOL_CONTENT_LENGTH:
-                original_length = len(content)
-                content = content[:MAX_TOOL_CONTENT_LENGTH] + f"\n\n[...truncated {original_length - MAX_TOOL_CONTENT_LENGTH} chars for context efficiency]"
+            # Apply tool content limits
+            if role == "tool" and content and tool_name:
+                max_length = TOOL_CONTENT_LIMITS.get(tool_name, DEFAULT_TOOL_CONTENT_LIMIT)
+                if len(content) > max_length:
+                    original_length = len(content)
+                    content = content[:max_length] + f"\n\n[...truncated {original_length - max_length} chars]"
 
             # Build message dict
             msg = {
@@ -361,25 +532,56 @@ def load_recent_conversation(
             if attachments_json:
                 msg["attachments"] = attachments_json
 
-            # Count tokens for this message
+            # Count tokens for full message
             msg_tokens = TokenCounter.count_message_tokens([msg])
 
-            # Check if adding this message would exceed budget
-            if current_tokens + msg_tokens > max_tokens and selected_messages:
-                # Budget exhausted, stop loading
-                print(f"[persistence.py] Token budget exhausted ({current_tokens:,}/{max_tokens:,} tokens)")
-                break
+            # PHASE 1: Fill verbose budget with full messages
+            if verbose_phase:
+                if verbose_tokens + msg_tokens <= verbose_budget:
+                    verbose_messages.insert(0, msg)
+                    verbose_tokens += msg_tokens
+                else:
+                    # Verbose budget full, switch to summary phase
+                    verbose_phase = False
+                    print(f"[persistence.py] Verbose budget filled: {verbose_tokens:,}/{verbose_budget:,} tokens, {len(verbose_messages)} messages")
 
-            # Add message to selection (prepend since we're working backwards)
-            selected_messages.insert(0, msg)
-            current_tokens += msg_tokens
+            # PHASE 2: Fill summary budget with summarized messages
+            if not verbose_phase and summary_budget > 0:
+                # Skip tool messages in summary phase (they don't have summaries)
+                if role == "tool":
+                    continue
 
-            # Safety brake: don't exceed max message count
-            if len(selected_messages) >= max_messages:
+                # Use summary if available, otherwise skip (or use truncated content)
+                if summary:
+                    summary_msg = {
+                        "role": role,
+                        "content": f"[Earlier] {summary}",
+                        "timeframe": temporal_description or "",
+                        "timestamp": c_timestamp.isoformat() if c_timestamp else "",
+                        "is_summary": True
+                    }
+                    summary_msg_tokens = TokenCounter.count_message_tokens([summary_msg])
+
+                    if summary_tokens + summary_msg_tokens <= summary_budget:
+                        summary_messages.insert(0, summary_msg)
+                        summary_tokens += summary_msg_tokens
+                    else:
+                        # Summary budget exhausted
+                        print(f"[persistence.py] Summary budget exhausted ({summary_tokens:,}/{summary_budget:,} tokens)")
+                        break
+
+            # Safety brake
+            total_messages = len(verbose_messages) + len(summary_messages)
+            if total_messages >= max_messages:
                 print(f"[persistence.py] Hit safety limit: {max_messages} messages")
                 break
 
-        print(f"[persistence.py] └── LOADED: {len(selected_messages)} messages, {current_tokens:,} tokens")
+        # Combine: summaries first (older), then verbose (recent)
+        selected_messages = summary_messages + verbose_messages
+        total_tokens = verbose_tokens + summary_tokens
+
+        print(f"[persistence.py] └── LOADED: {len(verbose_messages)} verbose ({verbose_tokens:,} tokens) + {len(summary_messages)} summaries ({summary_tokens:,} tokens)")
+        print(f"[persistence.py]     TOTAL: {len(selected_messages)} messages, {total_tokens:,} tokens")
 
         return selected_messages
         

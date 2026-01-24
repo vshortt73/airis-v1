@@ -1,0 +1,365 @@
+{
+  "ship_name": "Oasis of the Seas",
+  "deck_number": 5,
+  "total_locations": 30,
+  "locations": [
+    {
+      "name": "VITALITY SPA",
+      "position": "forward",
+      "side": "center",
+      "nearby": [
+        "ROYAL",
+        "THEATER"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "ROYAL",
+      "position": "forward",
+      "side": "center",
+      "nearby": [
+        "VITALITY SPA",
+        "THEATER"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "THEATER",
+      "position": "forward",
+      "side": "center",
+      "nearby": [
+        "VITALITY SPA",
+        "ROYAL"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "BOLEROS",
+      "position": "mid-forward",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "SHOP"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "STARBUCKS",
+      "position": "mid-forward",
+      "side": "center",
+      "nearby": [],
+      "confidence": 0.93
+    },
+    {
+      "name": "SPOTLIGHT",
+      "position": "mid-forward",
+      "side": "port",
+      "nearby": [
+        "KARAOKE",
+        "SOLERA",
+        "PORT",
+        "MERCHANTS",
+        "ANLOBEAS"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "KARAOKE",
+      "position": "mid-forward",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "SOLERA",
+        "PORT",
+        "MERCHANTS",
+        "ANLOBEAS"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "THE",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "SHOP",
+        "SORRENTOS",
+        "COLLECTION",
+        "REGALIA"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "SOLERA",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "KARAOKE",
+        "PORT",
+        "MERCHANTS",
+        "ANLOBEAS"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "SHOP",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "BOLEROS",
+        "THE",
+        "SORRENTOS",
+        "THE",
+        "COLLECTION"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "PORT",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "KARAOKE",
+        "SOLERA",
+        "MERCHANTS",
+        "ANLOBEAS"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "MERCHANTS",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "KARAOKE",
+        "SOLERA",
+        "PORT",
+        "ANLOBEAS"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "ANLOBEAS",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "KARAOKE",
+        "SOLERA",
+        "PORT",
+        "MERCHANTS"
+      ],
+      "confidence": 0.69
+    },
+    {
+      "name": "SORRENTOS",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "SHOP",
+        "THE",
+        "COLLECTION",
+        "REGALIA"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "PUB",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SPOTLIGHT",
+        "KARAOKE",
+        "SOLERA",
+        "PORT",
+        "MERCHANTS"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "THE",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "SHOP",
+        "SORRENTOS",
+        "COLLECTION",
+        "REGALIA"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "COLLECTION",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "SHOP",
+        "SORRENTOS",
+        "THE",
+        "REGALIA"
+      ],
+      "confidence": 0.98
+    },
+    {
+      "name": "CAFE",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SOLERA",
+        "PORT",
+        "MERCHANTS",
+        "ANLOBEAS",
+        "PUB"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "PROMENADE",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "SOLERA",
+        "PORT",
+        "MERCHANTS",
+        "ANLOBEAS",
+        "PUB"
+      ],
+      "confidence": 0.85
+    },
+    {
+      "name": "REGALIA",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "CAFE",
+        "PROMENADE",
+        "GUEST",
+        "SERVICES",
+        "FINE WATCHES"
+      ],
+      "confidence": 0.68
+    },
+    {
+      "name": "RISING",
+      "position": "mid",
+      "side": "center",
+      "nearby": [
+        "TIDE",
+        "BAR"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "GUEST",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "MERCHANTS",
+        "ANLOBEAS",
+        "PUB",
+        "CAFE",
+        "PROMENADE"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "TIDE",
+      "position": "mid",
+      "side": "center",
+      "nearby": [
+        "RISING",
+        "BAR"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "SERVICES",
+      "position": "mid",
+      "side": "port",
+      "nearby": [
+        "ANLOBEAS",
+        "PUB",
+        "CAFE",
+        "PROMENADE",
+        "GUEST"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "BAR",
+      "position": "mid",
+      "side": "center",
+      "nearby": [
+        "THE",
+        "COLLECTION",
+        "REGALIA",
+        "BIONIC"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "BIONIC",
+      "position": "mid",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "COLLECTION",
+        "REGALIA",
+        "BAR"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "REGALIA",
+      "position": "mid-aft",
+      "side": "port",
+      "nearby": [
+        "CAFE",
+        "PROMENADE",
+        "GUEST",
+        "SERVICES",
+        "FINE WATCHES"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "BAR",
+      "position": "mid-aft",
+      "side": "starboard",
+      "nearby": [
+        "THE",
+        "COLLECTION",
+        "REGALIA",
+        "BIONIC"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "name": "FINE WATCHES",
+      "position": "mid-aft",
+      "side": "port",
+      "nearby": [
+        "CAFE",
+        "PROMENADE",
+        "GUEST",
+        "SERVICES",
+        "REGALIA"
+      ],
+      "confidence": 0.74
+    },
+    {
+      "name": "MAIN DINING ROOM",
+      "position": "mid-aft",
+      "side": "center",
+      "nearby": [],
+      "confidence": 0.89
+    }
+  ],
+  "elevators": []
+}

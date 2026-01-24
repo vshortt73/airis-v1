@@ -7,6 +7,7 @@ import websockets
 import json
 import sys
 import argparse
+import ssl
 
 async def talk_to_iris(message, sender='claude_code'):
     """Send a message to Iris and receive her response
@@ -15,12 +16,17 @@ async def talk_to_iris(message, sender='claude_code'):
         message: Message text to send
         sender: Sender identifier (default 'claude_code')
     """
-    uri = "ws://localhost:8000/ws/chat"
+    uri = "wss://localhost:8000/ws/chat"
 
     full_response = ""
 
+    # Create SSL context that accepts self-signed certificates
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
     try:
-        async with websockets.connect(uri) as websocket:
+        async with websockets.connect(uri, ssl=ssl_context) as websocket:
             # Send message with sender identifier
             payload = {
                 "message": message,

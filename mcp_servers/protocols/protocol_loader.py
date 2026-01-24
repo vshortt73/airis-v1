@@ -16,6 +16,7 @@ import psycopg2
 import psycopg2.extras
 import json
 from app import config
+from core.websocket_broadcast import broadcast_sync
 
 
 def get_db_connection():
@@ -147,7 +148,7 @@ def load_protocol(protocol_name: str):
             show_chat_history = protocol['show_chat_history']
             show_memories = protocol['show_memories']
 
-            print(f"[protocol_loader] Protocol loaded: {len(traits_adjust)} trait changes, {len(rules_include)} includes, {len(rules_exclude)} excludes")
+            print(f"[protocol_loader] Protocol loaded: {len(traits_adjust)} trait changes, {len(rules_include)} rules to activate")
 
             # STEP 1: Apply trait changes
             for trait_name, new_value in traits_adjust.items():
@@ -159,23 +160,21 @@ def load_protocol(protocol_name: str):
                 print(f"[protocol_loader]   Trait: {trait_name} = {new_value}")
 
             # STEP 2: Apply instruction changes
-            # Activate rules in include list
+            # First, deactivate ALL instructions to start with a clean slate
+            cur.execute("UPDATE system_instructions SET active = false")
+
+            # Then activate only the rules specified in rules_include
+            # This makes each protocol fully self-contained
+            activated_count = 0
             for rule_id in rules_include:
                 cur.execute("""
                     UPDATE system_instructions
                     SET active = true
                     WHERE id = %s
                 """, (int(rule_id),))
+                activated_count += cur.rowcount
 
-            # Deactivate rules in exclude list
-            for rule_id in rules_exclude:
-                cur.execute("""
-                    UPDATE system_instructions
-                    SET active = false
-                    WHERE id = %s
-                """, (int(rule_id),))
-
-            print(f"[protocol_loader]   Activated {len(rules_include)} rules, deactivated {len(rules_exclude)} rules")
+            print(f"[protocol_loader]   Reset all rules, then activated {activated_count} rules")
 
             # STEP 3: Handle chat history table switching
             if show_chat_history:
@@ -211,6 +210,15 @@ def load_protocol(protocol_name: str):
             print(f"[protocol_loader] ✓ Protocol '{protocol_name}' loaded successfully")
             print(f"[protocol_loader]   Memories: {'ENABLED' if show_memories else 'DISABLED'}")
             print(f"[protocol_loader]   Chat table: {current_chat_table}")
+
+            # Push protocol status to WebSocket clients
+            broadcast_sync({
+                "type": "protocol_status",
+                "active_protocol": protocol_name,
+                "is_default": protocol_name.lower() == 'default',
+                "show_memories": show_memories,
+                "show_chat_history": show_chat_history
+            })
 
             return {
                 "success": True,

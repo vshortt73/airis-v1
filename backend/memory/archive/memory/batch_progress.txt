@@ -1,4 +1,0 @@
-last_id=30431
-processed=2093
-failed=0
-timestamp=2025-12-23T03:51:57.081515

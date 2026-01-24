@@ -30,10 +30,9 @@ from backend.memory.new.memory_evaluator import evaluate_topic
 # CONFIGURATION
 # ============================================
 
-# Use 72B Ollama for memory analysis (verified 14K context @ 35 GPU layers)
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:72b"
-OLLAMA_CONTEXT_WINDOW = 14336  # 14K verified for 72B
+# Use llama.cpp server (OpenAI-compatible API on port 11434)
+LLM_BASE_URL = config.OLLAMA_BASE_URL  # http://localhost:11434
+LLM_CONTEXT_WINDOW = 32768  # Context window size
 
 # ============================================
 # DATABASE CONNECTION
@@ -120,6 +119,9 @@ async def generate_summaries(
 
     prompt = f"""Analyze this conversation and generate a structured summary as JSON.
 
+IMPORTANT: In the conversation, "ASSISTANT" is Iris (an AI). "USER" is Victor (also called Captain).
+Write summaries using these names - say "Iris" not "the assistant", say "Victor" not "the user".
+
 CONVERSATION:
 {transcript_for_llm}
 
@@ -131,26 +133,19 @@ Generate a JSON object with exactly these 6 fields:
 - takeaway: Key lesson or insight (3-4 sentences)
 - key_details: Specific memorable details like {detail_hint} (3-4 sentences)
 
-OUTPUT ONLY VALID JSON. NO MARKDOWN. NO EXPLANATIONS."""
+OUTPUT ONLY VALID JSON. NO MARKDOWN. NO EXPLANATIONS. /no_think"""
 
     try:
-        # Use Ollama's JSON mode for reliable structured output
+        # Use llama.cpp OpenAI-compatible API with JSON response format
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{LLM_BASE_URL}/v1/chat/completions",
                 json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 1000,
                     "stream": False,
-                    "format": "json",  # Force JSON output
-                    "options": {
-                        "num_ctx": OLLAMA_CONTEXT_WINDOW,
-                        "temperature": 0.1,
-                        "top_k": 30,
-                        "top_p": 0.9,
-                        "repeat_penalty": 1.15,
-                        "num_predict": 1000
-                    }
+                    "response_format": {"type": "json_object"}  # Force JSON output
                 }
             )
 
@@ -160,8 +155,8 @@ OUTPUT ONLY VALID JSON. NO MARKDOWN. NO EXPLANATIONS."""
 
             if response.status_code == 200:
                 result = response.json()
-                # Ollama /api/generate returns {"response": "..."}
-                json_str = result.get('response', '').strip()
+                # OpenAI format returns {"choices": [{"message": {"content": "..."}}]}
+                json_str = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
 
                 # Debug: Show raw JSON output
                 print(f"[Summaries] Raw JSON output length: {len(json_str)} chars")
@@ -466,10 +461,12 @@ async def create_memory_from_topic(
     category = evaluation.get('category')
     summaries = await generate_summaries(transcript, conv_title, category)
 
-    # Analyze emotions
+    # Use transformer-detected emotion (more accurate than LLM guess)
+    # Falls back to LLM's primary_emotion if transformer didn't detect one
+    dominant_emotion = evaluation.get('dominant_emotion') or evaluation.get('primary_emotion') or 'neutral'
     emotions = await analyze_emotions(
         transcript,
-        primary_emotion=evaluation.get('primary_emotion')
+        primary_emotion=dominant_emotion
     )
 
     # Generate embeddings

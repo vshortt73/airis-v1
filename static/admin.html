@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iris Admin Console</title>
+    <style>
+        :root {
+            --primary:  #0000cc;
+            --primary-hover: #3b82f6;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #a3a3a3;
+            --border: #404040;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-running {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .status-stopped {
+            background: var(--danger);
+        }
+
+        .status-unknown {
+            background: var(--text-secondary);
+        }
+
+        .service-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .service-info {
+            display: flex;
+            align-items: center;
+        }
+
+        .service-name {
+            font-weight: 500;
+        }
+
+        .service-details {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-left: 1rem;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .config-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .config-input {
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .config-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .stat-item {
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+
+        .log-viewer {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+        }
+
+        .log-timestamp {
+            color: var(--text-secondary);
+        }
+
+        .log-info {
+            color: var(--primary);
+        }
+
+        .log-success {
+            color: var(--success);
+        }
+
+        .log-error {
+            color: var(--danger);
+        }
+
+        .log-warning {
+            color: var(--warning);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .btn-small {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .refresh-icon {
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .refresh-icon:hover {
+            opacity: 1;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinning {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎛️ Iris Admin Console</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" onclick="refreshAll()">🔄 Refresh All</button>
+            <button class="btn btn-danger" onclick="if(confirm('Restart Iris server?')) restartServer()">🔁 Restart Server</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- System Status Row -->
+        <div class="card-grid">
+            <!-- Localhost Services -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🖥️ Localhost Services
+                    </div>
+                    <span class="refresh-icon" onclick="refreshServices()" id="services-refresh">🔄</span>
+                </div>
+                <div class="card-body" id="localhost-services">
+                    <div class="service-item">
+                        <div class="service-info">
+                            <span class="status-indicator status-unknown"></span>
+                            <div>
+                                <div class="service-name">🧠 Main Inference</div>
+                                <div class="service-details">Checking...</div>
+                            </div>
+                        </div>
+                        <span class="status-badge badge-warning">...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Node2 Services -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🌐 Node2 Services
+                    </div>
+                    <span class="refresh-icon" onclick="refreshServices()" id="node2-refresh">🔄</span>
+                </div>
+                <div class="card-body" id="node2-services">
+                    <div class="service-item">
+                        <div class="service-info">
+                            <span class="status-indicator status-unknown"></span>
+                            <div>
+                                <div class="service-name">Loading...</div>
+                                <div class="service-details">Checking node2 services...</div>
+                            </div>
+                        </div>
+                        <span class="status-badge badge-warning">...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP Servers -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🔧 MCP Servers
+                    </div>
+                    <span class="refresh-icon" onclick="refreshMCPServers()" id="mcp-refresh">🔄</span>
+                </div>
+                <div class="card-body" id="mcp-servers">
+                    <p style="color: var(--text-secondary);">Loading MCP server status...</p>
+                </div>
+            </div>
+
+            <!-- System Stats -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        📊 System Stats
+                    </div>
+                    <span class="refresh-icon" onclick="refreshStats()" id="stats-refresh">🔄</span>
+                </div>
+                <div class="card-body">
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">Active Sessions</div>
+                            <div class="stat-value" id="stat-sessions">-</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">WebSocket Clients</div>
+                            <div class="stat-value" id="stat-clients">-</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Total Messages</div>
+                            <div class="stat-value" id="stat-messages">-</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Episodic Memories</div>
+                            <div class="stat-value" id="stat-memories">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Protocol -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🎭 Active Protocol
+                    </div>
+                    <span class="refresh-icon" onclick="refreshProtocol()" id="protocol-refresh">🔄</span>
+                </div>
+                <div class="card-body" id="protocol-info">
+                    <p style="color: var(--text-secondary);">Loading protocol information...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Row -->
+        <div class="card-grid">
+            <!-- Face Monitoring Config -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        👤 Face Monitoring
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="config-item">
+                        <label class="config-label">Monitoring Interval (seconds)</label>
+                        <input type="number" class="config-input" id="config-face-interval" value="30">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Min Absence for Greeting (minutes)</label>
+                        <input type="number" class="config-input" id="config-greeting-min" value="5">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Greeting Cooldown (minutes)</label>
+                        <input type="number" class="config-input" id="config-greeting-cooldown" value="15">
+                    </div>
+                    <button class="btn btn-success" onclick="saveFaceConfig()">💾 Save Face Config</button>
+                </div>
+            </div>
+
+            <!-- Token Budget Visualization -->
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-header">
+                    <div class="card-title">
+                        🎫 Token Budget
+                    </div>
+                    <span class="refresh-icon" onclick="refreshTokenBudget()" id="token-budget-refresh">🔄</span>
+                </div>
+                <div class="card-body">
+                    <!-- Context Window Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="font-weight: 600;">Context Window: <span id="token-context-window">32,768</span> tokens</span>
+                        <span id="token-utilization-badge" class="status-badge badge-success">20% used</span>
+                    </div>
+
+                    <!-- Live Usage Bar -->
+                    <div style="margin-bottom: 1rem;">
+                        <div style="background: var(--bg-tertiary); border-radius: 4px; height: 24px; overflow: hidden; position: relative;">
+                            <div id="token-usage-bar" style="height: 100%; background: linear-gradient(90deg, #3498db, #27ae60); width: 20%; transition: width 0.3s;"></div>
+                            <span id="token-usage-text" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 0.75rem; font-weight: 500;">6,541 / 32,768</span>
+                        </div>
+                    </div>
+
+                    <!-- Budget Allocation Bar -->
+                    <div style="margin-bottom: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">Budget Allocation:</div>
+                    <div style="background: var(--bg-tertiary); border-radius: 4px; height: 32px; overflow: hidden; display: flex; margin-bottom: 0.5rem;" id="budget-allocation-bar">
+                        <!-- Segments will be dynamically inserted -->
+                    </div>
+
+                    <!-- Budget Legend -->
+                    <div id="budget-legend" style="display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.7rem; margin-bottom: 1rem;">
+                        <!-- Legend items will be dynamically inserted -->
+                    </div>
+
+                    <!-- Live Usage Stats -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 6px;">
+                        <div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Total Tokens</div>
+                            <div style="font-size: 1.1rem; font-weight: 600;" id="live-total-tokens">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">System Prompt</div>
+                            <div style="font-size: 1.1rem; font-weight: 600;" id="live-system-tokens">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Conversation</div>
+                            <div style="font-size: 1.1rem; font-weight: 600;" id="live-conversation-tokens">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Messages</div>
+                            <div style="font-size: 1.1rem; font-weight: 600;" id="live-messages-loaded">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Configuration Section -->
+                    <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
+                        <div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem; text-align: center; color: var(--text-secondary);">─────────── Configuration ───────────</div>
+
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                            <!-- Left Column -->
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div class="config-item">
+                                    <label class="config-label">Context Window</label>
+                                    <input type="number" class="config-input" id="tb-context-window" value="32768">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Total context size</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">System Prompt Budget</label>
+                                    <input type="number" class="config-input" id="tb-system-prompt" value="600">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Base identity</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Character Traits Budget</label>
+                                    <input type="number" class="config-input" id="tb-traits" value="200">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Personality traits</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Episodic Memory Budget</label>
+                                    <input type="number" class="config-input" id="tb-memories" value="2500">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Retrieved memories</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Emotional State Budget</label>
+                                    <input type="number" class="config-input" id="tb-emotional" value="200">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Emotional context</small>
+                                </div>
+                            </div>
+
+                            <!-- Right Column -->
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div class="config-item">
+                                    <label class="config-label">Tool Definitions Budget</label>
+                                    <input type="number" class="config-input" id="tb-tool-defs" value="1500">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Tool schemas</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Tool Results Budget</label>
+                                    <input type="number" class="config-input" id="tb-tool-results" value="15000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Recent tool results</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Conversation History Budget</label>
+                                    <input type="number" class="config-input" id="tb-conversation" value="7000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Conversation turns</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Response Generation Budget</label>
+                                    <input type="number" class="config-input" id="tb-response" value="2000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Response reserve</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Max Total Messages</label>
+                                    <input type="number" class="config-input" id="tb-max-messages" value="50">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Safety limit</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tiered Context Section -->
+                        <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
+                            <div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem; text-align: center; color: var(--text-secondary);">─────────── Tiered Context (Summaries) ───────────</div>
+
+                            <!-- Summary Stats -->
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 6px;">
+                                <div>
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">With Summary</div>
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: #27ae60;" id="summary-has-count">-</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Needs Summary</div>
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: #f39c12;" id="summary-needs-count">-</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Total Messages</div>
+                                    <div style="font-size: 1.1rem; font-weight: 600;" id="summary-total-count">-</div>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                                <div class="config-item">
+                                    <label class="config-label">Verbose Budget</label>
+                                    <input type="number" class="config-input" id="tb-verbose-budget" value="3000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Recent full messages</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Summary Budget</label>
+                                    <input type="number" class="config-input" id="tb-summary-budget" value="17000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Older summarized msgs</small>
+                                </div>
+                                <div class="config-item">
+                                    <label class="config-label">Min Length</label>
+                                    <input type="number" class="config-input" id="tb-summary-min-length" value="50">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Chars to summarize</small>
+                                </div>
+                            </div>
+
+                            <button class="btn" style="width: 100%; margin-top: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border);" onclick="runBackfill()" id="backfill-btn">
+                                🔄 Backfill Summaries (<span id="backfill-count">0</span> pending)
+                            </button>
+
+                            <!-- Document Budget -->
+                            <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">📄 Document Budget</div>
+                                <div class="config-item">
+                                    <label class="config-label">Doc Budget</label>
+                                    <input type="number" class="config-input" id="tb-document-budget" value="8000">
+                                    <small style="color: var(--text-secondary); font-size: 0.7rem;">Max tokens for uploads</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-success" style="width: 100%; margin-top: 1rem;" onclick="saveTokenBudgetConfig()">💾 Save Token Budget Config</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Settings -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        ⏱️ Session Settings
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="config-item">
+                        <label class="config-label">Session Timeout (minutes)</label>
+                        <input type="number" class="config-input" id="config-session-timeout" value="30">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Ollama Context Window</label>
+                        <input type="number" class="config-input" id="config-ollama-context" value="32768">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Vision Enabled</label>
+                        <select class="config-input" id="config-vision-enabled">
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-success" onclick="saveSessionConfig()">💾 Save Session Config</button>
+                </div>
+            </div>
+
+            <!-- STT / Voice Settings -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🎤 STT / Voice Settings
+                    </div>
+                    <span class="refresh-icon" onclick="loadSTTConfig()" id="stt-refresh">🔄</span>
+                </div>
+                <div class="card-body">
+                    <div class="config-item">
+                        <label class="config-label">Voice Threshold</label>
+                        <input type="range" class="config-input" id="config-vox-threshold"
+                               min="0.005" max="0.1" step="0.005" value="0.025"
+                               oninput="document.getElementById('vox-threshold-display').textContent = this.value"
+                               style="width: 100%;">
+                        <small style="color: var(--text-secondary);">
+                            Current: <span id="vox-threshold-display">0.025</span>
+                            (lower = more sensitive)
+                        </small>
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Silence Timeout (ms)</label>
+                        <input type="number" class="config-input" id="config-vox-silence"
+                               min="500" max="15000" step="500" value="5000">
+                        <small style="color: var(--text-secondary);">How long to wait after speech stops</small>
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Min Speech Duration (ms)</label>
+                        <input type="number" class="config-input" id="config-vox-min-speech"
+                               min="100" max="5000" step="100" value="3000">
+                        <small style="color: var(--text-secondary);">Minimum recording length</small>
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Whisper Model</label>
+                        <select class="config-input" id="config-whisper-model">
+                            <option value="tiny">tiny (fastest, least accurate)</option>
+                            <option value="base">base (balanced)</option>
+                            <option value="small">small (better accuracy)</option>
+                            <option value="medium">medium (good accuracy)</option>
+                            <option value="large-v2">large-v2 (best, slow)</option>
+                            <option value="large-v3">large-v3 (newest, slow)</option>
+                        </select>
+                        <small style="color: var(--text-secondary);">⚠️ Requires STT service restart</small>
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Beam Size</label>
+                        <input type="number" class="config-input" id="config-beam-size"
+                               min="1" max="10" value="5">
+                        <small style="color: var(--text-secondary);">Higher = more accurate, slower</small>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button class="btn btn-success" onclick="saveSTTConfig()">💾 Save</button>
+                        <button class="btn btn-warning" onclick="restartSTTService()">🔄 Restart STT</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Streaming -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        🎬 Video Streaming
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="config-item">
+                        <label class="config-label">Saved Reference</label>
+                        <div id="saved-image-info" style="color: var(--text-secondary); font-size: 0.875rem;">Checking...</div>
+                        <img id="reference-image" src = ""> 
+                    </div>
+                    <button class="btn btn-success" style="width: 100%; margin-bottom: 0.5rem;" onclick="startVideoSessionWithSaved()" id="use-saved-btn" disabled>🖼️ Use Saved Image</button>
+                    <hr style="border-color: var(--border-color); margin: 0.75rem 0;">
+                    <div class="config-item">
+                        <label class="config-label">Upload New Image</label>
+                        <input type="file" id="video-image-input" accept="image/*" class="config-input" style="padding: 0.25rem;">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <button class="btn btn-success" style="flex: 1;" onclick="startVideoSession()">🚀 Start</button>
+                        <button class="btn btn-primary" style="flex: 1;" onclick="saveAsDefaultImage()" id="save-default-btn" disabled>💾 Save as Default</button>
+                    </div>
+                    <hr style="border-color: var(--border-color); margin: 0.75rem 0;">
+                    <div class="config-item">
+                        <label class="config-label">Status</label>
+                        <div id="video-status" style="color: var(--text-secondary); font-size: 0.875rem;">No session</div>
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.5rem;" onclick="openVideoPlayer()" id="open-video-btn" disabled>📺 Open Video Player</button>
+                    <button class="btn btn-danger" style="width: 100%;" onclick="stopVideoSession()" id="stop-video-btn" disabled>⏹️ Stop Session</button>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        ⚡ Quick Actions
+                    </div>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-primary" style="width: 100%;" onclick="clearWebcamCache()">🗑️ Clear Webcam Cache</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="resetFacePresence()">🔄 Reset Face Presence</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/protocol_editor.html'">🎭 Open Protocol Editor</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/paddleocr_lab.html'">🔍 PaddleOCR Lab</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/ephemeral_chat.html'">👥 Ephemrel Chat</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/florence2_lab.html'">🔍 Florence2 OCR Lab</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/face_manager.html'">👺 Face Recognition manager</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="viewLogs()">📝 View Server Logs</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Logs -->
+        <div class="card-grid">
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-title">
+                        📋 Service Logs
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select id="log-service-select" class="config-input" style="min-width: 150px;" onchange="loadServiceLogs()">
+                            <option value="">-- Select Service --</option>
+                            <optgroup label="Localhost">
+                                <option value="iris-llama">🧠 Main Inference</option>
+                            </optgroup>
+                            <optgroup label="Node2">
+                                <option value="iris-vision">👁️ Vision</option>
+                                <option value="iris-freud">🛋️ Freud</option>
+                                <option value="iris-stt">🎤 STT</option>
+                                <option value="iris-xtts">🔊 XTTS</option>
+                                <option value="iris-float">🎬 FLOAT</option>
+                                <option value="iris-sentiment">💭 Sentiment</option>
+                            </optgroup>
+                        </select>
+                        <button class="btn btn-small btn-primary" onclick="loadServiceLogs()">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="log-viewer" id="log-viewer" style="height: 400px;">
+                        <div class="log-entry" style="color: var(--text-secondary);">
+                            Select a service above to view its logs...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API helpers
+        async function apiGet(endpoint) {
+            const response = await fetch(`/api/${endpoint}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        }
+
+        async function apiPost(endpoint, data) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        }
+
+        // Service status checks
+        function getServiceId(serviceName) {
+            // Map display names to systemd service names
+            const mapping = {
+                'Main Inference': 'iris-llama',
+                'Vision / Freud': 'iris-vision',
+                'STT (Whisper)': 'iris-stt',
+                'XTTS': 'iris-xtts',
+                'FLOAT': 'iris-float'
+            };
+            return mapping[serviceName] || serviceName.toLowerCase().replace(/ /g, '-');
+        }
+
+        async function controlService(serviceName, action) {
+            const serviceId = getServiceId(serviceName);
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '...';
+
+            try {
+                const response = await fetch(`/api/admin/services/control?service_name=${serviceId}&action=${action}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Refresh services after a short delay
+                    setTimeout(() => refreshServices(), 1500);
+                } else {
+                    alert(`Failed to ${action} ${serviceName}: ${data.error}`);
+                }
+            } catch (e) {
+                alert(`Error: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function renderServiceItem(service) {
+            const isRunning = service.status === 'running';
+            const modelDisplay = service.model || service.expected_model || 'unknown';
+            const urlParts = service.url.split(':');
+            const port = urlParts[urlParts.length - 1];
+
+            return `
+                <div class="service-item">
+                    <div class="service-info">
+                        <span class="status-indicator status-${isRunning ? 'running' : 'stopped'}"></span>
+                        <div>
+                            <div class="service-name">${service.icon} ${service.name}</div>
+                            <div class="service-details">
+                                ${service.gpu} • Port ${port}
+                                ${service.model ? `<br><strong>Loaded:</strong> ${service.model}` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        ${isRunning
+                            ? `<button class="btn btn-small btn-danger" onclick="controlService('${service.name}', 'stop')">Stop</button>
+                               <button class="btn btn-small btn-primary" onclick="controlService('${service.name}', 'restart')">↻</button>`
+                            : `<button class="btn btn-small btn-success" onclick="controlService('${service.name}', 'start')">Start</button>`
+                        }
+                        <span class="status-badge badge-${isRunning ? 'success' : 'danger'}">${isRunning ? 'Running' : 'Stopped'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function refreshServices() {
+            const refreshIcon = document.getElementById('services-refresh');
+            const node2RefreshIcon = document.getElementById('node2-refresh');
+            refreshIcon.classList.add('spinning');
+            if (node2RefreshIcon) node2RefreshIcon.classList.add('spinning');
+
+            try {
+                const response = await fetch('/api/admin/services/all', {signal: AbortSignal.timeout(10000)});
+                const data = await response.json();
+
+                if (data.success) {
+                    // Render localhost services
+                    const localhostContainer = document.getElementById('localhost-services');
+                    if (data.localhost && data.localhost.length > 0) {
+                        localhostContainer.innerHTML = data.localhost.map(renderServiceItem).join('');
+                    } else {
+                        localhostContainer.innerHTML = '<p style="color: var(--text-secondary);">No localhost services configured</p>';
+                    }
+
+                    // Render node2 services
+                    const node2Container = document.getElementById('node2-services');
+                    if (data.node2 && data.node2.length > 0) {
+                        node2Container.innerHTML = data.node2.map(renderServiceItem).join('');
+                    } else {
+                        node2Container.innerHTML = '<p style="color: var(--text-secondary);">No node2 services configured</p>';
+                    }
+                } else {
+                    console.error('Failed to fetch services:', data.error);
+                }
+            } catch (e) {
+                console.error('Failed to refresh services:', e);
+                document.getElementById('localhost-services').innerHTML =
+                    '<p style="color: var(--danger);">Failed to check services</p>';
+                document.getElementById('node2-services').innerHTML =
+                    '<p style="color: var(--danger);">Failed to check services</p>';
+            }
+
+            refreshIcon.classList.remove('spinning');
+            if (node2RefreshIcon) node2RefreshIcon.classList.remove('spinning');
+        }
+
+        async function refreshMCPServers() {
+            const refreshIcon = document.getElementById('mcp-refresh');
+            refreshIcon.classList.add('spinning');
+
+            try {
+                const data = await apiGet('admin/services/mcp');
+                const container = document.getElementById('mcp-servers');
+
+                if (data.success && data.servers.length > 0) {
+                    container.innerHTML = data.servers.map(server => `
+                        <div class="service-item">
+                            <div class="service-info">
+                                <span class="status-indicator status-${server.status === 'running' ? 'running' : 'unknown'}"></span>
+                                <div>
+                                    <div class="service-name">${server.name}</div>
+                                    ${server.pid ? `<div class="service-details">PID: ${server.pid}</div>` : ''}
+                                </div>
+                            </div>
+                            <span class="status-badge badge-${server.status === 'running' ? 'success' : 'warning'}">${server.status}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p style="color: var(--text-secondary);">No MCP servers detected</p>';
+                }
+            } catch (e) {
+                console.error('Failed to refresh MCP servers:', e);
+            } finally {
+                refreshIcon.classList.remove('spinning');
+            }
+        }
+
+        async function refreshStats() {
+            try {
+                const data = await apiGet('admin/stats');
+                if (data.success) {
+                    const stats = data.stats;
+                    document.getElementById('stat-sessions').textContent = stats.sessions;
+                    document.getElementById('stat-clients').textContent = stats.active_clients;
+                    document.getElementById('stat-messages').textContent = stats.messages.toLocaleString();
+                    document.getElementById('stat-memories').textContent = stats.memories;
+                }
+            } catch (e) {
+                console.error('Failed to refresh stats:', e);
+            }
+        }
+
+        async function refreshProtocol() {
+            try {
+                const response = await fetch('/api/protocols/status/active');
+                const data = await response.json();
+
+                const container = document.getElementById('protocol-info');
+                if (data.success) {
+                    const protocol = data.active_protocol;
+                    const isDefault = data.is_default;
+
+                    container.innerHTML = `
+                        <div class="stat-item">
+                            <div class="stat-label">Current Protocol</div>
+                            <div class="stat-value">${protocol}</div>
+                        </div>
+                        <div style="margin-top: 1rem;">
+                            <span class="status-badge badge-${isDefault ? 'success' : 'warning'}">
+                                ${isDefault ? 'Default Mode' : 'Custom Protocol Active'}
+                            </span>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<p style="color: var(--danger);">Failed to load protocol info</p>';
+                }
+            } catch (e) {
+                console.error('Failed to refresh protocol:', e);
+            }
+        }
+
+        async function refreshLogs() {
+            await viewLogs();
+        }
+
+        async function refreshAll() {
+            await Promise.all([
+                refreshServices(),
+                refreshMCPServers(),
+                refreshStats(),
+                refreshProtocol(),
+                refreshTokenBudget()
+            ]);
+        }
+
+        // Token Budget functions
+        // Keys match what comes from allocations object (snake_case)
+        const BUDGET_COLORS = {
+            system_prompt_base: { color: '#3498db', label: 'System' },
+            character_traits: { color: '#5dade2', label: 'Traits' },
+            episodic_memories: { color: '#9b59b6', label: 'Memories' },
+            emotional_state: { color: '#e91e63', label: 'Emotional' },
+            tool_definitions: { color: '#e67e22', label: 'Tool Defs' },
+            tool_results: { color: '#f39c12', label: 'Tool Results' },
+            conversation_history: { color: '#27ae60', label: 'Conversation' },
+            response_reserve: { color: '#95a5a6', label: 'Response' },
+            safety_margin: { color: '#bdc3c7', label: 'Safety' }
+        };
+
+        // Map for running_config keys (UPPER_CASE) to display labels
+        const CONFIG_KEY_LABELS = {
+            'OLLAMA_CONTEXT_WINDOW': 'Context Window',
+            'SYSTEM_PROMPT_BASE_BUDGET': 'System Prompt',
+            'CHARACTER_TRAITS_BUDGET': 'Traits',
+            'EPISODIC_MEMORY_BUDGET': 'Memories',
+            'EMOTIONAL_STATE_BUDGET': 'Emotional',
+            'TOOL_DEFINITIONS_BUDGET': 'Tool Defs',
+            'TOOL_RESULTS_BUDGET': 'Tool Results',
+            'CONVERSATION_HISTORY_BUDGET': 'Conversation',
+            'RESPONSE_GENERATION_BUDGET': 'Response'
+        };
+
+        async function refreshTokenBudget() {
+            const refreshIcon = document.getElementById('token-budget-refresh');
+            if (refreshIcon) refreshIcon.classList.add('spinning');
+
+            try {
+                const response = await fetch('/api/admin/token-budget');
+                const data = await response.json();
+
+                if (data.success) {
+                    const budget = data.budget;
+                    const contextWindow = budget.context_window;
+                    const allocations = budget.allocations;
+                    const configurable = budget.configurable;
+                    const liveUsage = budget.live_usage;
+                    const runningConfig = budget.running_config || {};
+                    const mismatches = budget.mismatches;
+
+                    // Log for debugging - expand values for visibility
+                    console.log('[TokenBudget] Running config:', JSON.stringify(runningConfig, null, 2));
+                    console.log('[TokenBudget] Database config values:');
+                    for (const [key, obj] of Object.entries(configurable)) {
+                        console.log(`  ${key}: ${obj.value}`);
+                    }
+                    if (mismatches && mismatches.length > 0) {
+                        console.warn('[TokenBudget] Mismatches detected:', mismatches);
+                    } else {
+                        console.log('[TokenBudget] No mismatches - DB and running config are in sync');
+                    }
+
+                    // Update context window display
+                    document.getElementById('token-context-window').textContent = contextWindow.toLocaleString();
+
+                    // Show mismatch warning if any
+                    const headerEl = document.querySelector('#token-budget-refresh').parentElement.parentElement;
+                    let warningEl = headerEl.querySelector('.mismatch-warning');
+                    if (mismatches && mismatches.length > 0) {
+                        if (!warningEl) {
+                            warningEl = document.createElement('div');
+                            warningEl.className = 'mismatch-warning';
+                            warningEl.style.cssText = 'background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; font-size: 0.8rem;';
+                            headerEl.parentElement.insertBefore(warningEl, headerEl.nextSibling);
+                        }
+                        warningEl.innerHTML = `⚠️ Database differs from running config. Restart server to apply: ${mismatches.map(m => m.key).join(', ')}`;
+                    } else if (warningEl) {
+                        warningEl.remove();
+                    }
+
+                    // Update live usage bar
+                    const utilizationPercent = liveUsage.utilization_percent || 0;
+                    const usageBar = document.getElementById('token-usage-bar');
+                    const usageText = document.getElementById('token-usage-text');
+                    const utilizationBadge = document.getElementById('token-utilization-badge');
+
+                    usageBar.style.width = `${Math.min(utilizationPercent, 100)}%`;
+
+                    // Color based on utilization
+                    if (utilizationPercent > 90) {
+                        usageBar.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+                        utilizationBadge.className = 'status-badge badge-danger';
+                    } else if (utilizationPercent > 70) {
+                        usageBar.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
+                        utilizationBadge.className = 'status-badge badge-warning';
+                    } else {
+                        usageBar.style.background = 'linear-gradient(90deg, #3498db, #27ae60)';
+                        utilizationBadge.className = 'status-badge badge-success';
+                    }
+
+                    usageText.textContent = `${liveUsage.total_tokens.toLocaleString()} / ${contextWindow.toLocaleString()}`;
+                    utilizationBadge.textContent = `${utilizationPercent}% used`;
+
+                    // Update live stats
+                    document.getElementById('live-total-tokens').textContent = liveUsage.total_tokens.toLocaleString();
+                    document.getElementById('live-system-tokens').textContent = liveUsage.system_tokens.toLocaleString();
+                    document.getElementById('live-conversation-tokens').textContent = liveUsage.conversation_tokens.toLocaleString();
+                    document.getElementById('live-messages-loaded').textContent = liveUsage.messages_loaded;
+
+                    // Build allocation bar
+                    const allocationBar = document.getElementById('budget-allocation-bar');
+                    const legend = document.getElementById('budget-legend');
+                    allocationBar.innerHTML = '';
+                    legend.innerHTML = '';
+
+                    // Calculate total for percentages
+                    let totalAllocated = 0;
+                    for (const key in allocations) {
+                        totalAllocated += allocations[key];
+                    }
+
+                    // Create segments
+                    for (const [key, value] of Object.entries(allocations)) {
+                        if (value <= 0) continue;
+
+                        const colorInfo = BUDGET_COLORS[key] || { color: '#7f8c8d', label: key };
+                        const widthPercent = (value / contextWindow) * 100;
+
+                        // Bar segment
+                        const segment = document.createElement('div');
+                        segment.style.cssText = `
+                            width: ${widthPercent}%;
+                            height: 100%;
+                            background: ${colorInfo.color};
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            overflow: hidden;
+                            min-width: ${widthPercent > 3 ? '0' : '4px'};
+                        `;
+                        segment.title = `${colorInfo.label}: ${value.toLocaleString()} tokens (${widthPercent.toFixed(1)}%)`;
+
+                        // Label inside segment if wide enough
+                        if (widthPercent > 8) {
+                            segment.innerHTML = `<span style="font-size: 0.6rem; color: white; text-shadow: 0 0 2px rgba(0,0,0,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">${colorInfo.label}</span>`;
+                        }
+
+                        allocationBar.appendChild(segment);
+
+                        // Legend item
+                        const legendItem = document.createElement('div');
+                        legendItem.style.cssText = 'display: flex; align-items: center; gap: 4px;';
+                        legendItem.innerHTML = `
+                            <span style="width: 10px; height: 10px; background: ${colorInfo.color}; border-radius: 2px;"></span>
+                            <span>${colorInfo.label}: ${value.toLocaleString()}</span>
+                        `;
+                        legend.appendChild(legendItem);
+                    }
+
+                    // Add unused space to bar
+                    const unusedPercent = Math.max(0, 100 - (totalAllocated / contextWindow * 100));
+                    if (unusedPercent > 0) {
+                        const unusedSegment = document.createElement('div');
+                        unusedSegment.style.cssText = `
+                            width: ${unusedPercent}%;
+                            height: 100%;
+                            background: #ecf0f1;
+                        `;
+                        unusedSegment.title = `Unused: ${(contextWindow - totalAllocated).toLocaleString()} tokens`;
+                        allocationBar.appendChild(unusedSegment);
+                    }
+
+                    // Update config inputs
+                    if (configurable.OLLAMA_CONTEXT_WINDOW) {
+                        document.getElementById('tb-context-window').value = configurable.OLLAMA_CONTEXT_WINDOW.value;
+                    }
+                    if (configurable.SYSTEM_PROMPT_BASE_BUDGET) {
+                        document.getElementById('tb-system-prompt').value = configurable.SYSTEM_PROMPT_BASE_BUDGET.value;
+                    }
+                    if (configurable.CHARACTER_TRAITS_BUDGET) {
+                        document.getElementById('tb-traits').value = configurable.CHARACTER_TRAITS_BUDGET.value;
+                    }
+                    if (configurable.EPISODIC_MEMORY_BUDGET) {
+                        document.getElementById('tb-memories').value = configurable.EPISODIC_MEMORY_BUDGET.value;
+                    }
+                    if (configurable.EMOTIONAL_STATE_BUDGET) {
+                        document.getElementById('tb-emotional').value = configurable.EMOTIONAL_STATE_BUDGET.value;
+                    }
+                    if (configurable.TOOL_DEFINITIONS_BUDGET) {
+                        document.getElementById('tb-tool-defs').value = configurable.TOOL_DEFINITIONS_BUDGET.value;
+                    }
+                    if (configurable.TOOL_RESULTS_BUDGET) {
+                        document.getElementById('tb-tool-results').value = configurable.TOOL_RESULTS_BUDGET.value;
+                    }
+                    if (configurable.CONVERSATION_HISTORY_BUDGET) {
+                        document.getElementById('tb-conversation').value = configurable.CONVERSATION_HISTORY_BUDGET.value;
+                    }
+                    if (configurable.RESPONSE_GENERATION_BUDGET) {
+                        document.getElementById('tb-response').value = configurable.RESPONSE_GENERATION_BUDGET.value;
+                    }
+                    if (configurable.MAX_TOTAL_MESSAGES) {
+                        document.getElementById('tb-max-messages').value = configurable.MAX_TOTAL_MESSAGES.value;
+                    }
+
+                    // Tiered context settings
+                    if (configurable.VERBOSE_TOKEN_BUDGET) {
+                        document.getElementById('tb-verbose-budget').value = configurable.VERBOSE_TOKEN_BUDGET.value;
+                    }
+                    if (configurable.SUMMARY_TOKEN_BUDGET) {
+                        document.getElementById('tb-summary-budget').value = configurable.SUMMARY_TOKEN_BUDGET.value;
+                    }
+                    if (configurable.SUMMARY_MIN_LENGTH) {
+                        document.getElementById('tb-summary-min-length').value = configurable.SUMMARY_MIN_LENGTH.value;
+                    }
+                    if (configurable.DOCUMENT_CONTEXT_BUDGET) {
+                        document.getElementById('tb-document-budget').value = configurable.DOCUMENT_CONTEXT_BUDGET.value;
+                    }
+
+                    // Summary stats
+                    const summaryStats = budget.summary_stats;
+                    if (summaryStats) {
+                        document.getElementById('summary-has-count').textContent = summaryStats.has_summary.toLocaleString();
+                        document.getElementById('summary-needs-count').textContent = summaryStats.needs_summary.toLocaleString();
+                        document.getElementById('summary-total-count').textContent = summaryStats.total.toLocaleString();
+                        document.getElementById('backfill-count').textContent = summaryStats.needs_summary.toLocaleString();
+
+                        // Update backfill button state
+                        const backfillBtn = document.getElementById('backfill-btn');
+                        if (summaryStats.needs_summary === 0) {
+                            backfillBtn.disabled = true;
+                            backfillBtn.style.opacity = '0.5';
+                        } else {
+                            backfillBtn.disabled = false;
+                            backfillBtn.style.opacity = '1';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to refresh token budget:', e);
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('spinning');
+            }
+        }
+
+        async function saveTokenBudgetConfig() {
+            try {
+                const updates = {
+                    OLLAMA_CONTEXT_WINDOW: parseInt(document.getElementById('tb-context-window').value),
+                    SYSTEM_PROMPT_BASE_BUDGET: parseInt(document.getElementById('tb-system-prompt').value),
+                    CHARACTER_TRAITS_BUDGET: parseInt(document.getElementById('tb-traits').value),
+                    EPISODIC_MEMORY_BUDGET: parseInt(document.getElementById('tb-memories').value),
+                    EMOTIONAL_STATE_BUDGET: parseInt(document.getElementById('tb-emotional').value),
+                    TOOL_DEFINITIONS_BUDGET: parseInt(document.getElementById('tb-tool-defs').value),
+                    TOOL_RESULTS_BUDGET: parseInt(document.getElementById('tb-tool-results').value),
+                    CONVERSATION_HISTORY_BUDGET: parseInt(document.getElementById('tb-conversation').value),
+                    RESPONSE_GENERATION_BUDGET: parseInt(document.getElementById('tb-response').value),
+                    MAX_TOTAL_MESSAGES: parseInt(document.getElementById('tb-max-messages').value),
+                    // Tiered context settings
+                    VERBOSE_TOKEN_BUDGET: parseInt(document.getElementById('tb-verbose-budget').value),
+                    SUMMARY_TOKEN_BUDGET: parseInt(document.getElementById('tb-summary-budget').value),
+                    SUMMARY_MIN_LENGTH: parseInt(document.getElementById('tb-summary-min-length').value),
+                    DOCUMENT_CONTEXT_BUDGET: parseInt(document.getElementById('tb-document-budget').value)
+                };
+
+                const response = await fetch('/api/admin/token-budget/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(updates)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✓ Token budget config saved!\n\nUpdated: ${data.saved.join(', ')}`);
+                    // Refresh to show updated values
+                    refreshTokenBudget();
+                } else {
+                    let msg = '✗ Some updates failed:\n';
+                    if (data.errors) {
+                        msg += data.errors.join('\n');
+                    }
+                    if (data.saved && data.saved.length > 0) {
+                        msg += `\n\nSuccessfully saved: ${data.saved.join(', ')}`;
+                    }
+                    alert(msg);
+                }
+            } catch (e) {
+                alert('✗ Failed to save token budget config: ' + e.message);
+            }
+        }
+
+        async function runBackfill() {
+            const btn = document.getElementById('backfill-btn');
+            const originalText = btn.innerHTML;
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Running backfill...';
+
+                const response = await fetch('/api/admin/summaries/backfill?limit=100&batch_size=10', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✓ Backfill complete!\n\nProcessed: ${data.processed}\nSuccessful: ${data.successful}\nFailed: ${data.failed}`);
+                    // Refresh to show updated counts
+                    refreshTokenBudget();
+                } else {
+                    alert('✗ Backfill failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('✗ Backfill failed: ' + e.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Config save functions
+        async function saveFaceConfig() {
+            try {
+                const updates = [
+                    {key: 'FACE_MONITORING_INTERVAL_SECONDS', value: parseInt(document.getElementById('config-face-interval').value)},
+                    {key: 'FACE_GREETING_MIN_ABSENCE_MINUTES', value: parseInt(document.getElementById('config-greeting-min').value)},
+                    {key: 'FACE_GREETING_COOLDOWN_MINUTES', value: parseInt(document.getElementById('config-greeting-cooldown').value)}
+                ];
+
+                for (const update of updates) {
+                    await apiPost('admin/config/update', update);
+                }
+
+                alert('✓ Face config updated (restart server for changes to take full effect)');
+            } catch (e) {
+                alert('✗ Failed to save config: ' + e.message);
+            }
+        }
+
+        // Note: saveTokenConfig has been replaced by saveTokenBudgetConfig
+        // which provides comprehensive token budget management
+
+        async function saveSessionConfig() {
+            try {
+                const updates = [
+                    {key: 'SESSION_TIMEOUT_MINUTES', value: parseInt(document.getElementById('config-session-timeout').value)},
+                    {key: 'OLLAMA_CONTEXT_WINDOW', value: parseInt(document.getElementById('config-ollama-context').value)},
+                    {key: 'VISION_ENABLED', value: document.getElementById('config-vision-enabled').value === 'true'}
+                ];
+
+                for (const update of updates) {
+                    await apiPost('admin/config/update', update);
+                }
+
+                alert('✓ Session config updated');
+            } catch (e) {
+                alert('✗ Failed to save config: ' + e.message);
+            }
+        }
+
+        // STT Config functions
+        async function loadSTTConfig() {
+            const refreshIcon = document.getElementById('stt-refresh');
+            if (refreshIcon) refreshIcon.classList.add('spinning');
+
+            try {
+                const response = await fetch('/api/admin/stt/config');
+                const data = await response.json();
+
+                if (data.success) {
+                    const cfg = data.config;
+                    document.getElementById('config-vox-threshold').value = cfg.vox_threshold;
+                    document.getElementById('vox-threshold-display').textContent = cfg.vox_threshold;
+                    document.getElementById('config-vox-silence').value = cfg.vox_silence_ms;
+                    document.getElementById('config-vox-min-speech').value = cfg.vox_min_speech_ms;
+                    document.getElementById('config-whisper-model').value = cfg.whisper_model;
+                    document.getElementById('config-beam-size').value = cfg.beam_size;
+                }
+            } catch (e) {
+                console.error('Failed to load STT config:', e);
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('spinning');
+            }
+        }
+
+        async function saveSTTConfig() {
+            try {
+                const whisperModel = document.getElementById('config-whisper-model').value;
+
+                const config = {
+                    vox_threshold: parseFloat(document.getElementById('config-vox-threshold').value),
+                    vox_silence_ms: parseInt(document.getElementById('config-vox-silence').value),
+                    vox_min_speech_ms: parseInt(document.getElementById('config-vox-min-speech').value),
+                    whisper_model: whisperModel,
+                    beam_size: parseInt(document.getElementById('config-beam-size').value)
+                };
+
+                // Save to database
+                const response = await fetch('/api/admin/stt/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+
+                // Also update the model config file on node2
+                const modelResponse = await fetch(`/api/admin/stt/update-model?model=${whisperModel}`, {
+                    method: 'POST'
+                });
+                const modelData = await modelResponse.json();
+
+                if (data.success) {
+                    // Reload VOX settings in the browser
+                    if (window.IrisVOX && window.IrisVOX.loadVoxSettings) {
+                        window.IrisVOX.loadVoxSettings();
+                    }
+
+                    let msg = '✓ STT config saved!\n\nVoice settings applied.';
+                    if (modelData.success) {
+                        msg += '\n\nWhisper model updated. Click "Restart STT" to apply.';
+                    }
+                    alert(msg);
+                } else {
+                    alert('✗ Failed: ' + data.error);
+                }
+            } catch (e) {
+                alert('✗ Failed to save STT config: ' + e.message);
+            }
+        }
+
+        async function restartSTTService() {
+            if (!confirm('Restart the STT service on node2?\n\nThis will briefly interrupt voice recognition.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/services/control?service_name=iris-stt&action=restart', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('✓ STT service restarting...\n\nWait a few seconds for the model to load.');
+                    setTimeout(() => refreshServices(), 3000);
+                } else {
+                    alert('✗ Failed to restart: ' + data.error);
+                }
+            } catch (e) {
+                alert('✗ Error: ' + e.message);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const data = await apiGet('admin/config');
+                if (data.success) {
+                    const cfg = data.config;
+                    // Face monitoring
+                    document.getElementById('config-face-interval').value = cfg.FACE_MONITORING_INTERVAL_SECONDS;
+                    document.getElementById('config-greeting-min').value = cfg.FACE_GREETING_MIN_ABSENCE_MINUTES;
+                    document.getElementById('config-greeting-cooldown').value = cfg.FACE_GREETING_COOLDOWN_MINUTES;
+                    // Session
+                    document.getElementById('config-session-timeout').value = cfg.SESSION_TIMEOUT_MINUTES;
+                    document.getElementById('config-ollama-context').value = cfg.OLLAMA_CONTEXT_WINDOW;
+                    document.getElementById('config-vision-enabled').value = cfg.VISION_ENABLED ? 'true' : 'false';
+                }
+            } catch (e) {
+                console.error('Failed to load config:', e);
+            }
+        }
+
+        // Video streaming
+        let videoSessionId = null;
+        let currentImageId = null;  // Track uploaded image for "Save as Default"
+        let videoChannel = new BroadcastChannel('iris-video');
+
+        videoChannel.onmessage = (event) => {
+            if (event.data.type === 'player-ready') {
+                console.log('[Admin] Video player ready');
+            } else if (event.data.type === 'player-closed') {
+                console.log('[Admin] Video player closed');
+                updateVideoStatus('Player closed');
+            }
+        };
+
+        // Check for saved reference image on page load
+        async function checkSavedImage() {
+            try {
+                const response = await fetch('/api/video/saved-image');
+                const data = await response.json();
+
+                const infoElement = document.getElementById('saved-image-info');
+                const refImage    = document.getElementById('reference-image')
+                const useSavedBtn = document.getElementById('use-saved-btn');
+
+                if (data.has_saved_image) {
+                    infoElement.textContent = `✓ ${data.filename}`;
+                    infoElement.style.color = 'var(--success-color)';
+                    refImage.src = `static/${data.filename}`;
+                    refImage.style.height = '128px'; 
+                    refImage.style.width = '128px';
+
+
+                    useSavedBtn.disabled = false;
+                } else {
+                    infoElement.textContent = 'No saved image';
+                    infoElement.style.color = 'var(--text-secondary)';
+                    useSavedBtn.disabled = true;
+                }
+            } catch (error) {
+                console.error('[Admin] Check saved image error:', error);
+                document.getElementById('saved-image-info').textContent = 'Error checking';
+            }
+        }
+
+        // Start session using saved reference image
+        async function startVideoSessionWithSaved() {
+            try {
+                updateVideoStatus('Starting with saved image...');
+
+                const sessionResponse = await fetch('/api/video/start-session-saved', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        seed: 15,
+                        a_cfg_scale: 2.0,
+                        e_cfg_scale: 1.0,
+                        r_cfg_scale: 1.0,
+                        nfe: 10,
+                        emotion: 'neutral',
+                        no_crop: false
+                    })
+                });
+
+                if (!sessionResponse.ok) {
+                    const errorData = await sessionResponse.json();
+                    throw new Error(errorData.detail || 'Session start failed');
+                }
+
+                const {session_id} = await sessionResponse.json();
+                videoSessionId = session_id;
+
+                // Enable buttons
+                document.getElementById('open-video-btn').disabled = false;
+                document.getElementById('stop-video-btn').disabled = false;
+
+                updateVideoStatus(`Session active: ${session_id.substring(0, 8)}...`);
+
+                // Notify video player via BroadcastChannel
+                console.log('[Admin] Sending start-session to video player:', session_id);
+                videoChannel.postMessage({
+                    type: 'start-session',
+                    data: {sessionId: session_id}
+                });
+
+                // Notify main window TTSQueue
+                videoChannel.postMessage({
+                    type: 'video-session-started',
+                    sessionId: session_id
+                });
+
+            } catch (error) {
+                console.error('[Admin] Video session error:', error);
+                updateVideoStatus('Error: ' + error.message);
+                alert('Failed to start video session: ' + error.message);
+            }
+        }
+
+        // Save uploaded image as the default reference
+        async function saveAsDefaultImage() {
+            if (!currentImageId) {
+                alert('No image uploaded yet. Upload an image first.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/video/save-reference-image?image_id=${currentImageId}`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Save failed');
+                }
+
+                const data = await response.json();
+                alert(`Image saved as default: ${data.filename}`);
+
+                // Refresh saved image display
+                checkSavedImage();
+
+            } catch (error) {
+                console.error('[Admin] Save default image error:', error);
+                alert('Failed to save image: ' + error.message);
+            }
+        }
+
+        async function startVideoSession() {
+            const fileInput = document.getElementById('video-image-input');
+            if (!fileInput.files || !fileInput.files[0]) {
+                alert('Please select an image first');
+                return;
+            }
+
+            try {
+                updateVideoStatus('Uploading image...');
+
+                // Upload image
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+
+                const uploadResponse = await fetch('/api/video/upload-image', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) throw new Error('Image upload failed');
+                const {image_id} = await uploadResponse.json();
+
+                // Store image_id for potential "Save as Default"
+                currentImageId = image_id;
+                document.getElementById('save-default-btn').disabled = false;
+
+                updateVideoStatus('Starting session...');
+
+                // Start video session
+                const sessionResponse = await fetch('/api/video/start-session?' + new URLSearchParams({image_id}), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        seed: 15,
+                        a_cfg_scale: 2.0,
+                        e_cfg_scale: 1.0,
+                        r_cfg_scale: 1.0,
+                        nfe: 10,
+                        emotion: 'neutral',  // Valid emotions: angry, disgust, fear, happy, neutral, sad, surprise
+                        no_crop: false
+                    })
+                });
+
+                if (!sessionResponse.ok) throw new Error('Session start failed');
+                const {session_id} = await sessionResponse.json();
+
+                videoSessionId = session_id;
+
+                // Enable buttons
+                document.getElementById('open-video-btn').disabled = false;
+                document.getElementById('stop-video-btn').disabled = false;
+
+                updateVideoStatus(`Session active: ${session_id.substring(0, 8)}...`);
+
+                // Notify video player via BroadcastChannel
+                console.log('[Admin] Sending start-session to video player:', session_id);
+                videoChannel.postMessage({
+                    type: 'start-session',
+                    data: {sessionId: session_id}
+                });
+
+                // Notify main window TTSQueue via BroadcastChannel
+                console.log('[Admin] Sending video-session-started to main window:', session_id);
+                videoChannel.postMessage({
+                    type: 'video-session-started',
+                    sessionId: session_id
+                });
+
+            } catch (error) {
+                console.error('[Admin] Video session error:', error);
+                updateVideoStatus('Error: ' + error.message);
+                alert('Failed to start video session: ' + error.message);
+            }
+        }
+
+        function openVideoPlayer() {
+            if (!videoSessionId) {
+                alert('No active video session');
+                return;
+            }
+
+            const videoWindow = window.open(
+                '/static/video_player.html',
+                'iris-video',
+                'width=800,height=700'
+            );
+
+            if (videoWindow) {
+                // Wait a moment for window to load, then send session
+                setTimeout(() => {
+                    videoChannel.postMessage({
+                        type: 'start-session',
+                        data: {sessionId: videoSessionId}
+                    });
+                }, 500);
+            }
+        }
+
+        async function stopVideoSession() {
+            if (!videoSessionId) return;
+
+            try {
+                await fetch(`/api/video/end-session/${videoSessionId}`, {method: 'POST'});
+
+                videoSessionId = null;
+                document.getElementById('open-video-btn').disabled = true;
+                document.getElementById('stop-video-btn').disabled = true;
+
+                updateVideoStatus('No session');
+
+                // Notify video player and main window via BroadcastChannel
+                videoChannel.postMessage({type: 'stop'});
+                videoChannel.postMessage({type: 'video-session-ended'});
+
+            } catch (error) {
+                console.error('[Admin] Stop session error:', error);
+            }
+        }
+
+        function updateVideoStatus(status) {
+            document.getElementById('video-status').textContent = status;
+        }
+
+        // Quick actions
+        async function clearWebcamCache() {
+            if (confirm('Clear webcam cache?')) {
+                try {
+                    const data = await apiPost('admin/actions/clear-webcam-cache', {});
+                    alert(data.success ? '✓ ' + data.message : '✗ ' + data.error);
+                } catch (e) {
+                    alert('✗ Failed: ' + e.message);
+                }
+            }
+        }
+
+        async function resetFacePresence() {
+            if (confirm('Reset face presence state? This will mark all people as "not present".')) {
+                try {
+                    const data = await apiPost('admin/actions/reset-face-presence', {});
+                    alert(data.success ? '✓ ' + data.message : '✗ ' + data.error);
+                } catch (e) {
+                    alert('✗ Failed: ' + e.message);
+                }
+            }
+        }
+
+        async function viewLogs() {
+            // Legacy function - now redirects to loadServiceLogs
+            loadServiceLogs();
+        }
+
+        async function loadServiceLogs() {
+            const select = document.getElementById('log-service-select');
+            const serviceName = select.value;
+            const viewer = document.getElementById('log-viewer');
+
+            if (!serviceName) {
+                viewer.innerHTML = '<div class="log-entry" style="color: var(--text-secondary);">Select a service above to view its logs...</div>';
+                return;
+            }
+
+            viewer.innerHTML = '<div class="log-entry" style="color: var(--text-secondary);">Loading logs...</div>';
+
+            try {
+                const response = await fetch(`/api/admin/logs/service/${serviceName}?lines=100`);
+                const data = await response.json();
+
+                if (data.success && data.logs) {
+                    viewer.innerHTML = data.logs.map(line => {
+                        const trimmed = line.trim();
+                        let className = 'log-entry';
+                        if (trimmed.includes('error') || trimmed.includes('ERROR') || trimmed.includes('✗') || trimmed.includes('failed')) {
+                            className += ' log-error';
+                        } else if (trimmed.includes('warning') || trimmed.includes('WARNING') || trimmed.includes('⚠')) {
+                            className += ' log-warning';
+                        } else if (trimmed.includes('✓') || trimmed.includes('Started') || trimmed.includes('Listening')) {
+                            className += ' log-success';
+                        } else if (trimmed.includes('INFO') || trimmed.includes('info')) {
+                            className += ' log-info';
+                        }
+
+                        // Escape HTML
+                        const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        return `<div class="${className}">${escaped}</div>`;
+                    }).join('');
+
+                    // Scroll to bottom
+                    viewer.scrollTop = viewer.scrollHeight;
+                } else {
+                    viewer.innerHTML = `<div class="log-entry log-error">Error: ${data.error || 'Failed to load logs'}</div>`;
+                }
+            } catch (e) {
+                viewer.innerHTML = `<div class="log-entry log-error">Error: ${e.message}</div>`;
+            }
+        }
+
+        async function restartServer() {
+            const data = await apiPost('admin/system/restart', {});
+            alert(data.message || data.error);
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshAll();
+            loadConfig();
+            loadSTTConfig();
+            checkSavedImage();
+            refreshTokenBudget();
+        });
+    </script>
+</body>
+</html>

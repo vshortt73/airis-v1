@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iris Video</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        .container {
+            max-width: 500px;
+            width: 100%;
+            padding: 20px;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .video-wrapper video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        #loop-video {
+            z-index: 1;
+        }
+
+        #video-player {
+            z-index: 2;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        #video-player.active {
+            opacity: 1;
+        }
+
+        .status {
+            text-align: center;
+            color: #fff;
+            margin-top: 20px;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        .queue-info {
+            text-align: center;
+            color: #fff;
+            margin-top: 10px;
+            font-size: 12px;
+            opacity: 0.5;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .controls button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .controls button:hover {
+            background: #444;
+        }
+
+        .initializing {
+            text-align: center;
+            color: #fff;
+            padding: 40px;
+        }
+
+        .initializing h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .initializing p {
+            font-size: 14px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="initializing" class="initializing">
+            <h2>Iris Video Player</h2>
+            <p>Waiting for video session...</p>
+        </div>
+
+        <div id="player-container" style="display: none;">
+            <div class="video-wrapper">
+                <video id="loop-video" autoplay loop muted src="/static/loop.mp4"></video>
+                <video id="video-player" autoplay></video>
+            </div>
+            <div class="status" id="status">Ready</div>
+            <div class="queue-info" id="queue-info"></div>
+            <div class="controls">
+                <button id="prev-btn">← Previous</button>
+                <button id="stop-btn">Stop</button>
+                <button id="next-btn">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VideoPlayer {
+            constructor() {
+                this.videoElement = document.getElementById('video-player');
+                this.loopElement = document.getElementById('loop-video');
+                this.statusElement = document.getElementById('status');
+                this.queueInfoElement = document.getElementById('queue-info');
+                this.playerContainer = document.getElementById('player-container');
+                this.initializingElement = document.getElementById('initializing');
+
+                this.sessionId = null;
+                this.videoQueue = [];
+                this.currentChunkIndex = 0;
+                this.isPlaying = false;
+                this.isIdle = true;
+                this.pollInterval = null;
+
+                // BroadcastChannel for cross-window communication
+                this.channel = new BroadcastChannel('iris-video');
+
+                this.initializeListeners();
+                this.notifyReady();
+            }
+
+            showLoop() {
+                this.videoElement.classList.remove('active');
+                this.loopElement.play().catch(() => {});
+                this.isIdle = true;
+            }
+
+            showChunkVideo() {
+                this.videoElement.classList.add('active');
+                this.isIdle = false;
+            }
+
+            initializeListeners() {
+                // Listen for messages from main window
+                this.channel.onmessage = (event) => {
+                    const { type, data } = event.data;
+
+                    switch (type) {
+                        case 'start-session':
+                            this.startSession(data.sessionId);
+                            break;
+                        case 'queue-chunk':
+                            this.queueChunk(data);
+                            break;
+                        case 'stop':
+                            this.stop();
+                            break;
+                    }
+                };
+
+                // Video ended event - move to next chunk
+                this.videoElement.addEventListener('ended', () => {
+                    console.log('[VideoPlayer] Video ended, moving to next chunk...');
+                    this.currentChunkIndex++;
+                    this.isPlaying = false;
+                    this.playNext();
+                });
+
+                // Controls
+                document.getElementById('stop-btn').addEventListener('click', () => this.stop());
+                document.getElementById('prev-btn').addEventListener('click', () => this.playPrevious());
+                document.getElementById('next-btn').addEventListener('click', () => this.playNext());
+
+                // Notify parent when window closes
+                window.addEventListener('beforeunload', () => {
+                    this.channel.postMessage({ type: 'player-closed' });
+                });
+            }
+
+            notifyReady() {
+                // Tell main window we're ready
+                this.channel.postMessage({ type: 'player-ready' });
+            }
+
+            startSession(sessionId) {
+                this.sessionId = sessionId;
+                this.videoQueue = [];
+                this.currentChunkIndex = 0;
+
+                this.initializingElement.style.display = 'none';
+                this.playerContainer.style.display = 'block';
+
+                // Start with idle loop video
+                this.showLoop();
+
+                this.statusElement.textContent = 'Session started - idle';
+                console.log(`[VideoPlayer] Session started: ${sessionId}`);
+
+                // Start polling for chunk statuses
+                this.startPolling();
+            }
+
+            queueChunk(chunkData) {
+                // Add to queue if not already present
+                const exists = this.videoQueue.some(c => c.chunk_index === chunkData.chunk_index);
+
+                if (!exists) {
+                    this.videoQueue.push(chunkData);
+                    this.videoQueue.sort((a, b) => a.chunk_index - b.chunk_index);
+
+                    console.log(`[VideoPlayer] Chunk queued: ${chunkData.chunk_index}`);
+                    this.updateQueueInfo();
+
+                    // Start playing if not already playing
+                    if (!this.isPlaying) {
+                        this.playNext();
+                    }
+                }
+            }
+
+            async startPolling() {
+                if (this.pollInterval) {
+                    clearInterval(this.pollInterval);
+                }
+
+                this.pollInterval = setInterval(() => {
+                    this.checkQueueStatus();
+                }, 1000);
+            }
+
+            async checkQueueStatus() {
+                if (!this.sessionId) return;
+
+                // Check status of queued chunks
+                for (const chunk of this.videoQueue) {
+                    if (chunk.status === 'completed') continue;
+
+                    try {
+                        const response = await fetch(`/api/video/chunk-status/${this.sessionId}/${chunk.chunk_index}`);
+                        if (response.ok) {
+                            const status = await response.json();
+
+                            if (status.status === 'completed' && chunk.status !== 'completed') {
+                                chunk.status = 'completed';
+                                chunk.video_path = status.video_path;
+
+                                console.log(`[VideoPlayer] Chunk ${chunk.chunk_index} ready`);
+
+                                // If this is the next chunk to play and we're not playing, start
+                                if (chunk.chunk_index === this.currentChunkIndex && !this.isPlaying) {
+                                    this.playNext();
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`[VideoPlayer] Error checking chunk status:`, error);
+                    }
+                }
+
+                this.updateQueueInfo();
+            }
+
+            async playNext() {
+                // Find next chunk to play
+                const nextChunk = this.videoQueue.find(c =>
+                    c.chunk_index === this.currentChunkIndex && c.status === 'completed'
+                );
+
+                if (!nextChunk) {
+                    this.isPlaying = false;
+
+                    // Check if there are any pending/processing chunks
+                    const hasPending = this.videoQueue.some(c =>
+                        c.chunk_index >= this.currentChunkIndex &&
+                        (c.status === 'queued' || c.status === 'processing')
+                    );
+
+                    if (hasPending) {
+                        this.statusElement.textContent = 'Waiting for next chunk...';
+                    } else {
+                        // No more chunks - return to idle loop
+                        this.showLoop();
+                        this.statusElement.textContent = 'Idle';
+                        console.log('[VideoPlayer] Queue empty, returning to idle loop');
+                    }
+                    return;
+                }
+
+                // Switch to chunk video
+                this.showChunkVideo();
+                this.isPlaying = true;
+                this.statusElement.textContent = `Playing chunk ${nextChunk.chunk_index + 1}`;
+
+                console.log(`[VideoPlayer] Playing chunk ${nextChunk.chunk_index}`);
+
+                try {
+                    // Load and play video
+                    const chunk_id = `${this.sessionId}_chunk_${nextChunk.chunk_index}`;
+                    const videoUrl = `/api/video/stream/${chunk_id}?t=${Date.now()}`;
+
+                    // Wait for video to load before playing
+                    await new Promise((resolve, reject) => {
+                        this.videoElement.onloadeddata = resolve;
+                        this.videoElement.onerror = reject;
+                        this.videoElement.src = videoUrl;
+                    });
+
+                    await this.videoElement.play();
+
+                    // Notify parent that chunk is playing
+                    this.channel.postMessage({
+                        type: 'chunk-playing',
+                        data: { chunk_index: nextChunk.chunk_index }
+                    });
+
+                } catch (error) {
+                    console.error('[VideoPlayer] Play error:', error);
+                    this.statusElement.textContent = 'Playback error - retrying...';
+                    this.isPlaying = false;
+
+                    // Retry after a short delay
+                    setTimeout(() => this.playNext(), 500);
+                }
+            }
+
+            playPrevious() {
+                if (this.currentChunkIndex > 0) {
+                    this.currentChunkIndex--;
+                    this.videoElement.pause();
+                    this.isPlaying = false;
+                    this.playNext();
+                }
+            }
+
+            stop() {
+                this.videoElement.pause();
+                this.isPlaying = false;
+                this.showLoop();
+                this.statusElement.textContent = 'Stopped - idle';
+            }
+
+            updateQueueInfo() {
+                const queued = this.videoQueue.filter(c => c.status === 'queued').length;
+                const processing = this.videoQueue.filter(c => c.status === 'processing').length;
+                const completed = this.videoQueue.filter(c => c.status === 'completed').length;
+
+                this.queueInfoElement.textContent =
+                    `Queue: ${queued} queued, ${processing} processing, ${completed} ready`;
+            }
+        }
+
+        // Initialize player
+        const player = new VideoPlayer();
+    </script>
+</body>
+</html>

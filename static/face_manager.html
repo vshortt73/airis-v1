@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Manager - Iris</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --border: #475569;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .panel-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .person-list, .camera-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .person-card, .camera-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .person-info, .camera-info {
+            flex: 1;
+        }
+
+        .person-name, .camera-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .person-meta, .camera-meta {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .person-actions, .camera-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .webcam-container {
+            position: relative;
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        #webcam-video {
+            width: 100%;
+            display: block;
+        }
+
+        .webcam-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .webcam-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .captured-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .captured-image {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 1;
+        }
+
+        .captured-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .captured-image .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-success {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .status-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+        }
+
+        .recognition-result {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .recognition-match {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .match-confidence {
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .select-person {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👤 Face Recognition Manager</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="window.location.href='/'">← Back to Chat</button>
+                <button class="btn btn-primary" onclick="loadData()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div id="status-message" class="status-message"></div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="persons">👥 Persons</button>
+            <button class="tab" data-tab="training">📸 Train Faces</button>
+            <button class="tab" data-tab="test">🔍 Test Recognition</button>
+            <button class="tab" data-tab="stats">📊 Statistics</button>
+        </div>
+
+        <!-- Tab 1: Person Management -->
+        <div id="tab-persons" class="tab-content active">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Manage Persons</h2>
+                    <button class="btn btn-primary" onclick="showAddPersonForm()">➕ Add Person</button>
+                </div>
+
+                <div id="add-person-form" class="hidden" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Name *</label>
+                        <input type="text" id="new-person-name" class="form-input" placeholder="e.g., Victor">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Display Name</label>
+                        <input type="text" id="new-person-display" class="form-input" placeholder="Optional">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Relationship</label>
+                        <select id="new-person-relationship" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="owner">Owner</option>
+                            <option value="family">Family</option>
+                            <option value="friend">Friend</option>
+                            <option value="colleague">Colleague</option>
+                            <option value="visitor">Visitor</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notes</label>
+                        <textarea id="new-person-notes" class="form-textarea" placeholder="Optional notes"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-success" onclick="createPerson()">✓ Create</button>
+                        <button class="btn btn-secondary" onclick="hideAddPersonForm()">✗ Cancel</button>
+                    </div>
+                </div>
+
+                <div id="person-list" class="person-list"></div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Training -->
+        <div id="tab-training" class="tab-content">
+            <div class="panel">
+                <h2 class="panel-title">Train Face Recognition</h2>
+
+                <div class="form-group">
+                    <label class="form-label">Select Person to Train</label>
+                    <select id="training-person-select" class="select-person">
+                        <option value="">-- Select a person --</option>
+                    </select>
+                </div>
+
+                <div class="webcam-controls">
+                    <button id="start-webcam-btn" class="btn btn-primary" onclick="startWebcam()">📷 Start Webcam</button>
+                    <button id="stop-webcam-btn" class="btn btn-danger hidden" onclick="stopWebcam()">⏹ Stop Webcam</button>
+                    <button id="capture-btn" class="btn btn-success hidden" onclick="captureTrainingImage()">📸 Capture Image</button>
+                    <span id="capture-count" style="color: var(--text-secondary);"></span>
+                </div>
+
+                <div id="webcam-container" class="webcam-container hidden">
+                    <video id="webcam-video" autoplay playsinline></video>
+                    <canvas id="webcam-canvas"></canvas>
+                </div>
+
+                <div id="captured-images" class="captured-images"></div>
+
+                <button id="upload-training-btn" class="btn btn-success hidden" onclick="uploadTrainingImages()">
+                    ⬆️ Upload Training Images
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab 3: Test Recognition -->
+        <div id="tab-test" class="tab-content">
+            <div class="panel">
+                <h2 class="panel-title">Test Face Recognition</h2>
+
+                <div class="webcam-controls">
+                    <button id="start-test-webcam-btn" class="btn btn-primary" onclick="startTestWebcam()">📷 Start Webcam</button>
+                    <button id="stop-test-webcam-btn" class="btn btn-danger hidden" onclick="stopTestWebcam()">⏹ Stop Webcam</button>
+                    <button id="test-recognize-btn" class="btn btn-success hidden" onclick="testRecognition()">🔍 Recognize</button>
+                </div>
+
+                <div id="test-webcam-container" class="webcam-container hidden">
+                    <video id="test-webcam-video" autoplay playsinline></video>
+                    <canvas id="test-webcam-canvas"></canvas>
+                </div>
+
+                <div id="recognition-results"></div>
+            </div>
+        </div>
+
+        <!-- Tab 4: Statistics -->
+        <div id="tab-stats" class="tab-content">
+            <div class="panel">
+                <h2 class="panel-title">System Statistics</h2>
+                <div id="stats-grid" class="stats-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let webcamStream = null;
+        let testWebcamStream = null;
+        let capturedImages = [];
+        let allPersons = [];
+
+        // API helpers
+        async function apiGet(endpoint) {
+            const response = await fetch(`/api/${endpoint}`);
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiPost(endpoint, data) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiPostForm(endpoint, formData) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'POST',
+                body: formData
+            });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        async function apiDelete(endpoint) {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            return await response.json();
+        }
+
+        // Status messages
+        function showStatus(message, isSuccess) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.textContent = message;
+            statusEl.className = `status-message show ${isSuccess ? 'status-success' : 'status-error'}`;
+            setTimeout(() => statusEl.classList.remove('show'), 5000);
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+
+                if (tabName === 'stats') {
+                    loadStatistics();
+                }
+            });
+        });
+
+        // Load all data
+        async function loadData() {
+            await loadPersons();
+            await loadStatistics();
+        }
+
+        // Person management
+        async function loadPersons() {
+            try {
+                const data = await apiGet('faces/persons');
+                allPersons = data.persons;
+                renderPersonList();
+                updatePersonSelects();
+            } catch (error) {
+                showStatus(`Error loading persons: ${error.message}`, false);
+            }
+        }
+
+        function renderPersonList() {
+            const container = document.getElementById('person-list');
+            container.innerHTML = '';
+
+            if (allPersons.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 40px;">No persons yet. Click "Add Person" to get started.</p>';
+                return;
+            }
+
+            allPersons.forEach(person => {
+                const card = document.createElement('div');
+                card.className = 'person-card';
+                card.innerHTML = `
+                    <div class="person-info">
+                        <div class="person-name">${person.name}</div>
+                        <div class="person-meta">
+                            ${person.relationship || 'No relationship'} •
+                            ${person.training_image_count || 0} training images •
+                            ${person.recognition_count || 0} recognitions
+                            ${person.last_seen ? `• Last seen: ${new Date(person.last_seen).toLocaleString()}` : ''}
+                        </div>
+                    </div>
+                    <div class="person-actions">
+                        <button class="btn btn-danger" onclick="deletePerson(${person.person_id})">🗑️ Delete</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function updatePersonSelects() {
+            const select = document.getElementById('training-person-select');
+            select.innerHTML = '<option value="">-- Select a person --</option>';
+            allPersons.forEach(person => {
+                const option = document.createElement('option');
+                option.value = person.person_id;
+                option.textContent = `${person.name} (${person.training_image_count || 0} images)`;
+                select.appendChild(option);
+            });
+        }
+
+        function showAddPersonForm() {
+            document.getElementById('add-person-form').classList.remove('hidden');
+        }
+
+        function hideAddPersonForm() {
+            document.getElementById('add-person-form').classList.add('hidden');
+            document.getElementById('new-person-name').value = '';
+            document.getElementById('new-person-display').value = '';
+            document.getElementById('new-person-relationship').value = '';
+            document.getElementById('new-person-notes').value = '';
+        }
+
+        async function createPerson() {
+            const name = document.getElementById('new-person-name').value.trim();
+            if (!name) {
+                showStatus('Name is required', false);
+                return;
+            }
+
+            const data = {
+                name: name,
+                display_name: document.getElementById('new-person-display').value.trim() || null,
+                relationship: document.getElementById('new-person-relationship').value || null,
+                notes: document.getElementById('new-person-notes').value.trim() || null
+            };
+
+            try {
+                await apiPost('faces/persons', data);
+                showStatus(`Person "${name}" created successfully`, true);
+                hideAddPersonForm();
+                await loadPersons();
+            } catch (error) {
+                showStatus(`Error creating person: ${error.message}`, false);
+            }
+        }
+
+        async function deletePerson(personId) {
+            if (!confirm('Are you sure? This will delete all training images and recognition history.')) {
+                return;
+            }
+
+            try {
+                await apiDelete(`faces/persons/${personId}`);
+                showStatus('Person deleted successfully', true);
+                await loadPersons();
+            } catch (error) {
+                showStatus(`Error deleting person: ${error.message}`, false);
+            }
+        }
+
+        // Webcam for training
+        async function startWebcam() {
+            const personId = document.getElementById('training-person-select').value;
+            if (!personId) {
+                showStatus('Please select a person first', false);
+                return;
+            }
+
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                const video = document.getElementById('webcam-video');
+                video.srcObject = webcamStream;
+
+                document.getElementById('webcam-container').classList.remove('hidden');
+                document.getElementById('start-webcam-btn').classList.add('hidden');
+                document.getElementById('stop-webcam-btn').classList.remove('hidden');
+                document.getElementById('capture-btn').classList.remove('hidden');
+
+                capturedImages = [];
+                updateCaptureCount();
+            } catch (error) {
+                showStatus(`Error starting webcam: ${error.message}`, false);
+            }
+        }
+
+        function stopWebcam() {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+
+            document.getElementById('webcam-container').classList.add('hidden');
+            document.getElementById('start-webcam-btn').classList.remove('hidden');
+            document.getElementById('stop-webcam-btn').classList.add('hidden');
+            document.getElementById('capture-btn').classList.add('hidden');
+        }
+
+        function captureTrainingImage() {
+            const video = document.getElementById('webcam-video');
+            const canvas = document.getElementById('webcam-canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+            capturedImages.push(imageData);
+
+            renderCapturedImages();
+            updateCaptureCount();
+
+            if (capturedImages.length > 0) {
+                document.getElementById('upload-training-btn').classList.remove('hidden');
+            }
+
+            showStatus(`Captured image ${capturedImages.length}`, true);
+        }
+
+        function renderCapturedImages() {
+            const container = document.getElementById('captured-images');
+            container.innerHTML = '';
+
+            capturedImages.forEach((imageData, index) => {
+                const div = document.createElement('div');
+                div.className = 'captured-image';
+                div.innerHTML = `
+                    <img src="${imageData}" alt="Captured ${index + 1}">
+                    <button class="remove-btn" onclick="removeCapturedImage(${index})">×</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function removeCapturedImage(index) {
+            capturedImages.splice(index, 1);
+            renderCapturedImages();
+            updateCaptureCount();
+
+            if (capturedImages.length === 0) {
+                document.getElementById('upload-training-btn').classList.add('hidden');
+            }
+        }
+
+        function updateCaptureCount() {
+            const countEl = document.getElementById('capture-count');
+            if (capturedImages.length > 0) {
+                countEl.textContent = `${capturedImages.length} image(s) captured`;
+            } else {
+                countEl.textContent = '';
+            }
+        }
+
+        async function uploadTrainingImages() {
+            const personId = document.getElementById('training-person-select').value;
+            if (!personId) {
+                showStatus('Please select a person first', false);
+                return;
+            }
+
+            if (capturedImages.length === 0) {
+                showStatus('No images to upload', false);
+                return;
+            }
+
+            try {
+                console.log('[uploadTrainingImages] Starting upload for person:', personId);
+                console.log('[uploadTrainingImages] Images to upload:', capturedImages.length);
+
+                showStatus(`Uploading ${capturedImages.length} images...`, true);
+
+                const formData = new FormData();
+
+                // Convert base64 images to blobs
+                for (let i = 0; i < capturedImages.length; i++) {
+                    console.log(`[uploadTrainingImages] Converting image ${i+1}/${capturedImages.length}`);
+                    const base64Data = capturedImages[i].split(',')[1];
+                    const blob = await fetch(`data:image/jpeg;base64,${base64Data}`).then(r => r.blob());
+                    console.log(`[uploadTrainingImages] Blob ${i} size:`, blob.size, 'bytes');
+                    formData.append('files', blob, `training_${i}.jpg`);
+                }
+
+                formData.append('is_primary', capturedImages.length === 1 ? 'true' : 'false');
+
+                console.log('[uploadTrainingImages] Sending request to:', `/api/faces/persons/${personId}/train`);
+                const result = await apiPostForm(`faces/persons/${personId}/train`, formData);
+                console.log('[uploadTrainingImages] Upload result:', result);
+
+                showStatus(`Uploaded ${result.uploaded}/${result.total} images successfully`, true);
+
+                // Clear captured images
+                capturedImages = [];
+                renderCapturedImages();
+                updateCaptureCount();
+                document.getElementById('upload-training-btn').classList.add('hidden');
+
+                await loadPersons();
+            } catch (error) {
+                console.error('[uploadTrainingImages] Error:', error);
+                showStatus(`Error uploading images: ${error.message}`, false);
+            }
+        }
+
+        // Test recognition
+        async function startTestWebcam() {
+            try {
+                testWebcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                const video = document.getElementById('test-webcam-video');
+                video.srcObject = testWebcamStream;
+
+                document.getElementById('test-webcam-container').classList.remove('hidden');
+                document.getElementById('start-test-webcam-btn').classList.add('hidden');
+                document.getElementById('stop-test-webcam-btn').classList.remove('hidden');
+                document.getElementById('test-recognize-btn').classList.remove('hidden');
+            } catch (error) {
+                showStatus(`Error starting webcam: ${error.message}`, false);
+            }
+        }
+
+        function stopTestWebcam() {
+            if (testWebcamStream) {
+                testWebcamStream.getTracks().forEach(track => track.stop());
+                testWebcamStream = null;
+            }
+
+            document.getElementById('test-webcam-container').classList.add('hidden');
+            document.getElementById('start-test-webcam-btn').classList.remove('hidden');
+            document.getElementById('stop-test-webcam-btn').classList.add('hidden');
+            document.getElementById('test-recognize-btn').classList.add('hidden');
+        }
+
+        async function testRecognition() {
+            const video = document.getElementById('test-webcam-video');
+            const canvas = document.getElementById('test-webcam-canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+            try {
+                const result = await apiPost('faces/recognize', {
+                    image_data: imageData
+                });
+
+                renderRecognitionResults(result);
+            } catch (error) {
+                showStatus(`Error recognizing faces: ${error.message}`, false);
+            }
+        }
+
+        function renderRecognitionResults(result) {
+            const container = document.getElementById('recognition-results');
+
+            if (result.faces_detected === 0) {
+                container.innerHTML = '<div class="recognition-result"><p style="color: var(--text-secondary);">No faces detected</p></div>';
+                return;
+            }
+
+            let html = `<div class="recognition-result">`;
+            html += `<h3 style="margin-bottom: 15px;">Detected ${result.faces_detected} face(s), recognized ${result.faces_recognized}</h3>`;
+
+            result.results.forEach((face, index) => {
+                html += `<div style="margin-bottom: 15px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">`;
+                html += `<h4 style="margin-bottom: 10px;">Face ${index + 1}</h4>`;
+
+                if (face.best_match) {
+                    const match = face.best_match;
+                    html += `
+                        <div class="recognition-match">
+                            <div>
+                                <strong>${match.name}</strong>
+                                ${match.relationship ? `<span style="color: var(--text-secondary)"> (${match.relationship})</span>` : ''}
+                            </div>
+                            <div class="match-confidence">${(match.avg_similarity * 100).toFixed(1)}% confidence</div>
+                        </div>
+                    `;
+
+                    if (face.matches.length > 1) {
+                        html += `<p style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Other matches:</p>`;
+                        face.matches.slice(1, 3).forEach(m => {
+                            html += `<div style="padding: 8px; margin-top: 5px; background: var(--bg-tertiary); border-radius: 4px;">${m.name}: ${(m.avg_similarity * 100).toFixed(1)}%</div>`;
+                        });
+                    }
+                } else {
+                    html += `<p style="color: var(--warning);">⚠️ Unknown person (no match found)</p>`;
+                }
+
+                html += `</div>`;
+            });
+
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        // Statistics
+        async function loadStatistics() {
+            try {
+                const data = await apiGet('faces/stats');
+                renderStatistics(data.stats);
+            } catch (error) {
+                showStatus(`Error loading statistics: ${error.message}`, false);
+            }
+        }
+
+        function renderStatistics(stats) {
+            const container = document.getElementById('stats-grid');
+            container.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.persons_count || 0}</div>
+                    <div class="stat-label">Known Persons</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.embeddings_count || 0}</div>
+                    <div class="stat-label">Training Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.recognitions_24h || 0}</div>
+                    <div class="stat-label">Recognitions (24h)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.recognitions_7d || 0}</div>
+                    <div class="stat-label">Recognitions (7d)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.currently_present || 0}</div>
+                    <div class="stat-label">Currently Present</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.cameras_count || 0}</div>
+                    <div class="stat-label">Active Cameras</div>
+                </div>
+            `;
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            loadData();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopWebcam();
+            stopTestWebcam();
+        });
+    </script>
+</body>
+</html>

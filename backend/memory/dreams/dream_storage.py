@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 import json
 from app import config
 from dream_truth_extractor import check_and_extract_truth
+from dream_seed_suggester import check_and_suggest_seed
 
 def get_db_connection():
     """Create database connection"""
@@ -169,6 +170,20 @@ def store_dream(
             print(f"[dream_storage.py][store_dream] ✓ Dream truth extracted and stored")
         else:
             print(f"[dream_storage.py][store_dream] ℹ No dream truth extracted (didn't meet thresholds)")
+
+        # Check if this dream should suggest a seed for the Motivation Engine
+        seed_suggested = check_and_suggest_seed(
+            dream_id=dream_id,
+            dream_date=dream_date,
+            dream_type=dream_type,
+            reflection_data=reflection_data,
+            scores=scores_and_embeddings
+        )
+
+        if seed_suggested:
+            print(f"[dream_storage.py][store_dream] ✓ Seed suggestion created from dream")
+        else:
+            print(f"[dream_storage.py][store_dream] ℹ No seed suggestion (didn't meet thresholds)")
 
         return dream_id
 

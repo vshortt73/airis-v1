@@ -6,7 +6,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from core.system_prompt import build_system_message
 
-system_msg = build_system_message()
+system_msg = build_system_message(user_message=None)  # Test without user
 content = system_msg['content']
 
 # Check if FACTS_USED instruction is present

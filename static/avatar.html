@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iris 3D Avatar Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #bb86fc;
+            min-width: 250px;
+        }
+        h1 {
+            font-size: 1.5rem;
+            color: #bb86fc;
+            margin-bottom: 15px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        select {
+            width: 100%;
+            padding: 5px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border: 1px solid #3a3a3a;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #bb86fc;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #d4b3ff;
+        }
+        .value-display {
+            display: inline-block;
+            float: right;
+            color: #03dac6;
+            font-weight: bold;
+        }
+        #stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+            font-size: 0.85rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <h1>Iris 3D Avatar</h1>
+
+        <div class="control-group">
+            <label>
+                Rotation Axis
+            </label>
+            <select id="axis-select">
+                <option value="x">X Axis</option>
+                <option value="y">Y Axis</option>
+                <option value="z" selected>Z Axis (Working)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>
+                Direction
+            </label>
+            <select id="direction-select">
+                <option value="1" selected>Positive (+) [Opens Jaw]</option>
+                <option value="-1">Negative (-)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>
+                Jaw Open <span class="value-display" id="jaw-value">0.00</span>
+            </label>
+            <input type="range" id="jaw-slider" min="0" max="1" step="0.01" value="0">
+        </div>
+
+        <button id="reset-jaw-btn">Reset Jaw Position</button>
+        <button id="test-speech-btn">Test Speech Animation</button>
+        <button id="load-avatar-btn">Reload Avatar</button>
+
+        <div id="stats">
+            <div>FPS: <span id="fps">0</span></div>
+            <div>Triangles: <span id="triangles">0</span></div>
+            <div>Status: <span id="status">Loading...</span></div>
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================
+        // SCENE SETUP
+        // ============================================
+
+        let scene, camera, renderer, controls;
+        let avatarModel = null;
+        let jawBone = null;
+        let mixer = null;
+        let clock = new THREE.Clock();
+
+        // FPS tracking
+        let frameCount = 0;
+        let lastTime = performance.now();
+
+        function initScene() {
+            console.log('[Avatar] Initializing Three.js scene...');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2a2a2a);  // Lighter background to see character
+            scene.fog = new THREE.Fog(0x2a2a2a, 5, 15);
+
+            // Camera (adjusted for Alina - full body character)
+            camera = new THREE.PerspectiveCamera(
+                50,  // FOV
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 0.9, 1.5);  // Focus on head/upper body
+            camera.lookAt(0, 0.9, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Orbit controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0.9, 0);  // Focus on head
+            controls.update();
+
+            // Lighting - Improved for realistic character models
+            // Ambient light (overall scene brightness)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+            scene.add(ambientLight);
+
+            // Hemisphere light (sky/ground lighting for natural look)
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+            hemiLight.position.set(0, 20, 0);
+            scene.add(hemiLight);
+
+            // Key light (main light - from front-right)
+            const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            keyLight.position.set(2, 2, 3);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            scene.add(keyLight);
+
+            // Fill light (soften shadows - from left)
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            fillLight.position.set(-3, 1, 2);
+            scene.add(fillLight);
+
+            // Back light (rim light for depth)
+            const backLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            backLight.position.set(0, 2, -3);
+            scene.add(backLight);
+
+            // Face light (direct front lighting for features)
+            const faceLight = new THREE.PointLight(0xffffff, 0.8, 10);
+            faceLight.position.set(0, 1.2, 2);
+            scene.add(faceLight);
+
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(10, 10, 0x666666, 0x333333);
+            scene.add(gridHelper);
+
+            console.log('[Avatar] ✓ Scene initialized');
+        }
+
+        // ============================================
+        // AVATAR LOADING
+        // ============================================
+
+        function loadAvatar() {
+            console.log('[Avatar] Loading glTF model...');
+            document.getElementById('status').textContent = 'Loading model...';
+
+            const loader = new GLTFLoader();
+            const modelPath = '/assets/3D/alina/scene.gltf';
+
+            loader.load(
+                modelPath,
+                (gltf) => {
+                    console.log('[Avatar] ✓ Model loaded');
+                    console.log('[Avatar] Model structure:', gltf.scene);
+
+                    // Remove old model if exists
+                    if (avatarModel) {
+                        scene.remove(avatarModel);
+                    }
+
+                    avatarModel = gltf.scene;
+
+                    // Enable shadows and configure materials
+                    avatarModel.traverse((node) => {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+
+                            // Fix materials and textures
+                            if (node.material) {
+                                // Handle both single material and material arrays
+                                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                                materials.forEach(mat => {
+                                    // Ensure proper color space for textures
+                                    if (mat.map) {
+                                        mat.map.colorSpace = THREE.SRGBColorSpace;
+                                    }
+                                    if (mat.emissiveMap) {
+                                        mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                                    }
+                                    // Force material update
+                                    mat.needsUpdate = true;
+                                });
+                            }
+                        }
+                    });
+
+                    // Find jaw bone (Alina uses Character Creator rig)
+                    avatarModel.traverse((node) => {
+                        if (node.isBone && node.name === 'CC_Base_JawRoot_040') {
+                            jawBone = node;
+                        }
+                    });
+
+                    if (jawBone) {
+                        console.log('[Avatar] ✓ Found jaw bone:', jawBone.name);
+                        console.log('[Avatar]   Initial rotation:', jawBone.rotation);
+                        console.log('[Avatar]   Initial position:', jawBone.position);
+                        console.log('[Avatar]   Parent:', jawBone.parent?.name || 'none');
+                        console.log('[Avatar]   Quaternion:', jawBone.quaternion);
+                    } else {
+                        console.warn('[Avatar] ⚠ Jaw bone not found');
+                        console.log('[Avatar] Searching for alternative jaw bones...');
+                        // Try alternate names
+                        const altNames = ['CC_Base_JawRoot', 'JawRoot', 'jaw', 'Jaw', 'CC_Base_L_LipLowerInner', 'CC_Base_Tongue'];
+                        for (const name of altNames) {
+                            jawBone = findBoneByName(avatarModel, name);
+                            if (jawBone) {
+                                console.log(`[Avatar] ✓ Found alternative jaw bone: ${jawBone.name}`);
+                                break;
+                            }
+                        }
+                        if (!jawBone) {
+                            listAllBones(avatarModel);
+                        }
+                    }
+
+                    // Store initial rotation for reset
+                    if (jawBone) {
+                        window.initialJawRotation = {
+                            x: jawBone.rotation.x,
+                            y: jawBone.rotation.y,
+                            z: jawBone.rotation.z
+                        };
+                    }
+
+                    // Setup animations if present
+                    if (gltf.animations && gltf.animations.length > 0) {
+                        mixer = new THREE.AnimationMixer(avatarModel);
+                        console.log('[Avatar] Found animations:', gltf.animations.length);
+                    }
+
+                    // Add to scene
+                    scene.add(avatarModel);
+
+                    // Count triangles
+                    let triangles = 0;
+                    avatarModel.traverse((node) => {
+                        if (node.isMesh && node.geometry) {
+                            triangles += node.geometry.index ?
+                                node.geometry.index.count / 3 :
+                                node.geometry.attributes.position.count / 3;
+                        }
+                    });
+                    document.getElementById('triangles').textContent = Math.floor(triangles).toLocaleString();
+
+                    document.getElementById('status').textContent = 'Ready';
+                    console.log('[Avatar] ✓ Avatar loaded successfully');
+                },
+                (progress) => {
+                    const percent = (progress.loaded / progress.total * 100).toFixed(0);
+                    console.log(`[Avatar] Loading: ${percent}%`);
+                    document.getElementById('status').textContent = `Loading ${percent}%`;
+                },
+                (error) => {
+                    console.error('[Avatar] ✗ Error loading model:', error);
+                    document.getElementById('status').textContent = 'Error loading model';
+                }
+            );
+        }
+
+        // ============================================
+        // BONE UTILITIES
+        // ============================================
+
+        function findBoneByName(object, boneName) {
+            let found = null;
+            object.traverse((node) => {
+                if (node.isBone && node.name === boneName) {
+                    found = node;
+                }
+            });
+            return found;
+        }
+
+        function listAllBones(object) {
+            console.log('[Avatar] All bones in model:');
+            object.traverse((node) => {
+                if (node.isBone) {
+                    console.log(`  - ${node.name}`);
+                }
+            });
+        }
+
+        // ============================================
+        // JAW ANIMATION
+        // ============================================
+
+        function setJawRotation(openAmount) {
+            if (!jawBone) return;
+
+            // Get selected axis and direction from UI
+            const axis = document.getElementById('axis-select').value;
+            const direction = parseFloat(document.getElementById('direction-select').value);
+
+            // openAmount: 0 (closed) to 1 (fully open)
+            const maxRotation = 0.5;  // radians (~28 degrees max opening)
+            const rotation = direction * openAmount * maxRotation;
+
+            // Reset to initial rotation first
+            if (window.initialJawRotation) {
+                jawBone.rotation.x = window.initialJawRotation.x;
+                jawBone.rotation.y = window.initialJawRotation.y;
+                jawBone.rotation.z = window.initialJawRotation.z;
+            } else {
+                jawBone.rotation.x = 0;
+                jawBone.rotation.y = 0;
+                jawBone.rotation.z = 0;
+            }
+
+            // Apply rotation to selected axis
+            jawBone.rotation[axis] += rotation;
+
+            // Log for debugging
+            console.log(`[Jaw] Axis: ${axis}, Direction: ${direction > 0 ? '+' : '-'}, Amount: ${openAmount.toFixed(2)}, Rotation: ${rotation.toFixed(3)}`);
+            console.log(`[Jaw] Current rotation: x=${jawBone.rotation.x.toFixed(3)}, y=${jawBone.rotation.y.toFixed(3)}, z=${jawBone.rotation.z.toFixed(3)}`);
+        }
+
+        function testSpeechAnimation() {
+            console.log('[Avatar] Testing speech animation...');
+
+            if (!jawBone) {
+                console.warn('[Avatar] No jaw bone found');
+                return;
+            }
+
+            // Simulate phoneme sequence: open-close-open-close
+            const phonemeSequence = [
+                { time: 0, value: 0 },      // Closed
+                { time: 200, value: 0.7 },  // Open (A sound)
+                { time: 400, value: 0.2 },  // Semi-closed (M sound)
+                { time: 600, value: 0.8 },  // Open (O sound)
+                { time: 800, value: 0.3 },  // Semi-closed (N sound)
+                { time: 1000, value: 0 }    // Closed
+            ];
+
+            let currentIndex = 0;
+            const startTime = Date.now();
+
+            const animate = () => {
+                const elapsed = Date.now() - startTime;
+
+                if (currentIndex >= phonemeSequence.length) {
+                    console.log('[Avatar] Animation complete');
+                    return;
+                }
+
+                const current = phonemeSequence[currentIndex];
+
+                if (elapsed >= current.time) {
+                    setJawRotation(current.value);
+                    console.log(`[Avatar] Phoneme ${currentIndex}: jaw=${current.value.toFixed(2)}`);
+                    currentIndex++;
+                }
+
+                if (currentIndex < phonemeSequence.length) {
+                    requestAnimationFrame(animate);
+                }
+            };
+
+            animate();
+        }
+
+        // ============================================
+        // ANIMATION LOOP
+        // ============================================
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            // Update controls
+            controls.update();
+
+            // Update mixer if animations present
+            if (mixer) {
+                mixer.update(delta);
+            }
+
+            // Render
+            renderer.render(scene, camera);
+
+            // Update FPS counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+        }
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+
+        // Jaw slider
+        document.getElementById('jaw-slider').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            document.getElementById('jaw-value').textContent = value.toFixed(2);
+            setJawRotation(value);
+        });
+
+        // Axis and direction selectors
+        document.getElementById('axis-select').addEventListener('change', () => {
+            const value = parseFloat(document.getElementById('jaw-slider').value);
+            setJawRotation(value);
+        });
+
+        document.getElementById('direction-select').addEventListener('change', () => {
+            const value = parseFloat(document.getElementById('jaw-slider').value);
+            setJawRotation(value);
+        });
+
+        // Reset jaw button
+        document.getElementById('reset-jaw-btn').addEventListener('click', () => {
+            document.getElementById('jaw-slider').value = 0;
+            document.getElementById('jaw-value').textContent = '0.00';
+            if (jawBone && window.initialJawRotation) {
+                jawBone.rotation.x = window.initialJawRotation.x;
+                jawBone.rotation.y = window.initialJawRotation.y;
+                jawBone.rotation.z = window.initialJawRotation.z;
+                console.log('[Jaw] Reset to initial rotation');
+            }
+        });
+
+        // Test speech button
+        document.getElementById('test-speech-btn').addEventListener('click', testSpeechAnimation);
+
+        // Reload avatar button
+        document.getElementById('load-avatar-btn').addEventListener('click', loadAvatar);
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+
+        console.log('[Avatar] Starting Iris 3D Avatar...');
+        initScene();
+        loadAvatar();
+        animate();
+    </script>
+</body>
+</html>

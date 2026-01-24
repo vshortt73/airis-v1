@@ -1,140 +1,226 @@
 """
 Configuration for Iris v3
-All settings explicitly defined
+
+!! CLAUDE: DATABASE IS SOURCE OF TRUTH !!
+
+This file contains ONLY bootstrap configuration needed to connect to PostgreSQL.
+ALL runtime configuration loads from the system_config database table.
+
+If you need to add/modify configuration:
+1. Add to database: database/sql/populate_system_config_complete.sql
+2. Run the SQL
+3. Restart Iris
+
+The config_loader injects all database values into this module on startup.
 """
 
-# ============================================
-# OLLAMA CONFIGURATION
-# ============================================
-# Main Ollama instance (GPU 1 - RTX 5090 with 32GB VRAM via inverted CUDA) - Port 11434
-OLLAMA_BASE_URL = "http://localhost:11434"
-#OLLAMA_MODEL = "qwen2.5:72b"  # 72B model with RAM offloading
-OLLAMA_MODEL = "qwen3:32b"
-OLLAMA_CONTEXT_WINDOW = 65536  # 64K context - qwen3:32b native context window
-
-OLLAMA_MEMORY_MODEL: "qwen2.5:14b"
-OLLAMA_MEMORY_CONTEXT_WINDOW = 4096
-OLLAMA_MEMORY_URL = "http://localhost:11436"
-
-# Vision Ollama instance (GPU 0 - RTX 4080 Super with 16GB VRAM via inverted CUDA) - Port 11435
-OLLAMA_VISION_MODEL: "llava:7b"
-VISION_OLLAMA_URL = "http://localhost:11435"
-
+import os
 
 # ============================================
-# SERVER CONFIGURATION
+# DATABASE CONNECTION (Bootstrap - Required)
+# ============================================
+# These are the ONLY hardcoded values needed - to connect to the database
+DB_HOST = "localhost"
+DB_PORT = 5432
+DB_NAME = "irisdb"
+DB_USER = "irisuser"
+# IMPORTANT: Use IRIS_DB_PASSWORD environment variable
+DB_PASSWORD = os.environ.get('IRIS_DB_PASSWORD', 'yourpassword')
+
+# ============================================
+# SERVER (Bootstrap - Required before DB load)
 # ============================================
 HOST = "0.0.0.0"
 PORT = 8000
 
 # ============================================
-# IDENTITY
+# PLACEHOLDER DEFAULTS
 # ============================================
-IRIS_NAME = "Iris"
-VICTOR_NAME = "Victor"
+# These are set here ONLY so code doesn't crash before database injection.
+# They will be OVERWRITTEN by database values on startup.
+# If you see these values in use, database loading has failed!
+
+# # LLM Backend (will be overwritten)
+# OLLAMA_BASE_URL = "http://localhost:11434"
+# OLLAMA_MODEL = "PLACEHOLDER_CHECK_DB"
+# OLLAMA_CONTEXT_WINDOW = 32768
+
+# # Remote Services (will be overwritten)
+# FLOAT_SERVER_URL = "http://node2:8000"
+# XTTS_SERVER_URL = "http://node2:8700"
+# STT_SERVER_URL = "http://node2:8600"
+# VISION_OLLAMA_URL = "http://node2:11435"
+# MISTRAL_URL = "http://node2:11437/v1/chat/completions"
+
+# # Feature Flags - MUST come from database
+# SERVER_SIDE_TTS_ROUTING = None  # None = not loaded, will crash if DB fails (intentional)
+# EMOTIONAL_STATE = None
+# TOOLS_ENABLE = None
+
+# # Identity (will be overwritten)
+# IRIS_NAME = "Iris"
+# VICTOR_NAME = "Victor"
+
+# # Token Budgets (will be overwritten)
+# CONTEXT_WINDOW = 32768
+# SYSTEM_PROMPT_BASE_BUDGET = 600
+# CHARACTER_TRAITS_BUDGET = 200
+# RESPONSE_GENERATION_BUDGET = 2000
+# EPISODIC_MEMORY_BUDGET = 2500
+# EMOTIONAL_STATE_BUDGET = 200
+# TOOL_DEFINITIONS_BUDGET = 1500
+# TOOL_RESULTS_BUDGET = 15000
+# CONVERSATION_HISTORY_BUDGET = 7000
+# DOCUMENT_CONTEXT_BUDGET = 8000  # Max tokens for uploaded documents
+
+# Fallback default for document processing
+DOCUMENT_CONTEXT_BUDGET = 8000
+
+# # Session
+# SESSION_TIMEOUT_MINUTES = 30
+
+# # Context Management
+# MAX_CONTEXT_TOKENS = 6000
+# MAX_TOTAL_MESSAGES = 50
+# SYSTEM_PROMPT_TOKEN_BUDGET = 2000
+# RESPONSE_TOKEN_BUDGET = 2000
+# CONTEXT_ROLES = ["user", "assistant", "tool"]
+# CONTEXT_DEBUG = False
+
+# # System Prompt Includes
+# SYSTEM_INSTRUCTIONS = True
+# CHARACTER_TRAITS = True
+# SHORT_TERM_FACTS = True
+# EPISODIC_MEMORIES = True
+# ACTIVE_SEEDS = True
+# TOOL_RESULTS = True
+
+# # Emotional State
+# EMOTIONAL_DECAY_PER_TURN = 0.05
+# EMOTIONAL_DECAY_PER_MINUTE = 0.02
+
+# # Vision
+# VISION_ENABLED = True
+# VISION_MODEL = "llava-phi-3"
+# OLLAMA_VISION_MODEL = "llama3.2-vision:11b"
+# VISION_AUTO_UNLOAD_MINUTES = 5
+# VISION_MAX_TOKENS = 1000
+# VISION_MAX_IMAGE_SIZE_MB = 10
+# VISION_MAX_IMAGES_PER_REQUEST = 5
+# VISION_TIMEOUT_SECONDS = 30
+# VISION_TEMPERATURE = 0.7
+# VISION_DEBUG = False
+
+# # Face Recognition
+# FACE_RECOGNITION_MODEL = "buffalo_l"
+# FACE_EMBEDDING_DIM = 512
+# FACE_SIMILARITY_THRESHOLD = 0.5
+# FACE_DETECTION_CONFIDENCE = 0.5
+# FACE_MONITORING_ENABLED = True
+# FACE_MONITORING_INTERVAL_SECONDS = 30
+# FACE_GREETING_MIN_ABSENCE_MINUTES = 5
+# FACE_GREETING_COOLDOWN_MINUTES = 15
+# FACE_STORE_CAPTURED_FRAMES = False
+# FACE_MAX_TRAINING_IMAGES = 20
+# FACE_TRAINING_IMAGE_PATH = "attachments/face_training"
+# FACE_CAPTURES_PATH = "attachments/face_captures"
+# FACE_MAX_FACES_PER_FRAME = 10
+# FACE_USE_GPU = False
+# FACE_DETECTION_SIZE = (640, 640)
+# FACE_NOTIFY_ON_ENTRY = True
+# FACE_NOTIFY_ON_EXIT = False
+# FACE_NOTIFY_UNKNOWN = True
+
+# # Tool Limits
+# MAX_SQL_RESULT_TOKENS = 3000
+
+# # Memory Processing
+# OLLAMA_MEMORY_MODEL = "Qwen2.5-32B-Instruct-Q5_K_M"
+# OLLAMA_MEMORY_CONTEXT_WINDOW = 4096
+# OLLAMA_MEMORY_URL = "http://localhost:11434"
+# OLLAMA_TOOL_EVAL_URL = "http://localhost:11434"
+# OLLAMA_TOOL_EVAL_MODEL = "Qwen2.5-32B-Instruct-Q5_K_M"
+# OLLAMA_TOOL_EVAL_CONTEXT_WINDOW = 8192
+
+# # Florence2 / PaddleOCR
+# FLORENCE2_SERVER_URL = "http://node2:5100"
+# FLORENCE2_MODE = "remote"
+# PADDLEOCR_SERVER_URL = "http://node2:5200"
+
+# # Freud
+# FREUD_URL = "http://node2:11435"
+# FREUD_MODEL = "gemma3:4b"
+
+# # Knowledge/RAG (complex config - kept as placeholders)
+# KNOWLEDGE_SCAN_DIRECTORIES = ["/iris-v3"]
+# KNOWLEDGE_FILE_PATTERNS = {"code": ["*.py"], "docs": ["*.md"]}
+# KNOWLEDGE_EXCLUDE_PATTERNS = ["__pycache__", ".git", "node_modules"]
+# KNOWLEDGE_EXCLUDE_FILENAMES = ["__init__.py"]
+# KNOWLEDGE_MAX_CHUNK_TOKENS = 512
+# KNOWLEDGE_CHUNK_OVERLAP_TOKENS = 50
+# KNOWLEDGE_MIN_CHUNK_TOKENS = 50
+# KNOWLEDGE_EMBEDDING_BATCH_SIZE = 32
+# KNOWLEDGE_EMBEDDING_FACETS = ["content", "context"]
+# KNOWLEDGE_DEFAULT_SEARCH_LIMIT = 10
+# KNOWLEDGE_MAX_SEARCH_LIMIT = 50
+# KNOWLEDGE_SIMILARITY_THRESHOLD = 0.30
+# KNOWLEDGE_TIER_THRESHOLDS = {1: 0.70, 2: 0.55, 3: 0.40, 4: 0.30}
+# KNOWLEDGE_FACET_WEIGHTS = {"content": 0.6, "context": 0.4}
+# KNOWLEDGE_INCREMENTAL_INDEXING = True
+# KNOWLEDGE_HASH_CHECK = True
+# KNOWLEDGE_MAX_FILE_SIZE_MB = 10
+# KNOWLEDGE_PDF_ENABLED = True
+# KNOWLEDGE_PDF_MAX_PAGES = 500
+
+# # Legacy compatibility
+# MAX_CONVERSATION_TURNS = 500
+# FIXED_BUDGET = SYSTEM_PROMPT_BASE_BUDGET + CHARACTER_TRAITS_BUDGET + RESPONSE_GENERATION_BUDGET
+# DYNAMIC_BUDGET = (EPISODIC_MEMORY_BUDGET + EMOTIONAL_STATE_BUDGET +
+#                   TOOL_DEFINITIONS_BUDGET + TOOL_RESULTS_BUDGET +
+#                   CONVERSATION_HISTORY_BUDGET)
+# TOTAL_ALLOCATED = FIXED_BUDGET + DYNAMIC_BUDGET
+# SAFETY_MARGIN = CONTEXT_WINDOW - TOTAL_ALLOCATED
+
 
 # ============================================
-# SESSION MANAGEMENT
-# ============================================
-SESSION_TIMEOUT_MINUTES = 30  # Create new session if gap exceeds this
-
-# ============================================
-# TOKEN BUDGET ALLOCATION
-# ============================================
-# Total available context window
-CONTEXT_WINDOW = OLLAMA_CONTEXT_WINDOW  # 131072 tokens (128K)
-
-# Fixed allocations (cannot be truncated)
-SYSTEM_PROMPT_BASE_BUDGET = 600         # Base identity paragraph
-CHARACTER_TRAITS_BUDGET = 200           # All 144 traits (estimated)
-RESPONSE_GENERATION_BUDGET = 2000       # Room for Iris to respond (reduced for 8K context)
-
-# Dynamic allocations (can be truncated with priority)
-# Priority 1 (High) - Truncate last
-EPISODIC_MEMORY_BUDGET = 2500           # Retrieved memories from past
-EMOTIONAL_STATE_BUDGET = 200            # Current emotional context
-
-# Priority 2 (Medium) - Truncate second
-TOOL_DEFINITIONS_BUDGET = 1500          # Tool schemas/descriptions
-TOOL_RESULTS_BUDGET = 800               # Recent tool call results
-
-# Priority 3 (Low) - Truncate first
-CONVERSATION_HISTORY_BUDGET = 7000      # Recent conversation turns
-
-# Calculate totals
-FIXED_BUDGET = (SYSTEM_PROMPT_BASE_BUDGET + CHARACTER_TRAITS_BUDGET + 
-                RESPONSE_GENERATION_BUDGET)
-DYNAMIC_BUDGET = (EPISODIC_MEMORY_BUDGET + EMOTIONAL_STATE_BUDGET + 
-                  TOOL_DEFINITIONS_BUDGET + TOOL_RESULTS_BUDGET + 
-                  CONVERSATION_HISTORY_BUDGET)
-TOTAL_ALLOCATED = FIXED_BUDGET + DYNAMIC_BUDGET
-
-# Safety margin
-SAFETY_MARGIN = CONTEXT_WINDOW - TOTAL_ALLOCATED
-
-
-
-# ============================================
-# CONTEXT MANAGEMENT
+# DATABASE CONFIG INJECTION
 # ============================================
 
-# Primary limit: conversation turns (DEPRECATED - now using dynamic token budgeting)
-MAX_CONVERSATION_TURNS = 500  # Legacy - not used anymore, kept for compatibility
+def load_database_config():
+    """
+    Load configuration from database and inject into this module.
+    Called automatically on startup.
 
-# Safety limits: prevent runaway loading
-MAX_CONTEXT_TOKENS = 6000     # Conversation history token limit (dynamic fills this)
-MAX_TOTAL_MESSAGES = 50       # DIAGNOSTIC: Reduced from 500 to test tool calling with less history
+    This OVERWRITES all placeholder values above with real database values.
+    """
+    try:
+        import sys
+        PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        sys.path.insert(0, PROJECT_ROOT)
 
-# Context budget allocation (total: 16384 tokens)
-SYSTEM_PROMPT_TOKEN_BUDGET = 2000  # Reserve for system prompt
-RESPONSE_TOKEN_BUDGET = 2000       # Reserve for model response
-# Remaining ~12,384 tokens available for conversation
+        from database.config_loader import inject_into_module
+        import app.config as config_module
 
-# Role filtering
-CONTEXT_ROLES = ["user", "assistant", "tool"]  # Which roles to load
+        # Inject database values into this module
+        inject_into_module(config_module)
 
-# Debug mode
-CONTEXT_DEBUG = False              # Log detailed token counting info
+        # Verify critical values were loaded
+        if config_module.SERVER_SIDE_TTS_ROUTING is None:
+            print("[config.py] !! CRITICAL: SERVER_SIDE_TTS_ROUTING not loaded from database!")
+            print("[config.py] !! Check that system_config table has this key")
+            config_module.SERVER_SIDE_TTS_ROUTING = False  # Safe default
 
-# ============================================
-# SYSTEM PROMPT INCLUDES
-# ============================================
-SYSTEM_INSTRUCTIONS = True
-CHARACTER_TRAITS = True
-SHORT_TERM_FACTS = True           # Include recent manually flagged facts
-EPISODIC_MEMORIES = True
-TOOLS_ENABLE = True
-TOOL_RESULTS = True
+        return True
+    except Exception as e:
+        print(f"[config.py] !! CRITICAL: Failed to load database config: {e}")
+        print(f"[config.py] !! Server may not function correctly!")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
-# ============================================
-# DATABASE CONFIGURATION
-# ============================================
-DB_HOST = "localhost"
-DB_PORT = 5432
-DB_NAME = "irisdb"
-DB_USER = "irisuser"
-# IMPORTANT: Use IRIS_DB_PASSWORD environment variable instead of hardcoding
-# DB_PASSWORD is a fallback only - DO NOT commit real credentials
-DB_PASSWORD = "yourpassword"  # Always use IRIS_DB_PASSWORD environment variable
-IRIS_DB_PASSWORD = "yourpassword"
+# Auto-load on import
+_DB_CONFIG_LOADED = load_database_config()
 
-# ============================================
-# TOOL RESULT LIMITS
-# ============================================
-# SQL query result token safety threshold
-# Prevents context overflow from unbounded query results
-MAX_SQL_RESULT_TOKENS = 3000  # Token limit for SQL query results
-
-# ============================================
-# VISION SYSTEM CONFIGURATION
-# ============================================
-# Vision runs on separate Ollama instance (GPU 1) for GPU isolation
-VISION_ENABLED = True
-VISION_MODEL = "llava:7b"  # Running on GPU 1 via VISION_OLLAMA_URL
-VISION_AUTO_UNLOAD_MINUTES = 5  # Unload after idle time (shares GPU 1 with ComfyUI/XTTS)
-VISION_MAX_TOKENS = 1000  # Max tokens per image analysis
-VISION_MAX_IMAGE_SIZE_MB = 10  # Max image size for processing
-VISION_MAX_IMAGES_PER_REQUEST = 5  # Batch limit
-VISION_TIMEOUT_SECONDS = 30  # Per-image timeout
-VISION_DEBUG = False  # Verbose logging
+if not _DB_CONFIG_LOADED:
+    print("[config.py] !! WARNING: Running with placeholder config - check database connection!")

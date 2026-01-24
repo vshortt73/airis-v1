@@ -1,0 +1,532 @@
+{
+  "image_width": 500,
+  "image_height": 3333,
+  "total_labels": 25,
+  "labels": [
+    {
+      "text": "VITALITY SPA",
+      "confidence": 0.96,
+      "center_x": 296.4,
+      "center_y": 403.2,
+      "min_x": 224.0,
+      "max_x": 346.5,
+      "min_y": 394.5,
+      "max_y": 412.0,
+      "fragments": 2,
+      "norm_x": 0.593,
+      "norm_y": 0.121,
+      "position": "forward",
+      "side": "center",
+      "neighbors": {
+        "north": "none",
+        "south": "ROYAL THEATER",
+        "east": "none",
+        "west": "none"
+      }
+    },
+    {
+      "text": "ROYAL THEATER",
+      "confidence": 0.96,
+      "center_x": 248.8,
+      "center_y": 645.0,
+      "min_x": 207.5,
+      "max_x": 288.0,
+      "min_y": 626.0,
+      "max_y": 664.0,
+      "fragments": 2,
+      "norm_x": 0.498,
+      "norm_y": 0.194,
+      "position": "mid-forward",
+      "side": "center",
+      "neighbors": {
+        "north": "VITALITY SPA",
+        "south": "lu",
+        "east": "none",
+        "west": "none"
+      }
+    },
+    {
+      "text": "lu",
+      "confidence": 0.55,
+      "center_x": 167.8,
+      "center_y": 1003.0,
+      "min_x": 159.5,
+      "max_x": 176.0,
+      "min_y": 998.5,
+      "max_y": 1007.5,
+      "fragments": 1,
+      "norm_x": 0.336,
+      "norm_y": 0.301,
+      "position": "mid-forward",
+      "side": "port",
+      "neighbors": {
+        "north": "ROYAL THEATER",
+        "south": "STARBUCKS",
+        "east": "BOLEROS",
+        "west": "none"
+      }
+    },
+    {
+      "text": "BOLEROS",
+      "confidence": 0.92,
+      "center_x": 377.0,
+      "center_y": 1169.8,
+      "min_x": 336.0,
+      "max_x": 418.0,
+      "min_y": 1161.5,
+      "max_y": 1178.0,
+      "fragments": 1,
+      "norm_x": 0.754,
+      "norm_y": 0.351,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "ROYAL THEATER",
+        "south": "TRACK",
+        "east": "none",
+        "west": "STARBUCKS"
+      }
+    },
+    {
+      "text": "STARBUCKS",
+      "confidence": 0.96,
+      "center_x": 240.5,
+      "center_y": 1196.0,
+      "min_x": 186.0,
+      "max_x": 295.0,
+      "min_y": 1187.5,
+      "max_y": 1204.5,
+      "fragments": 1,
+      "norm_x": 0.481,
+      "norm_y": 0.359,
+      "position": "mid",
+      "side": "center",
+      "neighbors": {
+        "north": "lu",
+        "south": "SOLERA",
+        "east": "BOLEROS",
+        "west": "SPOTLIGHT KARAOKE"
+      }
+    },
+    {
+      "text": "SPOTLIGHT KARAOKE",
+      "confidence": 0.96,
+      "center_x": 110.5,
+      "center_y": 1263.0,
+      "min_x": 59.5,
+      "max_x": 161.5,
+      "min_y": 1244.0,
+      "max_y": 1282.0,
+      "fragments": 2,
+      "norm_x": 0.221,
+      "norm_y": 0.379,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "lu",
+        "south": "SOLERA",
+        "east": "STARBUCKS",
+        "west": "none"
+      }
+    },
+    {
+      "text": "SOLERA",
+      "confidence": 0.92,
+      "center_x": 136.2,
+      "center_y": 1402.5,
+      "min_x": 101.0,
+      "max_x": 171.5,
+      "min_y": 1394.0,
+      "max_y": 1411.0,
+      "fragments": 1,
+      "norm_x": 0.272,
+      "norm_y": 0.421,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "SPOTLIGHT KARAOKE",
+        "south": "PORT MERCHANTS",
+        "east": "SORRENTOS",
+        "west": "none"
+      }
+    },
+    {
+      "text": "TRACK",
+      "confidence": 0.95,
+      "center_x": 454.2,
+      "center_y": 1428.8,
+      "min_x": 446.0,
+      "max_x": 462.5,
+      "min_y": 1398.5,
+      "max_y": 1459.0,
+      "fragments": 1,
+      "norm_x": 0.908,
+      "norm_y": 0.429,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "STARBUCKS",
+        "south": "RUNNING",
+        "east": "none",
+        "west": "PROMENADE"
+      }
+    },
+    {
+      "text": "PORT MERCHANTS",
+      "confidence": 0.955,
+      "center_x": 120.0,
+      "center_y": 1470.1,
+      "min_x": 61.5,
+      "max_x": 178.0,
+      "min_y": 1451.0,
+      "max_y": 1489.5,
+      "fragments": 2,
+      "norm_x": 0.24,
+      "norm_y": 0.441,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "SOLERA",
+        "south": "GLOBE AND ATLAS PUB",
+        "east": "PROMENADE",
+        "west": "none"
+      }
+    },
+    {
+      "text": "RUNNING",
+      "confidence": 0.96,
+      "center_x": 454.2,
+      "center_y": 1508.2,
+      "min_x": 446.0,
+      "max_x": 462.5,
+      "min_y": 1465.0,
+      "max_y": 1551.5,
+      "fragments": 1,
+      "norm_x": 0.908,
+      "norm_y": 0.453,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "TRACK",
+        "south": "THE COLLECTION",
+        "east": "none",
+        "west": "SORRENTOS"
+      }
+    },
+    {
+      "text": "SORRENTOS",
+      "confidence": 0.9,
+      "center_x": 353.2,
+      "center_y": 1540.5,
+      "min_x": 298.5,
+      "max_x": 408.0,
+      "min_y": 1532.0,
+      "max_y": 1549.0,
+      "fragments": 1,
+      "norm_x": 0.706,
+      "norm_y": 0.462,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "TRACK",
+        "south": "THE COLLECTION",
+        "east": "RUNNING",
+        "west": "PROMENADE"
+      }
+    },
+    {
+      "text": "GLOBE AND ATLAS PUB",
+      "confidence": 0.96,
+      "center_x": 132.8,
+      "center_y": 1541.5,
+      "min_x": 81.0,
+      "max_x": 183.5,
+      "min_y": 1511.5,
+      "max_y": 1571.5,
+      "fragments": 4,
+      "norm_x": 0.266,
+      "norm_y": 0.462,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "PORT MERCHANTS",
+        "south": "ROYAL",
+        "east": "PROMENADE",
+        "west": "none"
+      }
+    },
+    {
+      "text": "PROMENADE",
+      "confidence": 0.95,
+      "center_x": 255.5,
+      "center_y": 1602.5,
+      "min_x": 247.0,
+      "max_x": 264.0,
+      "min_y": 1544.0,
+      "max_y": 1661.0,
+      "fragments": 1,
+      "norm_x": 0.511,
+      "norm_y": 0.481,
+      "position": "mid",
+      "side": "center",
+      "neighbors": {
+        "north": "SOLERA",
+        "south": "ROYAL",
+        "east": "SORRENTOS",
+        "west": "GLOBE AND ATLAS PUB"
+      }
+    },
+    {
+      "text": "THE COLLECTION",
+      "confidence": 0.96,
+      "center_x": 382.5,
+      "center_y": 1693.1,
+      "min_x": 329.5,
+      "max_x": 440.5,
+      "min_y": 1674.0,
+      "max_y": 1712.5,
+      "fragments": 2,
+      "norm_x": 0.765,
+      "norm_y": 0.508,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "SORRENTOS",
+        "south": "REGALIA",
+        "east": "none",
+        "west": "PROMENADE"
+      }
+    },
+    {
+      "text": "ROYAL",
+      "confidence": 0.95,
+      "center_x": 255.5,
+      "center_y": 1695.8,
+      "min_x": 247.0,
+      "max_x": 264.0,
+      "min_y": 1666.5,
+      "max_y": 1725.0,
+      "fragments": 1,
+      "norm_x": 0.511,
+      "norm_y": 0.509,
+      "position": "mid",
+      "side": "center",
+      "neighbors": {
+        "north": "PROMENADE",
+        "south": "GUEST SERVICES",
+        "east": "THE COLLECTION",
+        "west": "PROMENADE"
+      }
+    },
+    {
+      "text": "PROMENADE",
+      "confidence": 0.96,
+      "center_x": 143.2,
+      "center_y": 1767.2,
+      "min_x": 85.0,
+      "max_x": 201.5,
+      "min_y": 1759.0,
+      "max_y": 1775.5,
+      "fragments": 1,
+      "norm_x": 0.286,
+      "norm_y": 0.53,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "PROMENADE",
+        "south": "GUEST SERVICES",
+        "east": "ROYAL",
+        "west": "none"
+      }
+    },
+    {
+      "text": "REGALIA",
+      "confidence": 0.93,
+      "center_x": 393.2,
+      "center_y": 1811.5,
+      "min_x": 354.5,
+      "max_x": 432.0,
+      "min_y": 1794.0,
+      "max_y": 1829.0,
+      "fragments": 1,
+      "norm_x": 0.786,
+      "norm_y": 0.544,
+      "position": "mid",
+      "side": "starboard",
+      "neighbors": {
+        "north": "THE COLLECTION",
+        "south": "MAIN DINING ROOM",
+        "east": "none",
+        "west": "ROYAL"
+      }
+    },
+    {
+      "text": "GUEST SERVICES",
+      "confidence": 0.96,
+      "center_x": 127.2,
+      "center_y": 1882.7,
+      "min_x": 79.0,
+      "max_x": 166.0,
+      "min_y": 1864.0,
+      "max_y": 1901.5,
+      "fragments": 2,
+      "norm_x": 0.254,
+      "norm_y": 0.565,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "PROMENADE",
+        "south": "REGALIA FINE WATCHES",
+        "east": "RISING TIDE BAR",
+        "west": "none"
+      }
+    },
+    {
+      "text": "RISING TIDE BAR",
+      "confidence": 0.963,
+      "center_x": 250.2,
+      "center_y": 1889.1,
+      "min_x": 219.5,
+      "max_x": 281.0,
+      "min_y": 1859.0,
+      "max_y": 1919.0,
+      "fragments": 3,
+      "norm_x": 0.5,
+      "norm_y": 0.567,
+      "position": "mid",
+      "side": "center",
+      "neighbors": {
+        "north": "PROMENADE",
+        "south": "REGALIA FINE WATCHES",
+        "east": "REGALIA",
+        "west": "GUEST SERVICES"
+      }
+    },
+    {
+      "text": "REGALIA FINE WATCHES",
+      "confidence": 0.943,
+      "center_x": 130.2,
+      "center_y": 2035.3,
+      "min_x": 62.5,
+      "max_x": 197.5,
+      "min_y": 2016.0,
+      "max_y": 2054.5,
+      "fragments": 3,
+      "norm_x": 0.26,
+      "norm_y": 0.611,
+      "position": "mid",
+      "side": "port",
+      "neighbors": {
+        "north": "RISING TIDE BAR",
+        "south": "MAIN DINING ROOM",
+        "east": "REGALIA",
+        "west": "none"
+      }
+    },
+    {
+      "text": "MAIN DINING ROOM",
+      "confidence": 0.96,
+      "center_x": 248.2,
+      "center_y": 2520.6,
+      "min_x": 168.0,
+      "max_x": 331.5,
+      "min_y": 2513.0,
+      "max_y": 2528.0,
+      "fragments": 3,
+      "norm_x": 0.496,
+      "norm_y": 0.756,
+      "position": "mid-aft",
+      "side": "center",
+      "neighbors": {
+        "north": "REGALIA FINE WATCHES",
+        "south": "TRACK",
+        "east": "none",
+        "west": "none"
+      }
+    },
+    {
+      "text": "TRACK",
+      "confidence": 0.96,
+      "center_x": 455.2,
+      "center_y": 2757.2,
+      "min_x": 447.0,
+      "max_x": 463.5,
+      "min_y": 2727.0,
+      "max_y": 2787.5,
+      "fragments": 1,
+      "norm_x": 0.91,
+      "norm_y": 0.827,
+      "position": "mid-aft",
+      "side": "starboard",
+      "neighbors": {
+        "north": "MAIN DINING ROOM",
+        "south": "RUNNING",
+        "east": "none",
+        "west": "TRACK"
+      }
+    },
+    {
+      "text": "RUNNING",
+      "confidence": 0.96,
+      "center_x": 455.2,
+      "center_y": 2836.8,
+      "min_x": 447.0,
+      "max_x": 463.5,
+      "min_y": 2793.5,
+      "max_y": 2880.0,
+      "fragments": 1,
+      "norm_x": 0.91,
+      "norm_y": 0.851,
+      "position": "aft",
+      "side": "starboard",
+      "neighbors": {
+        "north": "TRACK",
+        "south": "none",
+        "east": "none",
+        "west": "TRACK"
+      }
+    },
+    {
+      "text": "TRACK",
+      "confidence": 0.96,
+      "center_x": 45.5,
+      "center_y": 2897.2,
+      "min_x": 37.0,
+      "max_x": 54.0,
+      "min_y": 2867.0,
+      "max_y": 2927.5,
+      "fragments": 1,
+      "norm_x": 0.091,
+      "norm_y": 0.869,
+      "position": "aft",
+      "side": "port",
+      "neighbors": {
+        "north": "MAIN DINING ROOM",
+        "south": "RUNNING",
+        "east": "TRACK",
+        "west": "none"
+      }
+    },
+    {
+      "text": "RUNNING",
+      "confidence": 0.96,
+      "center_x": 45.5,
+      "center_y": 2976.8,
+      "min_x": 37.0,
+      "max_x": 54.0,
+      "min_y": 2933.5,
+      "max_y": 3020.0,
+      "fragments": 1,
+      "norm_x": 0.091,
+      "norm_y": 0.893,
+      "position": "aft",
+      "side": "port",
+      "neighbors": {
+        "north": "TRACK",
+        "south": "none",
+        "east": "TRACK",
+        "west": "none"
+      }
+    }
+  ]
+}
