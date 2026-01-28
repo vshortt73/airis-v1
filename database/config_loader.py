@@ -84,6 +84,14 @@ class DatabaseConfig:
                 elif value_type == 'json':
                     import json
                     value = json.loads(value_str)
+                    # JSON always deserializes object keys as strings.
+                    # Convert numeric string keys to int so config values
+                    # match the types code expects (e.g., {1: 0.70} not {"1": 0.70})
+                    if isinstance(value, dict):
+                        value = {
+                            int(k) if k.lstrip('-').isdigit() else k: v
+                            for k, v in value.items()
+                        }
                 else:  # string
                     value = value_str
 
@@ -95,11 +103,11 @@ class DatabaseConfig:
             self._last_load = datetime.now()
             self._load_attempted = True
 
-            print(f"[config_loader] ✓ Loaded {len(self._config_cache)} config values from database")
+            print(f"[config_loader] ✓ Loaded {len(self._config_cache)} config values from database", file=sys.stderr)
             return True
 
         except Exception as e:
-            print(f"[config_loader] ✗ Failed to load from database: {e}")
+            print(f"[config_loader] ✗ Failed to load from database: {e}", file=sys.stderr)
             self._load_attempted = True
             return False
 
@@ -152,7 +160,7 @@ class DatabaseConfig:
             """, (value_str, modified_by, key))
 
             if cursor.rowcount == 0:
-                print(f"[config_loader] ✗ Key not found: {key}")
+                print(f"[config_loader] ✗ Key not found: {key}", file=sys.stderr)
                 cursor.close()
                 conn.close()
                 return False
@@ -164,11 +172,11 @@ class DatabaseConfig:
             # Update cache
             self._config_cache[key] = value
 
-            print(f"[config_loader] ✓ Updated {key} = {value} (by {modified_by})")
+            print(f"[config_loader] ✓ Updated {key} = {value} (by {modified_by})", file=sys.stderr)
             return True
 
         except Exception as e:
-            print(f"[config_loader] ✗ Failed to update {key}: {e}")
+            print(f"[config_loader] ✗ Failed to update {key}: {e}", file=sys.stderr)
             return False
 
     def create_or_update(self, key: str, value: Any, category: str = 'general',
@@ -218,11 +226,11 @@ class DatabaseConfig:
             # Update cache
             self._config_cache[key] = value
 
-            print(f"[config_loader] ✓ Upserted {key} = {value} (by {modified_by})")
+            print(f"[config_loader] ✓ Upserted {key} = {value} (by {modified_by})", file=sys.stderr)
             return True
 
         except Exception as e:
-            print(f"[config_loader] ✗ Failed to upsert {key}: {e}")
+            print(f"[config_loader] ✗ Failed to upsert {key}: {e}", file=sys.stderr)
             return False
 
     def get_all_by_category(self, category: str) -> Dict[str, Any]:
@@ -258,7 +266,7 @@ class DatabaseConfig:
             return result
 
         except Exception as e:
-            print(f"[config_loader] ✗ Failed to get category {category}: {e}")
+            print(f"[config_loader] ✗ Failed to get category {category}: {e}", file=sys.stderr)
             return {}
 
     def get_all(self) -> Dict[str, Any]:
@@ -360,10 +368,10 @@ def inject_into_module(module):
     for key, value in all_config.items():
         setattr(module, key, value)
 
-    print(f"[config_loader] ✓ Injected {len(all_config)} config values into {module.__name__}")
+    print(f"[config_loader] ✓ Injected {len(all_config)} config values into {module.__name__}", file=sys.stderr)
 
     # Debug: explicitly log SERVER_SIDE_TTS_ROUTING
     if 'SERVER_SIDE_TTS_ROUTING' in all_config:
-        print(f"[config_loader] ✓ SERVER_SIDE_TTS_ROUTING = {all_config['SERVER_SIDE_TTS_ROUTING']} (from database)")
+        print(f"[config_loader] ✓ SERVER_SIDE_TTS_ROUTING = {all_config['SERVER_SIDE_TTS_ROUTING']} (from database)", file=sys.stderr)
     else:
-        print(f"[config_loader] ⚠ SERVER_SIDE_TTS_ROUTING not found in database - using fallback")
+        print(f"[config_loader] ⚠ SERVER_SIDE_TTS_ROUTING not found in database - using fallback", file=sys.stderr)

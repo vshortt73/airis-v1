@@ -29,6 +29,7 @@ from database.persistence import get_db_connection, load_recent_conversation
 from database.fast_reactive_memory import FastReactiveMemory
 from core.vision_manager import analyze_images_for_conversation
 from core.document_processor import process_documents_for_conversation
+from core.document_indexer import index_document_to_knowledge_base
 from core.emotional_state import get_emotional_tracker
 from core.websocket_broadcast import set_broadcast_function
 from core.want_detector import process_response_async as detect_wants
@@ -1105,6 +1106,9 @@ async def websocket_chat(websocket: WebSocket):
                 sender=sender
             )
 
+            # Append user message to prompt snapshot (if active)
+            active_conversation.append_to_snapshot({"role": "user", "content": user_message})
+
             # Check if we should refresh memories (every 10 messages)
             message_count = len(active_conversation.get_messages())
             await refresh_memories_if_needed(message_count)
@@ -1176,10 +1180,14 @@ async def websocket_chat(websocket: WebSocket):
                         print(f"[routes_chat.py][websocket_chat] │  ✓ Vision analysis complete ({len(vision_analysis)} chars)")
 
                         # Add vision analysis to conversation as tool message
+                        vision_content = f"[Vision Analysis]\n{vision_analysis}"
                         active_conversation.add_tool_message(
-                            content=f"[Vision Analysis]\n{vision_analysis}",
+                            content=vision_content,
                             tool_name="vision_analysis"
                         )
+                        active_conversation.append_to_snapshot({
+                            "role": "tool", "content": vision_content, "tool_name": "vision_analysis"
+                        })
 
                         # Notify client
                         await websocket.send_json({
@@ -1219,7 +1227,7 @@ async def websocket_chat(websocket: WebSocket):
 
                 try:
                     # Extract text from documents
-                    document_text = await process_documents_for_conversation(
+                    document_text, full_documents = await process_documents_for_conversation(
                         documents=user_documents,
                         user_message=user_message if user_message else None
                     )
@@ -1227,11 +1235,30 @@ async def websocket_chat(websocket: WebSocket):
                     if document_text:
                         print(f"[routes_chat.py][websocket_chat] │  ✓ Document extraction complete ({len(document_text):,} chars)")
 
+                        # Launch background indexing for each full document
+                        for full_doc in full_documents:
+                            asyncio.create_task(
+                                index_document_to_knowledge_base(
+                                    title=full_doc["title"],
+                                    full_text=full_doc["full_text"],
+                                    file_type=full_doc["file_type"],
+                                    category="uploaded_documents"
+                                )
+                            )
+                            print(f"[routes_chat.py][websocket_chat] │  → Queued '{full_doc['title']}' for knowledge base indexing")
+
                         # Add document content to conversation as tool message
+                        kb_note = ""
+                        if full_documents:
+                            kb_note = "\n[Note: This document has been automatically saved to the knowledge base.]"
+                        doc_content = f"[Document Content]\n{document_text}{kb_note}"
                         active_conversation.add_tool_message(
-                            content=f"[Document Content]\n{document_text}",
+                            content=doc_content,
                             tool_name="document_extraction"
                         )
+                        active_conversation.append_to_snapshot({
+                            "role": "tool", "content": doc_content, "tool_name": "document_extraction"
+                        })
 
                         # Notify client
                         await websocket.send_json({
@@ -1259,33 +1286,27 @@ async def websocket_chat(websocket: WebSocket):
             tool_definitions = tool_manager.get_tool_definitions_for_ollama()
             print(f"[routes_chat.py][websocket_chat] ├─ TOOLS AVAILABLE: {len(tool_definitions)} ─┤")
 
-            # Assemble context - PHASE 2 uses unified builder for KV cache optimization
-            if USE_UNIFIED_CONTEXT:
-                # PHASE 2: Unified context (KV cache optimized)
-                # - No tiered context levels - always full context
-                # - Tool call IDs normalized for cache consistency
-                # - Static sections byte-identical across turns
-                all_messages, budget = assemble_unified_context(active_conversation, tool_definitions)
-            else:
-                # LEGACY: Tiered context with dynamic budgeting
-                all_messages, budget = assemble_full_context(active_conversation, tool_definitions, skip_fast_memory=False, context_level=context_level)
+            # Assemble context with prompt snapshot (KV cache batch trim optimization)
+            # When batch trim is enabled, reuses a frozen snapshot for N turns
+            # instead of rebuilding every turn — keeps prefix byte-identical for KV cache
+            from core.system_prompt import assemble_context_with_snapshot
+            all_messages, budget = assemble_context_with_snapshot(
+                active_conversation, tool_definitions,
+                context_level=context_level,
+                use_unified=USE_UNIFIED_CONTEXT
+            )
 
             # ============================================
             # VOICE/VIDEO MODE: Conversational Style Override
             # ============================================
             # When output is being spoken or shown as video, inject instruction
             # to use natural conversational style instead of formatted text.
+            # Voice/video mode flag — instruction injected AFTER snapshot
+            # to avoid tainting the frozen prefix (KV cache optimization)
             state = connection_manager.get_state(websocket)
-            if state and state.output_mode in (OutputMode.AUDIO, OutputMode.VIDEO):
-                conversational_instruction = """
-
-<voice-mode>
-CRITICAL: Your response will be spoken aloud as audio or video. Write entirely in flowing, conversational prose. No bullet points, no numbered lists, no markdown formatting, no headers, no bold text, no code blocks. Just natural sentences and paragraphs as if you're speaking face-to-face. Keep it warm and personable. Do not sign off or add postscripts. Start naturally without preambles like "Sure!" or "Great question!"
-</voice-mode>"""
-                # Append to system prompt (first message)
-                if all_messages and all_messages[0].get("role") == "system":
-                    all_messages[0]["content"] += conversational_instruction
-                    print(f"[routes_chat.py][websocket_chat] 🎤 Voice/video mode: conversational style enabled")
+            voice_mode_active = state and state.output_mode in (OutputMode.AUDIO, OutputMode.VIDEO)
+            if voice_mode_active:
+                print(f"[routes_chat.py][websocket_chat] 🎤 Voice/video mode: conversational style will be appended at end")
 
             print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT READY ─┤")
             print(f"[routes_chat.py][websocket_chat] Messages: {budget['message_count']}, Images: {budget['image_count']}")
@@ -1322,9 +1343,25 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
             print(f"[routes_chat.py][websocket_chat] ├─ STREAMING WITH TOOLS ─┤")
 
             # Apply /no_think if thinking is disabled (only for LLM call, not stored)
-            llm_messages = apply_no_think(all_messages) if not thinking_enabled else all_messages
+            llm_messages = apply_no_think(all_messages) if not thinking_enabled else list(all_messages)
             if not thinking_enabled:
                 print(f"[routes_chat.py][websocket_chat] 🧠 Thinking disabled - /no_think applied")
+
+            # Voice/video mode: append instruction at END of messages list (not in system prompt)
+            # This preserves the frozen prefix for KV cache — the instruction is always at the tail
+            if voice_mode_active:
+                llm_messages.append({
+                    "role": "system",
+                    "content": (
+                        "CRITICAL: Your response will be spoken aloud as audio or video. "
+                        "Write entirely in flowing, conversational prose. No bullet points, "
+                        "no numbered lists, no markdown formatting, no headers, no bold text, "
+                        "no code blocks. Just natural sentences and paragraphs as if you're "
+                        "speaking face-to-face. Keep it warm and personable. Do not sign off "
+                        "or add postscripts. Start naturally without preambles like \"Sure!\" "
+                        "or \"Great question!\""
+                    )
+                })
 
             # ============================================
             # SERVER-SIDE TTS/VIDEO ROUTING SETUP
@@ -1350,6 +1387,9 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
             tool_response = None
             streaming_kv_metrics = None
 
+            # Thinking state: llama.cpp sends reasoning_content in separate delta field
+            thinking_active = False
+
             # Start concurrent WebSocket listener for interrupt messages during streaming
             async def listen_for_interrupt():
                 """Listen for interrupt messages while streaming"""
@@ -1372,20 +1412,25 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
             interrupt_listener = asyncio.create_task(listen_for_interrupt())
 
             try:
-                async for chunk, final_response in chat_completion_stream_with_tools(llm_messages, tools=tool_definitions):
+                async for chunk, final_response, is_thinking in chat_completion_stream_with_tools(llm_messages, tools=tool_definitions):
                     if chunk:
-                        # Stream content to client as it arrives
-                        full_response += chunk
-                        await websocket.send_json({
-                            "type": "chunk",
-                            "content": chunk
-                        })
-
-                        # Feed to sentence processor for TTS/video (server-side routing)
-                        if use_server_tts and state.sentence_processor:
-                            batches = state.sentence_processor.add_chunk(chunk, is_video_mode)
-                            for batch in batches:
-                                state.tts_queue.append(batch)
+                        if is_thinking:
+                            # Reasoning content — send to thinking UI, skip TTS/DB
+                            if not thinking_active:
+                                thinking_active = True
+                                await websocket.send_json({"type": "thinking_start"})
+                            await websocket.send_json({"type": "thinking_chunk", "content": chunk})
+                        else:
+                            # Regular content
+                            if thinking_active:
+                                thinking_active = False
+                                await websocket.send_json({"type": "thinking_end"})
+                            full_response += chunk
+                            await websocket.send_json({"type": "chunk", "content": chunk})
+                            if use_server_tts and state and state.sentence_processor:
+                                batches = state.sentence_processor.add_chunk(chunk, is_video_mode)
+                                for batch in batches:
+                                    state.tts_queue.append(batch)
 
                     if final_response:
                         # End of stream - capture response object with potential tool_calls
@@ -1426,6 +1471,13 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
                     "content": f"Streaming failed: {str(stream_error)}"
                 })
             finally:
+                # Close any open thinking block
+                if thinking_active:
+                    thinking_active = False
+                    try:
+                        await websocket.send_json({"type": "thinking_end"})
+                    except Exception:
+                        pass
                 # Stop the interrupt listener
                 interrupt_listener.cancel()
                 try:
@@ -1502,6 +1554,12 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
                 # Save assistant message with tool calls (include any streamed content)
                 active_conversation.add_assistant_message(content=full_response, tool_calls=tool_response.tool_calls)
 
+                # Append assistant message (with tool calls) to snapshot
+                snapshot_assistant_msg = {"role": "assistant", "content": full_response}
+                if tool_response.tool_calls:
+                    snapshot_assistant_msg["tool_calls"] = tool_response.tool_calls
+                active_conversation.append_to_snapshot(snapshot_assistant_msg)
+
                 # Add tool results to conversation
                 for tool_call, result in zip(tool_response.tool_calls, tool_results):
                     function_info = tool_call.get("function", {})
@@ -1536,35 +1594,66 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
                         "Present only the data supplied below.\n\n"
                         "Tool result data: "
                     )
+                    tool_content = result_instructions + json.dumps(tool_result_data)
                     active_conversation.add_tool_message(
-                        content=result_instructions + json.dumps(tool_result_data),
+                        content=tool_content,
                         tool_name=tool_name,
                         tool_call_id=tool_call_id,
                         images=tool_images if tool_images else None
                     )
 
+                    # Append tool message to snapshot
+                    active_conversation.append_to_snapshot({
+                        "role": "tool",
+                        "content": tool_content,
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id
+                    })
+
+                    # Spoiler detection: certain tools invalidate the prompt snapshot
+                    if result.get("success"):
+                        try:
+                            args = function_info.get("arguments", {})
+                            if isinstance(args, str):
+                                args = json.loads(args)
+                            action = args.get("action", "")
+                            if tool_name == "trait" and action == "modify":
+                                active_conversation.invalidate_snapshot("trait_modify")
+                            elif tool_name == "memory" and action == "insert":
+                                active_conversation.invalidate_snapshot("memory_insert")
+                        except Exception:
+                            pass
+
                 # Reassemble context with tool results for follow-up call
-                if USE_UNIFIED_CONTEXT:
-                    all_messages, budget = assemble_unified_context(active_conversation, tool_definitions)
-                else:
-                    all_messages, budget = assemble_full_context(active_conversation, tool_definitions, skip_fast_memory=True, context_level=context_level)
-
-                # Re-apply voice/video mode conversational style for follow-up
-                if state and state.output_mode in (OutputMode.AUDIO, OutputMode.VIDEO):
-                    conversational_instruction = """
-
-<voice-mode>
-CRITICAL: Your response will be spoken aloud as audio or video. Write entirely in flowing, conversational prose. No bullet points, no numbered lists, no markdown formatting, no headers, no bold text, no code blocks. Just natural sentences and paragraphs as if you're speaking face-to-face. Keep it warm and personable. Do not sign off or add postscripts. Start naturally without preambles like "Sure!" or "Great question!"
-</voice-mode>"""
-                    if all_messages and all_messages[0].get("role") == "system":
-                        all_messages[0]["content"] += conversational_instruction
+                from core.system_prompt import assemble_context_with_snapshot
+                all_messages, budget = assemble_context_with_snapshot(
+                    active_conversation, tool_definitions,
+                    context_level=context_level,
+                    use_unified=USE_UNIFIED_CONTEXT
+                )
 
                 print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (with tool results) ─┤")
 
                 # Follow-up streaming call to present tool results (no tools this time)
                 print(f"[routes_chat.py][websocket_chat] ├─ FOLLOW-UP STREAMING (tool results) ─┤")
-                llm_messages = apply_no_think(all_messages) if not thinking_enabled else all_messages
+                llm_messages = apply_no_think(all_messages) if not thinking_enabled else list(all_messages)
+
+                # Voice/video mode: append at end for follow-up too
+                if voice_mode_active:
+                    llm_messages.append({
+                        "role": "system",
+                        "content": (
+                            "CRITICAL: Your response will be spoken aloud as audio or video. "
+                            "Write entirely in flowing, conversational prose. No bullet points, "
+                            "no numbered lists, no markdown formatting, no headers, no bold text, "
+                            "no code blocks. Just natural sentences and paragraphs as if you're "
+                            "speaking face-to-face. Keep it warm and personable. Do not sign off "
+                            "or add postscripts. Start naturally without preambles like \"Sure!\" "
+                            "or \"Great question!\""
+                        )
+                    })
                 full_response = ""  # Reset for follow-up response
+                thinking_active = False  # Reset think state for follow-up
 
                 # Reset sentence processor for follow-up if using server-side TTS
                 if use_server_tts and state:
@@ -1605,19 +1694,23 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
                                 }
                                 print(f"[routes_chat.py][websocket_chat] ├─ KV CACHE METRICS (follow-up) ─┤")
                                 print(f"[routes_chat.py][websocket_chat] │  {chunk['cache_n']:,} cached + {chunk['prompt_n']:,} new = {chunk['cache_n'] + chunk['prompt_n']:,} tokens ({chunk['efficiency']:.1f}%)")
-                            else:
-                                # Regular content chunk
-                                full_response += chunk
-                                await websocket.send_json({
-                                    "type": "chunk",
-                                    "content": chunk
-                                })
-
-                                # Feed to sentence processor for TTS/video (server-side routing)
-                                if use_server_tts and state and state.sentence_processor:
-                                    batches = state.sentence_processor.add_chunk(chunk, is_video_mode)
-                                    for batch in batches:
-                                        state.tts_queue.append(batch)
+                            elif isinstance(chunk, tuple):
+                                text, is_thinking = chunk
+                                if is_thinking:
+                                    if not thinking_active:
+                                        thinking_active = True
+                                        await websocket.send_json({"type": "thinking_start"})
+                                    await websocket.send_json({"type": "thinking_chunk", "content": text})
+                                else:
+                                    if thinking_active:
+                                        thinking_active = False
+                                        await websocket.send_json({"type": "thinking_end"})
+                                    full_response += text
+                                    await websocket.send_json({"type": "chunk", "content": text})
+                                    if use_server_tts and state and state.sentence_processor:
+                                        batches = state.sentence_processor.add_chunk(text, is_video_mode)
+                                        for batch in batches:
+                                            state.tts_queue.append(batch)
 
                         # Check for interrupt
                         if interrupt_manager.is_interrupted():
@@ -1706,8 +1799,12 @@ CRITICAL: Your response will be spoken aloud as audio or video. Write entirely i
                     print(f"[routes_chat.py][websocket_chat] │  Fact IDs: {fact_ids}")
                     update_fact_references(fact_ids)
 
-                active_conversation.add_assistant_message(cleaned_response if fact_ids else full_response)
+                final_content = cleaned_response if fact_ids else full_response
+                active_conversation.add_assistant_message(final_content)
                 print(f"[routes_chat.py][websocket_chat] ✓ Final response saved")
+
+                # Append final assistant message to snapshot
+                active_conversation.append_to_snapshot({"role": "assistant", "content": final_content})
 
                 # Scan for want expressions (fire-and-forget, don't block response)
                 # Layer 1: Check if user asked about garden/motivations - skip detection if so

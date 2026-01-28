@@ -194,6 +194,12 @@ curl http://node2:11437/health  # Sentiment
 
 7. **Emotional State Tracking**: Sentiment analysis updates Iris's emotional state each turn, influencing responses.
 
+8. **Batch Trim Prompt Snapshot**: The entire assembled prompt is frozen as a snapshot for N turns (default 5). New messages are appended without rebuilding. Spoiler events (trait modify, memory insert) force immediate rebuild. Achieves ~99% KV cache reuse. Config: `BATCH_TRIM_ENABLED`, `BATCH_TRIM_SIZE`, `BATCH_TRIM_HEADROOM_TOKENS`.
+
+9. **Thinking Block**: When thinking is enabled, Qwen3 reasoning is streamed to the UI via `reasoning_content` delta field (NOT `<think>` tags). Thinking content is displayed in a collapsible block but excluded from DB storage, TTS, and snapshot.
+
+10. **Prompt Effectiveness Pattern**: Any system prompt data block (traits, dreams, memories) must have a corresponding CRITICAL RULES directive in instruction ID 103 that says "read it, don't guess." The thinking block serves as an audit tool to verify compliance.
+
 ### Module Structure
 
 ```

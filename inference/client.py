@@ -1,13 +1,13 @@
 """
 LLM API client for Iris v3
-OpenAI-compatible interface for llama-server with tool calling support
+OpenAI-compatible interface with switchable backends (llama-server / SGLang)
 
-Migration: Ollama → llama-server (Phase 1)
-- Endpoint: /api/chat → /v1/chat/completions
-- Payload: Ollama options → OpenAI flat params
-- Response: message → choices[0].message
-- Streaming: NDJSON → SSE data: prefix
-- KV Cache: metrics available in __verbose.timings.cache_n
+Both backends expose /v1/chat/completions (OpenAI-compatible).
+The difference is metrics extraction:
+- llama.cpp: timings object with cache_n, prompt_n, predicted_n, etc.
+- SGLang: usage object with prompt_tokens_details.cached_tokens (RadixAttention)
+
+Backend is selected via INFERENCE_BACKEND config ('llamacpp' or 'sglang').
 """
 from colorama import Fore, Back, Style, init
 import httpx
@@ -110,6 +110,87 @@ def prompt_compare(prompt):
 
 
 
+def _get_backend() -> str:
+    """Return the active inference backend ('llamacpp' or 'sglang')"""
+    return getattr(config, 'INFERENCE_BACKEND', 'llamacpp').lower()
+
+
+def _extract_timings_from_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract unified timing metrics from a non-streaming response.
+
+    llama.cpp: top-level 'timings' object or __verbose.timings
+    SGLang: 'usage' object with prompt_tokens_details.cached_tokens
+    """
+    backend = _get_backend()
+
+    if backend == 'sglang':
+        usage = response_data.get("usage", {})
+        prompt_total = usage.get("prompt_tokens", 0)
+        cached = 0
+        details = usage.get("prompt_tokens_details", {})
+        if details:
+            cached = details.get("cached_tokens", 0)
+        return {
+            "cache_n": cached,
+            "prompt_n": prompt_total - cached,
+            "predicted_n": usage.get("completion_tokens", 0),
+            "predicted_ms": 0,
+            "prompt_ms": 0,
+            "predicted_per_second": 0,
+            "prompt_per_second": 0,
+        }
+    else:
+        # llama.cpp: try top-level timings first, then __verbose.timings
+        timings = response_data.get("timings", {})
+        if not timings:
+            timings = response_data.get("__verbose", {}).get("timings", {})
+        return {
+            "cache_n": timings.get("cache_n", 0),
+            "prompt_n": timings.get("prompt_n", 0),
+            "predicted_n": timings.get("predicted_n", 0),
+            "predicted_ms": timings.get("predicted_ms", 0),
+            "prompt_ms": timings.get("prompt_ms", 0),
+            "predicted_per_second": timings.get("predicted_per_second", 0),
+            "prompt_per_second": timings.get("prompt_per_second", 0),
+        }
+
+
+def _extract_timings_from_stream_chunk(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Extract unified timing metrics from a streaming SSE chunk.
+    Returns a timings dict on the final chunk, or None otherwise.
+
+    llama.cpp: 'timings' key on the final chunk (with finish_reason)
+    SGLang: 'usage' key on the final chunk (when stream_options.include_usage is set)
+    """
+    backend = _get_backend()
+
+    if backend == 'sglang':
+        usage = chunk.get("usage")
+        if not usage:
+            return None
+        prompt_total = usage.get("prompt_tokens", 0)
+        cached = 0
+        details = usage.get("prompt_tokens_details", {})
+        if details:
+            cached = details.get("cached_tokens", 0)
+        return {
+            "cache_n": cached,
+            "prompt_n": prompt_total - cached,
+            "predicted_n": usage.get("completion_tokens", 0),
+            "predicted_ms": 0,
+            "prompt_ms": 0,
+            "predicted_per_second": 0,
+            "prompt_per_second": 0,
+        }
+    else:
+        timings = chunk.get("timings")
+        if not timings:
+            return None
+        return timings
+
+
 class ToolCallResponse:
     """Response object that may contain tool calls (OpenAI-compatible format)"""
 
@@ -119,8 +200,8 @@ class ToolCallResponse:
         choices = response_data.get("choices", [])
         self.message = choices[0].get("message", {}) if choices else {}
         self.tool_calls = self.message.get("tool_calls", [])
-        # Extract KV cache metrics from timings (top-level in llama.cpp response)
-        timings = response_data.get("timings", {})
+        # Extract KV cache metrics via backend-aware helper
+        timings = _extract_timings_from_response(response_data)
         self.cache_tokens = timings.get("cache_n", 0)
         self.prompt_tokens = timings.get("prompt_n", 0)
         self.predicted_tokens = timings.get("predicted_n", 0)
@@ -278,7 +359,11 @@ async def chat_completion_stream(
         "top_p": 0.95,
     }
 
-    print(f"[client.py][chat_completion_stream] POST {url}")
+    # SGLang needs stream_options to include usage in final chunk
+    if _get_backend() == 'sglang':
+        payload["stream_options"] = {"include_usage": True}
+
+    print(f"[client.py][chat_completion_stream] POST {url} (backend: {_get_backend()})")
     print(f"[client.py][chat_completion_stream] Sending {len(messages)} messages")
 
     try:
@@ -308,13 +393,25 @@ async def chat_completion_stream(
                             choices = chunk.get("choices", [])
                             if choices:
                                 delta = choices[0].get("delta", {})
+                                # Yield reasoning content (thinking)
+                                reasoning = delta.get("reasoning_content")
+                                if reasoning:
+                                    chunk_count += 1
+                                    yield (reasoning, True)  # (text, is_thinking)
                                 content = delta.get("content")
                                 if content:
                                     chunk_count += 1
-                                    yield content
+                                    yield (content, False)
                                 # Capture timings from final chunk (has finish_reason)
-                                if choices[0].get("finish_reason") and chunk.get("timings"):
-                                    final_timings = chunk.get("timings")
+                                if choices[0].get("finish_reason"):
+                                    extracted = _extract_timings_from_stream_chunk(chunk)
+                                    if extracted:
+                                        final_timings = extracted
+                            # SGLang may send usage in a separate final chunk (no choices)
+                            if not choices:
+                                extracted = _extract_timings_from_stream_chunk(chunk)
+                                if extracted:
+                                    final_timings = extracted
                         except json.JSONDecodeError as e:
                             print(f"[client.py][chat_completion_stream] JSON decode error: {e}")
                             continue
@@ -395,12 +492,16 @@ async def chat_completion_stream_with_tools(
         "temperature": 0.7,
     }
 
+    # SGLang needs stream_options to include usage in final chunk
+    if _get_backend() == 'sglang':
+        payload["stream_options"] = {"include_usage": True}
+
     # Add tools if provided
     if tools:
         payload["tools"] = tools
         print(f"[client.py][chat_completion_stream_with_tools] Sending {len(tools)} tools (streaming)")
 
-    print(f"[client.py][chat_completion_stream_with_tools] POST {url}")
+    print(f"[client.py][chat_completion_stream_with_tools] POST {url} (backend: {_get_backend()})")
 
     response_obj = StreamingToolResponse()
     chunk_count = 0
@@ -436,12 +537,17 @@ async def chat_completion_stream_with_tools(
                             if chunk_count <= 3:
                                 print(f"[client.py][DEBUG] Chunk {chunk_count}: {json.dumps(chunk)[:200]}")
 
+                            # Stream reasoning content (thinking) as it arrives
+                            reasoning = delta.get("reasoning_content")
+                            if reasoning:
+                                yield (reasoning, None, True)  # 3rd element = is_thinking
+
                             # Stream text content as it arrives
                             content = delta.get("content")
                             if content:
                                 response_obj.content += content
                                 content_chunks += 1
-                                yield (content, None)
+                                yield (content, None, False)
 
                             # Check for tool_calls in delta (streaming tool calls)
                             if "tool_calls" in delta:
@@ -466,8 +572,15 @@ async def chat_completion_stream_with_tools(
                             finish_reason = choice.get("finish_reason")
                             if finish_reason:
                                 response_obj.raw_message["finish_reason"] = finish_reason
-                                if chunk.get("timings"):
-                                    final_timings = chunk.get("timings")
+                                extracted = _extract_timings_from_stream_chunk(chunk)
+                                if extracted:
+                                    final_timings = extracted
+
+                        # SGLang may send usage in a separate final chunk (no choices)
+                        if not chunk.get("choices"):
+                            extracted = _extract_timings_from_stream_chunk(chunk)
+                            if extracted:
+                                final_timings = extracted
 
                     except json.JSONDecodeError:
                         continue
@@ -509,7 +622,7 @@ async def chat_completion_stream_with_tools(
             print(f"  - {tc.get('function', {}).get('name')}")
 
     # Yield final response object with tool calls (if any)
-    yield ("", response_obj)
+    yield ("", response_obj, False)
 
 async def chat_completions(
     messages: List[Dict[str, str]],
@@ -541,12 +654,12 @@ async def chat_completions(
         "temperature": 0.1,
     }
 
-    # Add grammar if provided (llama-server supports this via grammar parameter)
-    if grammar_file:
+    # Add grammar if provided (llama-server only; SGLang doesn't support GBNF)
+    if grammar_file and _get_backend() != 'sglang':
         with open(grammar_file, 'r') as f:
             payload["grammar"] = f.read()
 
-    print(f"[client.py][chat_completions] POST {url}")
+    print(f"[client.py][chat_completions] POST {url} (backend: {_get_backend()})")
 
     async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(url, json=payload)
@@ -554,9 +667,8 @@ async def chat_completions(
 
         data = response.json()
 
-        # Log KV cache metrics if available
-        verbose = data.get("__verbose", {})
-        timings = verbose.get("timings", {})
+        # Log KV cache metrics via backend-aware extraction
+        timings = _extract_timings_from_response(data)
         cache_n = timings.get("cache_n", 0)
         if cache_n > 0:
             print(f"[client.py][chat_completions] " + Style.BRIGHT + Fore.GREEN +

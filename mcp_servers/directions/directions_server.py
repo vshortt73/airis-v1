@@ -32,7 +32,7 @@ def get_navigator() -> ShipNavigator:
         if not MAP_FILE.exists():
             raise FileNotFoundError(f"Ship map not found: {MAP_FILE}")
         navigator = ShipNavigator(str(MAP_FILE))
-        print(f"[ship] Loaded map: {navigator.ship_name}")
+        print(f"[ship] Loaded map: {navigator.ship_name}", file=sys.stderr)
     return navigator
 
 
@@ -40,7 +40,7 @@ def _handle_directions(start: str, end: str) -> dict:
     """Get directions between two locations"""
     try:
         nav = get_navigator()
-        print(f"[ship][directions] From: '{start}' To: '{end}'")
+        print(f"[ship][directions] From: '{start}' To: '{end}'", file=sys.stderr)
 
         start_id = nav.resolve_location(start)
         end_id = nav.resolve_location(end)
@@ -66,11 +66,11 @@ def _handle_directions(start: str, end: str) -> dict:
             "steps": len(path) if path else 0
         }
 
-        print(f"[ship][directions] ✓ Found route: {result['steps']} steps")
+        print(f"[ship][directions] ✓ Found route: {result['steps']} steps", file=sys.stderr)
         return result
 
     except Exception as e:
-        print(f"[ship][directions] ✗ Error: {e}")
+        print(f"[ship][directions] ✗ Error: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
@@ -78,7 +78,7 @@ def _handle_locations(deck: Optional[int] = None) -> dict:
     """List available locations"""
     try:
         nav = get_navigator()
-        print(f"[ship][locations] Deck filter: {deck}")
+        print(f"[ship][locations] Deck filter: {deck}", file=sys.stderr)
 
         locations = nav.list_locations(deck=deck)
 
@@ -90,11 +90,11 @@ def _handle_locations(deck: Optional[int] = None) -> dict:
             "count": len(locations)
         }
 
-        print(f"[ship][locations] ✓ Found {result['count']} locations")
+        print(f"[ship][locations] ✓ Found {result['count']} locations", file=sys.stderr)
         return result
 
     except Exception as e:
-        print(f"[ship][locations] ✗ Error: {e}")
+        print(f"[ship][locations] ✗ Error: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
@@ -127,7 +127,7 @@ def ship(
         ship(action="locations", deck=6)
     """
     action = action.lower().strip()
-    print(f"[ship] Action: {action}")
+    print(f"[ship] Action: {action}", file=sys.stderr)
 
     if action == "directions":
         if not start or not end:
@@ -149,19 +149,19 @@ def ship(
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("IRIS DIRECTIONS SERVER (Unified)")
-    print("=" * 60)
+    print("=" * 60, file=sys.stderr)
+    print("IRIS DIRECTIONS SERVER (Unified)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
 
     try:
         nav = get_navigator()
-        print(f"Ship: {nav.ship_name}")
-        print(f"Venues: {len(nav.venues)}")
+        print(f"Ship: {nav.ship_name}", file=sys.stderr)
+        print(f"Venues: {len(nav.venues)}", file=sys.stderr)
     except Exception as e:
-        print(f"WARNING: Could not load ship map: {e}")
+        print(f"WARNING: Could not load ship map: {e}", file=sys.stderr)
 
-    print("\nTool: ship(action, start?, end?, deck?)")
-    print("Actions: directions, locations")
-    print("Starting server...")
-    print("=" * 60)
+    print("\nTool: ship(action, start?, end?, deck?)", file=sys.stderr)
+    print("Actions: directions, locations", file=sys.stderr)
+    print("Starting server...", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     server.run()

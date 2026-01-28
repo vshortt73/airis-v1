@@ -1,0 +1,32 @@
+[Unit]
+Description=Iris Main Inference Server (Qwen3-32B on SGLang)
+After=network.target
+Conflicts=iris-llama.service
+
+[Service]
+Type=simple
+User=captain
+Group=captain
+WorkingDirectory=/iris-v3
+
+# GPU 0 (RTX 5090)
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="PATH=/venv/iris-v3/bin:/usr/local/cuda/bin:/usr/local/bin:/usr/bin:/bin"
+
+ExecStart=/venv/iris-v3/bin/python -m sglang.launch_server \
+    --model-path /localmodels/qwen/Qwen3-32B-Q4_K_M.gguf \
+    --port 11434 \
+    --host 0.0.0.0 \
+    --context-length 40960 \
+    --mem-fraction-static 0.95
+
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iris-sglang
+
+[Install]
+WantedBy=multi-user.target

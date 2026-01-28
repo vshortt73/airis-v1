@@ -51,7 +51,7 @@ def _handle_insert(fact: str, category: Optional[str] = None) -> dict:
         cursor.close()
         conn.close()
 
-        print(f"[memory][insert] ✓ Stored fact {fact_id}: {fact[:60]}...")
+        print(f"[memory][insert] ✓ Stored fact {fact_id}: {fact[:60]}...", file=sys.stderr)
 
         return {
             "success": True,
@@ -62,7 +62,7 @@ def _handle_insert(fact: str, category: Optional[str] = None) -> dict:
         }
 
     except Exception as e:
-        print(f"[memory][insert] ✗ Error: {e}")
+        print(f"[memory][insert] ✗ Error: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
@@ -109,7 +109,7 @@ def _handle_retrieve(limit: int = 20) -> dict:
         cursor.close()
         conn.close()
 
-        print(f"[memory][retrieve] ✓ Retrieved {len(fact_list)} facts")
+        print(f"[memory][retrieve] ✓ Retrieved {len(fact_list)} facts", file=sys.stderr)
 
         return {
             "success": True,
@@ -118,7 +118,7 @@ def _handle_retrieve(limit: int = 20) -> dict:
         }
 
     except Exception as e:
-        print(f"[memory][retrieve] ✗ Error: {e}")
+        print(f"[memory][retrieve] ✗ Error: {e}", file=sys.stderr)
         return {"success": False, "error": str(e), "facts": []}
 
 
@@ -142,7 +142,7 @@ def _handle_archive() -> dict:
         cursor.close()
         conn.close()
 
-        print(f"[memory][archive] ✓ Archived {len(archived)} facts")
+        print(f"[memory][archive] ✓ Archived {len(archived)} facts", file=sys.stderr)
 
         return {
             "success": True,
@@ -151,7 +151,7 @@ def _handle_archive() -> dict:
         }
 
     except Exception as e:
-        print(f"[memory][archive] ✗ Error: {e}")
+        print(f"[memory][archive] ✗ Error: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
@@ -185,7 +185,7 @@ def memory(
         memory(action="archive")
     """
     action = action.lower().strip()
-    print(f"[memory] Action: {action}")
+    print(f"[memory] Action: {action}", file=sys.stderr)
 
     if action == "insert":
         if not fact:
@@ -210,7 +210,7 @@ def memory(
 
 
 if __name__ == "__main__":
-    print("[memory_server] Starting Memory Server (Unified)...")
-    print("Tool: memory(action, fact?, category?, limit?)")
-    print("Actions: insert, retrieve, archive")
+    print("[memory_server] Starting Memory Server (Unified)...", file=sys.stderr)
+    print("Tool: memory(action, fact?, category?, limit?)", file=sys.stderr)
+    print("Actions: insert, retrieve, archive", file=sys.stderr)
     mcp.run()

@@ -166,10 +166,10 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-#### iris-xtts.service
+#### iris-xtts.service (Legacy/Fallback)
 ```ini
 [Unit]
-Description=Iris XTTS Text-to-Speech
+Description=Iris XTTS Text-to-Speech (Fallback)
 After=network.target
 
 [Service]
@@ -183,6 +183,66 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
+```
+
+#### iris-llama-orpheus.service (Orpheus Token Generator)
+```ini
+[Unit]
+Description=Iris Llama.cpp Server for Orpheus TTS
+After=network.target
+
+[Service]
+Type=simple
+User=captain
+WorkingDirectory=/home/captain
+Environment="CUDA_VISIBLE_DEVICES=1"
+ExecStart=/home/captain/llama.cpp/build/bin/llama-server \
+    --model /models/audio/orpheus/orpheus-3b-0.1-ft-q4_k_m.gguf \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --ctx-size 4096 \
+    --n-gpu-layers 99 \
+    --flash-attn
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### iris-orpheus.service (Orpheus TTS - Primary)
+```ini
+[Unit]
+Description=Iris Orpheus TTS Server
+After=network.target iris-llama-orpheus.service
+
+[Service]
+Type=simple
+User=captain
+WorkingDirectory=/home/captain/node2-mount/programs/orpheus-tts-local
+Environment="CUDA_VISIBLE_DEVICES=1"
+Environment="ORPHEUS_LLAMA_URL=http://localhost:8080/v1/completions"
+Environment="SNAC_MODEL_PATH=/models/audio/snac"
+ExecStart=/home/captain/venvs/orpheus/bin/python orpheus_server.py --port 8701
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Orpheus TTS Features:**
+- High quality neural voice synthesis
+- Emotion tags: `<laugh>`, `<sigh>`, `<giggle>`, `<gasp>`, `<yawn>`, `<chuckle>`
+- Voices: mia (default), tara, leah, jess, leo, dan, zac, zoe
+- 24kHz WAV output
+
+**Setup Orpheus venv (on node2):**
+```bash
+python -m venv /home/captain/venvs/orpheus
+source /home/captain/venvs/orpheus/bin/activate
+cd /home/captain/node2-mount/programs/orpheus-tts-local
+pip install -r requirements.txt
 ```
 
 #### iris-stt.service
@@ -257,10 +317,13 @@ psql -h localhost -U irisuser -d irisdb \
 | llm | OLLAMA_MODEL | qwen3:32b | Model name |
 | llm | OLLAMA_CONTEXT_WINDOW | 32768 | Context size |
 | remote_services | NODE2_HOST | node2 | Node2 hostname |
-| remote_services | XTTS_URL | http://node2:8700 | TTS server |
+| remote_services | ORPHEUS_SERVER_URL | http://node2:8701 | Orpheus TTS server |
+| remote_services | XTTS_URL | http://node2:8700 | XTTS server (fallback) |
 | remote_services | STT_URL | http://node2:8600 | STT server |
 | remote_services | VISION_URL | http://node2:11435 | Vision server |
 | remote_services | SENTIMENT_URL | http://node2:11437 | Sentiment server |
+| tts | TTS_BACKEND | orpheus | TTS backend: orpheus or xtts |
+| tts | ORPHEUS_VOICE | mia | Default Orpheus voice |
 | tokens | VERBOSE_TOKEN_BUDGET | 3000 | Recent messages |
 | tokens | SUMMARY_TOKEN_BUDGET | 17000 | Summarized messages |
 | tokens | DOCUMENT_CONTEXT_BUDGET | 8000 | Uploaded documents |
@@ -314,7 +377,13 @@ curl http://localhost:11434/api/tags
 # Vision (node2)
 curl http://node2:11435/api/tags
 
-# XTTS
+# Orpheus TTS (primary)
+curl http://node2:8701/health
+
+# Orpheus llama.cpp token server
+curl http://node2:8080/health
+
+# XTTS (fallback)
 curl http://node2:8700/health
 
 # STT
@@ -322,6 +391,9 @@ curl http://node2:8600/health
 
 # Sentiment
 curl http://node2:11437/api/tags
+
+# Combined TTS health from Iris
+curl http://localhost:8000/api/tts/health | jq
 ```
 
 ### GPU Status

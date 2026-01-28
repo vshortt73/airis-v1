@@ -228,7 +228,7 @@ def trait(
     Values range from 0 (minimal) to 10 (maximum).
     """
     action = action.lower().strip()
-    print(f"[trait] Action: {action}, name: {name}, value: {value}")
+    print(f"[trait] Action: {action}, name: {name}, value: {value}", file=sys.stderr)
 
     # Route to appropriate handler
     if action == "list":
@@ -272,11 +272,11 @@ def trait(
 # ============================================================================
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("IRIS TRAITS SERVER (Unified)")
-    print("=" * 60)
-    print("Tool: trait(action, name?, value?, reason?)")
-    print("Actions: get, list, modify")
-    print("Starting server...")
-    print("=" * 60)
+    print("=" * 60, file=sys.stderr)
+    print("IRIS TRAITS SERVER (Unified)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("Tool: trait(action, name?, value?, reason?)", file=sys.stderr)
+    print("Actions: get, list, modify", file=sys.stderr)
+    print("Starting server...", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     server.run()

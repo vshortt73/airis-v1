@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import Enum
 
+from app.api.tts_normalizer import normalize_for_tts
+
 
 class OutputMode(Enum):
     """Output mode for TTS/video routing"""
@@ -153,7 +155,8 @@ class SentenceProcessor:
         """
         Final cleaning pass for text going to TTS.
 
-        Removes remaining markdown artifacts and normalizes whitespace.
+        Removes remaining markdown artifacts, normalizes whitespace,
+        and converts technical terms for proper pronunciation.
         """
         text = text.replace('**', '')        # Bold
         text = text.replace('*', '')         # Italic
@@ -162,7 +165,13 @@ class SentenceProcessor:
         text = re.sub(r'#+', '', text)       # Hash marks
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)  # Links - keep text
         text = re.sub(r'[\s\n]+', ' ', text)  # Collapse whitespace
-        return text.strip()
+        text = text.strip()
+
+        # Normalize technical terms for proper pronunciation
+        # (GPU names, acronyms, storage units, etc.)
+        text = normalize_for_tts(text)
+
+        return text
 
     def extract_sentences(self, text: str) -> List[str]:
         """

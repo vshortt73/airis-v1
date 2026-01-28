@@ -870,7 +870,8 @@ def database_query(query: str) -> dict:
         # Token estimation failure is logged but does NOT block the query
         print(
             "[system_server.py][database_query] "
-            f"Token estimation failed (continuing): {token_check_error.pgerror}"
+            f"Token estimation failed (continuing): {token_check_error.pgerror}",
+            file=sys.stderr
         )
         try:
             est_conn.rollback()
@@ -1090,13 +1091,13 @@ def database_query(query: str) -> dict:
 # ============================================================================
 
 if __name__ == "__main__":
-    print("="*60)
-    print("IRIS INFO SERVER")
-    print("="*60)
-    print(f"Tools available: system_status")
-    print(f"Starting server...")
-    print("="*60)
-    print("running shell")
+    print("="*60, file=sys.stderr)
+    print("IRIS INFO SERVER", file=sys.stderr)
+    print("="*60, file=sys.stderr)
+    print(f"Tools available: system_status", file=sys.stderr)
+    print(f"Starting server...", file=sys.stderr)
+    print("="*60, file=sys.stderr)
+    print("running shell", file=sys.stderr)
    #result = linux_shell("ls /iris-v3/")
    #print(result)
     server.run()

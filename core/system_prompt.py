@@ -296,7 +296,7 @@ def get_system_prompt(protocol: Dict = None) -> str:
             instructions = []
             rules_include = [str(id) for id in protocol.get("rules_include", [])]
             rules_exclude = [str(id) for id in protocol.get("rules_exclude", [])]
-            print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.GREEN + f"instruction list: {rules_include}") 
+           # print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.GREEN + f"instruction list: {rules_include}") 
             for instruction_id, instruction_text in results:
                 id_str = str(instruction_id)
 
@@ -304,16 +304,16 @@ def get_system_prompt(protocol: Dict = None) -> str:
                 if instruction_id >= 1000:
                     instructions.append(instruction_text)
                     continue
-                print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.GREEN + f"parsing instruction {instruction_id} from protocol: {protocol.get('protocol_name', 'unknown')})")
+              #  print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.GREEN + f"parsing instruction {instruction_id} from protocol: {protocol.get('protocol_name', 'unknown')})")
                 # Protocol filtering for non-security instructions
                 if not rules_include:
-                    print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.RED + f"no include rules found for {protocol.get('protocol_name', 'unknown')})")
+                   print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.RED + f"no include rules found for {protocol.get('protocol_name', 'unknown')})")
 
                 if rules_include:
                     # Include mode: only include specified IDs
                     if id_str in rules_include:
                         instructions.append(instruction_text)
-                        print(f"include TEXT: {instruction_text[:25]}")
+                     #   print(f"include TEXT: {instruction_text[:25]}")
                 elif rules_exclude:
                     # Exclude mode: include all except specified IDs
                     if id_str not in rules_exclude:
@@ -321,7 +321,7 @@ def get_system_prompt(protocol: Dict = None) -> str:
                 else:
                     # No filtering: include all
                     instructions.append(instruction_text)
-                    print(f"default TEXT: {instruction_text[:25]}")
+                   # print(f"default TEXT: {instruction_text[:25]}")
 
 
             print(f"[system_prompt.py][get_system_prompt]" + Style.BRIGHT + Fore.GREEN + f" Loaded {len(instructions)} instructions (protocol: {protocol.get('protocol_name', 'unknown')})")
@@ -1095,7 +1095,7 @@ When you answer FREUD's questions below, reference the transcript above.
     print(f"[system_prompt.py] ✓ Final context: 1 system message with embedded transcript")
     return messages
 
-def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory: bool = False, context_level: str = "FULL") -> Tuple[List[Dict], Dict[str, int]]:
+def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory: bool = False, context_level: str = "FULL", headroom_tokens: int = 0) -> Tuple[List[Dict], Dict[str, int]]:
     """
     Assemble complete context for Ollama with DYNAMIC token budgeting
 
@@ -1116,7 +1116,6 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
         Tuple of (messages_with_images, budget_report)
     """
     print(f"[system_prompt.py][assemble_full_context] ┌── DYNAMIC CONTEXT ASSEMBLY (Level: {context_level}) ──┐")
-
 
     # STEP 1: Build system message (fixed context)
     # Get the user's message from conversation for fast reactive memory
@@ -1161,19 +1160,12 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     # TIERED CONTEXT: Limit conversation budget based on context level
     # This is critical for performance - prevents loading 17K tokens for simple queries
     if context_level == "GREETING":
-        # Greeting mode: Minimal context - last 2-3 messages for reference only
-        # These are for ACKNOWLEDGING what was being discussed, NOT continuing it
-        # Target: ~500 tokens (2-3 recent messages)
         conversation_budget = min(conversation_budget, 500)
         print(f"[system_prompt.py] GREETING mode: Conversation budget capped at 500 tokens (for reference only)")
     elif context_level == "TASK":
-        # Task mode: Only recent messages needed for tool queries
-        # Target: ~2,500 tokens (10-15 recent messages)
         conversation_budget = min(conversation_budget, 2500)
         print(f"[system_prompt.py] TASK mode: Conversation budget capped at 2,500 tokens")
     elif context_level == "CONVERSATIONAL":
-        # Conversational mode: Balanced context
-        # Target: ~4,500 tokens (20-25 recent messages)
         conversation_budget = min(conversation_budget, 4500)
         print(f"[system_prompt.py] CONVERSATIONAL mode: Conversation budget capped at 4,500 tokens")
     # DEEP and FULL: Use full calculated budget (no cap)
@@ -1181,8 +1173,7 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     print(f"[system_prompt.py] Available for conversation: {conversation_budget:,} tokens")
     print(f"[system_prompt.py]   (max: {max_context:,} - system: {system_tokens:,} - tools: {tool_tokens:,} - response: {response_budget:,} - safety: {safety_margin:,})")
 
-    # STEP 4: Load conversation history with TIERED BUDGETS
-    # Uses verbose (recent full messages) + summary (older summarized messages)
+    # STEP 4: Load conversation history
     from database.persistence import load_recent_conversation
 
     # Get tiered budgets from config
@@ -1201,7 +1192,8 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     history = load_recent_conversation(
         verbose_budget=verbose_budget,
         summary_budget=summary_budget,
-        max_messages=getattr(config, 'MAX_TOTAL_MESSAGES', 50)
+        max_messages=getattr(config, 'MAX_TOTAL_MESSAGES', 50),
+        headroom_tokens=headroom_tokens
     )
 
     # Count verbose vs summary messages
@@ -1212,7 +1204,7 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     # STEP 5: Build full message list with images
     messages = [system_msg]
     image_count = 0
-    
+
     for msg in history:
         # Format temporal information if present
         content = msg["content"]
@@ -1228,8 +1220,7 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
             "role": msg["role"],
             "content": content
         }
-        
-        # Add tool-related fields if present
+
         # Add tool-related fields if present
         if "tool_calls" in msg:
             # Extract just the tool_calls array from stored Ollama response
@@ -1246,13 +1237,13 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
             formatted_msg["tool_name"] = msg["tool_name"]
         if "tool_call_id" in msg:
             formatted_msg["tool_call_id"] = msg["tool_call_id"]
-        
+
         # Load and encode images if attachments present
         if "attachments" in msg:
             try:
                 # Parse attachments JSON
                 attachment_list = attachments.parse_attachments_json(msg["attachments"])
-                
+
                 if attachment_list:
                     # Load and encode all images
                     encoded_images = []
@@ -1262,17 +1253,16 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
                             if base64_img:
                                 encoded_images.append(base64_img)
                                 image_count += 1
-                    
+
                     # Add images to message in Ollama format
                     if encoded_images:
                         formatted_msg["images"] = encoded_images
-                        #print(f"[system_prompt.py]   ✓ Loaded {len(encoded_images)} image(s) for {msg['role']} message")
-            
+
             except Exception as e:
                 print(f"[system_prompt.py][assemble_full_context]" + Style.BRIGHT + Fore.GREEN + "    ✗ Error loading attachments: {e}")
-        
+
         messages.append(formatted_msg)
-    
+
     # NOTE: Tools are now passed separately via routes_chat.py
     # They should NOT be appended to messages - Ollama expects them as a separate parameter
 
@@ -1296,6 +1286,72 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     print(f"[system_prompt.py] └────────────────────────┘")
 
     return messages, budget_report
+
+
+# =========================================================================
+# PROMPT SNAPSHOT: Batch Trim KV Cache Optimization
+# =========================================================================
+
+def assemble_context_with_snapshot(
+    conversation,
+    tool_definitions=None,
+    context_level: str = "FULL",
+    use_unified: bool = False
+) -> Tuple[List[Dict], Dict[str, int]]:
+    """
+    KV-cache-optimized context assembly with prompt snapshots.
+
+    When batch trim is enabled, freezes the assembled messages list as a
+    "snapshot" and reuses it for N turns. New messages are appended to the
+    snapshot by routes_chat.py, keeping the prefix byte-identical across
+    turns for maximum KV cache hits.
+
+    When batch trim is disabled or snapshot needs rebuilding, falls through
+    to assemble_full_context() / assemble_unified_context().
+
+    Args:
+        conversation: ConversationHistory instance (holds snapshot state)
+        tool_definitions: Tool definitions for token budgeting
+        context_level: Tiered context level
+        use_unified: If True, use assemble_unified_context instead of assemble_full_context
+
+    Returns:
+        Tuple of (messages_list, budget_report)
+    """
+    if not conversation.should_rebuild_snapshot():
+        # ── REUSE SNAPSHOT ──
+        turns_since = conversation.turn_id - conversation.snapshot_turn_base
+        batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
+        print(f"[snapshot] REUSING snapshot (turn {turns_since}/{batch_size}, "
+              f"{len(conversation.snapshot)} msgs, {conversation.snapshot_token_count:,} tokens)")
+        return conversation.snapshot, conversation.snapshot_budget
+
+    # ── FULL REBUILD ──
+    headroom = getattr(config, 'BATCH_TRIM_HEADROOM_TOKENS', 4000) if getattr(config, 'BATCH_TRIM_ENABLED', False) else 0
+
+    if use_unified:
+        messages, budget = assemble_unified_context(conversation, tool_definitions)
+    else:
+        messages, budget = assemble_full_context(
+            conversation, tool_definitions,
+            skip_fast_memory=False,
+            context_level=context_level,
+            headroom_tokens=headroom
+        )
+
+    # Store as new snapshot
+    conversation.snapshot = messages  # Direct reference — routes_chat.py appends to this
+    conversation.snapshot_turn_base = conversation.turn_id
+    conversation.snapshot_token_count = budget.get('total_tokens', 0)
+    conversation.snapshot_spoiled = False
+    conversation.snapshot_budget = budget
+
+    batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
+    enabled = getattr(config, 'BATCH_TRIM_ENABLED', False)
+    print(f"[snapshot] NEW SNAPSHOT: {len(messages)} msgs, {budget['total_tokens']:,} tokens"
+          f"{f', headroom: {headroom:,} reserved, batch size: {batch_size}' if enabled else ' (batch trim disabled)'}")
+
+    return messages, budget
 
 
 # =========================================================================

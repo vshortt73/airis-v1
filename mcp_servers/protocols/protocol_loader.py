@@ -42,7 +42,7 @@ def snapshot_to_default():
     - ALL system instruction active states
     - Current memory and chat history settings
     """
-    print("[protocol_loader] Snapshotting current state to 'default' protocol...")
+    print("[protocol_loader] Snapshotting current state to 'default' protocol...", file=sys.stderr)
 
     conn = get_db_connection()
     try:
@@ -92,11 +92,11 @@ def snapshot_to_default():
             ))
 
             conn.commit()
-            print(f"[protocol_loader] ✓ Snapshot saved: {len(traits_snapshot)} traits, {len(rules_include)} active rules")
+            print(f"[protocol_loader] ✓ Snapshot saved: {len(traits_snapshot)} traits, {len(rules_include)} active rules", file=sys.stderr)
 
     except Exception as e:
         conn.rollback()
-        print(f"[protocol_loader] ✗ Snapshot failed: {e}")
+        print(f"[protocol_loader] ✗ Snapshot failed: {e}", file=sys.stderr)
         raise
     finally:
         conn.close()
@@ -119,7 +119,7 @@ def load_protocol(protocol_name: str):
     Returns:
         dict with success status and message
     """
-    print(f"[protocol_loader] Loading protocol '{protocol_name}'...")
+    print(f"[protocol_loader] Loading protocol '{protocol_name}'...", file=sys.stderr)
 
     conn = get_db_connection()
     try:
@@ -148,7 +148,7 @@ def load_protocol(protocol_name: str):
             show_chat_history = protocol['show_chat_history']
             show_memories = protocol['show_memories']
 
-            print(f"[protocol_loader] Protocol loaded: {len(traits_adjust)} trait changes, {len(rules_include)} rules to activate")
+            print(f"[protocol_loader] Protocol loaded: {len(traits_adjust)} trait changes, {len(rules_include)} rules to activate", file=sys.stderr)
 
             # STEP 1: Apply trait changes
             for trait_name, new_value in traits_adjust.items():
@@ -157,7 +157,7 @@ def load_protocol(protocol_name: str):
                     SET value = %s
                     WHERE name = %s
                 """, (new_value, trait_name))
-                print(f"[protocol_loader]   Trait: {trait_name} = {new_value}")
+                print(f"[protocol_loader]   Trait: {trait_name} = {new_value}", file=sys.stderr)
 
             # STEP 2: Apply instruction changes
             # First, deactivate ALL instructions to start with a clean slate
@@ -174,17 +174,17 @@ def load_protocol(protocol_name: str):
                 """, (int(rule_id),))
                 activated_count += cur.rowcount
 
-            print(f"[protocol_loader]   Reset all rules, then activated {activated_count} rules")
+            print(f"[protocol_loader]   Reset all rules, then activated {activated_count} rules", file=sys.stderr)
 
             # STEP 3: Handle chat history table switching
             if show_chat_history:
                 current_chat_table = 'chat_history'
-                print(f"[protocol_loader]   Chat history: ENABLED (using chat_history)")
+                print(f"[protocol_loader]   Chat history: ENABLED (using chat_history)", file=sys.stderr)
             else:
                 # Clear generic table and switch to it
                 cur.execute("TRUNCATE TABLE chat_history_generic")
                 current_chat_table = 'chat_history_generic'
-                print(f"[protocol_loader]   Chat history: DISABLED (using chat_history_generic, cleared)")
+                print(f"[protocol_loader]   Chat history: DISABLED (using chat_history_generic, cleared)", file=sys.stderr)
 
             # STEP 4: Update active_protocol table
             cur.execute("DELETE FROM active_protocol")
@@ -207,9 +207,9 @@ def load_protocol(protocol_name: str):
 
             conn.commit()
 
-            print(f"[protocol_loader] ✓ Protocol '{protocol_name}' loaded successfully")
-            print(f"[protocol_loader]   Memories: {'ENABLED' if show_memories else 'DISABLED'}")
-            print(f"[protocol_loader]   Chat table: {current_chat_table}")
+            print(f"[protocol_loader] ✓ Protocol '{protocol_name}' loaded successfully", file=sys.stderr)
+            print(f"[protocol_loader]   Memories: {'ENABLED' if show_memories else 'DISABLED'}", file=sys.stderr)
+            print(f"[protocol_loader]   Chat table: {current_chat_table}", file=sys.stderr)
 
             # Push protocol status to WebSocket clients
             broadcast_sync({
@@ -228,7 +228,7 @@ def load_protocol(protocol_name: str):
 
     except Exception as e:
         conn.rollback()
-        print(f"[protocol_loader] ✗ Load failed: {e}")
+        print(f"[protocol_loader] ✗ Load failed: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return {

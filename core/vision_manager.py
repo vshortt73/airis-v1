@@ -115,12 +115,12 @@ class VisionManager:
                     if context:
                         prompt += f"Context: {context}"
                     else:
-                        prompt += "Focus on key objects, people, actions, and notable features."
+                        prompt += "and all of the prominent items within it in extreme detail. If characters exist, describe each of their features in detail using color, texture and other details that help illustrate the feature for the reader."
                 else:
                     if context:
                         prompt = f"Describe this image to help answer: {context}"
                     else:
-                        prompt = "Describe this image in detail. Focus on key objects, people, actions, text, colors, and any notable features."
+                        prompt = "Describe this image and all of the prominent items within it in extreme detail. If characters exist in the image, describe each of their features in detail using color, texture and other details that help illustrate the feature for the reader."
 
                 # Analyze image
                 print(f"[vision_manager.py][process_images] Analyzing image {i + 1}/{len(images)}...")

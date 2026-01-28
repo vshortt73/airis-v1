@@ -108,7 +108,7 @@ def _handle_activate(protocol_name: str, duration_minutes: Optional[int] = None)
         else:
             result["message"] = f"Protocol '{protocol_name}' activated permanently (until manually deactivated)"
 
-        print(f"[protocol] ✓ Activated: {protocol_name}")
+        print(f"[protocol] ✓ Activated: {protocol_name}", file=sys.stderr)
         return result
 
     except Exception as e:
@@ -123,7 +123,7 @@ def _handle_deactivate() -> Dict[str, Any]:
         result = load_protocol("default")
         if result["success"]:
             result["message"] = "Protocol deactivated, returned to default configuration"
-            print(f"[protocol] ✓ Deactivated, returned to default")
+            print(f"[protocol] ✓ Deactivated, returned to default", file=sys.stderr)
         return result
 
     except Exception as e:
@@ -186,7 +186,7 @@ def _handle_status() -> Dict[str, Any]:
         if active['passphrase_protected']:
             result["message"] += " [Passphrase Protected]"
 
-        print(f"[protocol] ✓ Status: {protocol_name}")
+        print(f"[protocol] ✓ Status: {protocol_name}", file=sys.stderr)
         return result
 
     except Exception as e:
@@ -269,7 +269,7 @@ def protocol(
         protocol(action="deactivate")
     """
     action = action.lower().strip()
-    print(f"[protocol] Action: {action}, name: {name}, duration: {duration}")
+    print(f"[protocol] Action: {action}, name: {name}, duration: {duration}", file=sys.stderr)
 
     # Route to appropriate handler
     if action == "list":
@@ -315,11 +315,11 @@ def protocol(
 # ============================================================================
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("IRIS PROTOCOL SERVER (Unified)")
-    print("=" * 60)
-    print("Tool: protocol(action, name?, duration?, request?)")
-    print("Actions: activate, deactivate, status, list")
-    print("Starting server...")
-    print("=" * 60)
+    print("=" * 60, file=sys.stderr)
+    print("IRIS PROTOCOL SERVER (Unified)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("Tool: protocol(action, name?, duration?, request?)", file=sys.stderr)
+    print("Actions: activate, deactivate, status, list", file=sys.stderr)
+    print("Starting server...", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     server.run()

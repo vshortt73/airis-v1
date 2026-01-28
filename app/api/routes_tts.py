@@ -24,6 +24,7 @@ from app import config
 from app.api.phoneme_mapper import text_to_rhubarb_phonemes
 from app.api.whisperx_mapper import whisperx_text_to_phonemes
 from app.api.wav2vec2_aligner import align_audio_wav2vec2
+from app.api.tts_normalizer import normalize_for_tts
 
 router = APIRouter(tags=["tts"])
 
@@ -43,13 +44,14 @@ class TTSWithPhonemeRequest(BaseModel):
 
 def clean_text_for_tts(text: str) -> str:
     """
-    Clean text for TTS by removing markdown formatting and special characters
+    Clean text for TTS by removing markdown formatting and special characters,
+    then normalize technical terms for proper pronunciation.
 
     Args:
         text: Raw text with possible markdown formatting
 
     Returns:
-        Cleaned text suitable for TTS
+        Cleaned and normalized text suitable for TTS
     """
     # Remove markdown bold/italic
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)  # ***bold italic***
@@ -81,11 +83,15 @@ def clean_text_for_tts(text: str) -> str:
 
     # Remove multiple spaces
     text = re.sub(r'\s+', ' ', text)
-    
+
     text = emoji.replace_emoji(text, replace='')
 
     # Remove leading/trailing whitespace
     text = text.strip()
+
+    # Normalize technical terms for proper pronunciation
+    # (GPU names, acronyms, storage units, etc.)
+    text = normalize_for_tts(text)
 
     return text
 

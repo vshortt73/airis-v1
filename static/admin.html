@@ -311,6 +311,62 @@
         .spinning {
             animation: spin 1s linear infinite;
         }
+
+        /* Auto-rendered config styles */
+        .auto-config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .auto-config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .auto-config-key {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .auto-config-indicators {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .config-indicator {
+            font-size: 0.65rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+        }
+
+        .indicator-restart {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .indicator-modified {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+        }
+
+        .auto-config-reset {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .auto-config-reset:hover {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -763,6 +819,27 @@
                     <button class="btn btn-primary" style="width: 100%;" onclick="viewLogs()">📝 View Server Logs</button>
                 </div>
             </div>
+
+            <!-- All Configuration (Auto-Rendered Demo) -->
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-header">
+                    <div class="card-title">
+                        ⚙️ All Configuration
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select id="config-category-select" class="config-input" style="min-width: 150px;" onchange="loadConfigCategory()">
+                            <option value="">-- Select Category --</option>
+                        </select>
+                        <span class="refresh-icon" onclick="refreshConfigCategories()" id="config-category-refresh">🔄</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="auto-config-container" style="max-height: 400px; overflow-y: auto;">
+                        <p style="color: var(--text-secondary);">Select a category to view configuration...</p>
+                    </div>
+                    <button class="btn btn-success" style="width: 100%; margin-top: 1rem;" onclick="saveAutoConfigGroup()" id="save-auto-config-btn" disabled>💾 Save Changes</button>
+                </div>
+            </div>
         </div>
 
         <!-- System Logs -->
@@ -817,6 +894,233 @@
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.json();
+        }
+
+        // ============================================================================
+        // Reusable Config Renderer
+        // ============================================================================
+
+        // Global cache for system config data
+        let _systemConfigCache = null;
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
+        // Fetch all system config (cached)
+        async function loadSystemConfig(forceRefresh = false) {
+            if (_systemConfigCache && !forceRefresh) return _systemConfigCache;
+
+            try {
+                const response = await fetch('/api/admin/system-config');
+                const data = await response.json();
+                if (data.success) {
+                    _systemConfigCache = data;
+                }
+                return data;
+            } catch (e) {
+                console.error('Failed to load system config:', e);
+                return { success: false, error: e.message };
+            }
+        }
+
+        // Render configs for a category into a container
+        async function renderConfigGroup(category, containerEl, options = {}) {
+            const data = await loadSystemConfig();
+            if (!data.success) {
+                containerEl.innerHTML = '<p style="color:var(--danger)">Failed to load config</p>';
+                return;
+            }
+
+            const categoryData = data.categories.find(c => c.name === category);
+            if (!categoryData) {
+                containerEl.innerHTML = '<p style="color:var(--text-secondary)">No configs found</p>';
+                return;
+            }
+
+            // Filter by specific keys if provided
+            let configs = categoryData.configs;
+            if (options.keys) {
+                configs = configs.filter(c => options.keys.includes(c.key));
+            }
+            if (options.exclude) {
+                configs = configs.filter(c => !options.exclude.includes(c.key));
+            }
+
+            containerEl.innerHTML = configs.map(c => renderAutoConfigItem(c, options)).join('');
+
+            // Attach change event listeners if onchange callback provided
+            if (options.onchange) {
+                containerEl.querySelectorAll('[data-key]').forEach(el => {
+                    el.addEventListener('change', () => options.onchange(el.dataset.key, el.value));
+                });
+            }
+        }
+
+        // Render single config item
+        function renderAutoConfigItem(config, options = {}) {
+            const indicators = [];
+            if (config.requires_restart) {
+                indicators.push('<span class="config-indicator indicator-restart">Restart</span>');
+            }
+            if (config.is_modified) {
+                indicators.push('<span class="config-indicator indicator-modified">Modified</span>');
+            }
+
+            const showReset = config.is_modified && config.default_value !== null;
+            const resetBtn = showReset
+                ? `<button class="auto-config-reset" onclick="resetConfigToDefault('${config.key}', this)" title="Reset to: ${escapeHtml(config.default_value)}">Reset</button>`
+                : '';
+
+            const showKey = options.showKey !== false;  // Default to showing key
+
+            return `
+                <div class="auto-config-item" data-config-key="${config.key}">
+                    ${showKey ? `
+                    <div class="auto-config-header">
+                        <span class="auto-config-key">${config.key}</span>
+                        <div class="auto-config-indicators">
+                            ${indicators.join('')}
+                            ${resetBtn}
+                        </div>
+                    </div>
+                    ` : ''}
+                    <label class="config-label">${config.description || config.key}</label>
+                    ${renderAutoConfigInput(config)}
+                </div>
+            `;
+        }
+
+        // Render appropriate input based on value_type
+        function renderAutoConfigInput(config) {
+            const { key, value, value_type } = config;
+            const escaped = escapeHtml(value);
+
+            switch (value_type) {
+                case 'bool':
+                    const isTrue = value === 'true' || value === true;
+                    return `
+                        <select class="config-input" id="cfg-${key}" data-key="${key}">
+                            <option value="true" ${isTrue ? 'selected' : ''}>Yes</option>
+                            <option value="false" ${!isTrue ? 'selected' : ''}>No</option>
+                        </select>`;
+                case 'int':
+                    return `<input type="number" class="config-input" id="cfg-${key}" data-key="${key}" value="${escaped}" step="1">`;
+                case 'float':
+                    return `<input type="number" class="config-input" id="cfg-${key}" data-key="${key}" value="${escaped}" step="0.01">`;
+                case 'json':
+                    return `<textarea class="config-input" id="cfg-${key}" data-key="${key}"
+                        style="font-family:monospace;min-height:60px">${escaped}</textarea>`;
+                default: // string
+                    return value && value.length > 60
+                        ? `<textarea class="config-input" id="cfg-${key}" data-key="${key}">${escaped}</textarea>`
+                        : `<input type="text" class="config-input" id="cfg-${key}" data-key="${key}" value="${escaped}">`;
+            }
+        }
+
+        // Collect values from auto-rendered configs in a container
+        function collectConfigValues(containerEl) {
+            const values = {};
+            containerEl.querySelectorAll('[data-key]').forEach(el => {
+                values[el.dataset.key] = el.value;
+            });
+            return values;
+        }
+
+        // Save multiple config values
+        async function saveConfigValues(values) {
+            const results = { saved: [], errors: [], requiresRestart: [] };
+
+            for (const [key, value] of Object.entries(values)) {
+                try {
+                    const resp = await apiPost('admin/config/update', { key, value });
+                    if (resp.success) {
+                        results.saved.push(key);
+                        // Check if this config requires restart
+                        const cfg = _systemConfigCache?.categories
+                            ?.flatMap(c => c.configs)
+                            ?.find(c => c.key === key);
+                        if (cfg?.requires_restart) results.requiresRestart.push(key);
+                    } else {
+                        results.errors.push(`${key}: ${resp.error}`);
+                    }
+                } catch (e) {
+                    results.errors.push(`${key}: ${e.message}`);
+                }
+            }
+
+            // Refresh cache
+            await loadSystemConfig(true);
+            return results;
+        }
+
+        // Reset a config to its default value
+        async function resetConfigToDefault(key, buttonEl) {
+            if (!confirm(`Reset ${key} to default value?`)) return;
+
+            const originalText = buttonEl.textContent;
+            buttonEl.textContent = '...';
+            buttonEl.disabled = true;
+
+            try {
+                const resp = await apiPost('admin/system-config/reset', { key });
+                if (resp.success) {
+                    // Update the input field with the default value
+                    const input = document.querySelector(`[data-key="${key}"]`);
+                    if (input) {
+                        input.value = resp.default_value;
+                    }
+
+                    // Refresh cache and re-render if the item has a container
+                    await loadSystemConfig(true);
+
+                    // Remove the reset button and modified indicator
+                    const configItem = buttonEl.closest('.auto-config-item');
+                    if (configItem) {
+                        const modifiedIndicator = configItem.querySelector('.indicator-modified');
+                        if (modifiedIndicator) modifiedIndicator.remove();
+                        buttonEl.remove();
+                    }
+
+                    console.log(`Reset ${key} to: ${resp.default_value}`);
+                } else {
+                    alert(`Failed to reset: ${resp.error}`);
+                    buttonEl.textContent = originalText;
+                    buttonEl.disabled = false;
+                }
+            } catch (e) {
+                alert(`Error resetting config: ${e.message}`);
+                buttonEl.textContent = originalText;
+                buttonEl.disabled = false;
+            }
+        }
+
+        // Helper to save configs from a specific container with user feedback
+        async function saveConfigGroup(containerEl, groupName = 'Config') {
+            const values = collectConfigValues(containerEl);
+            if (Object.keys(values).length === 0) {
+                alert('No configuration values to save');
+                return;
+            }
+
+            const results = await saveConfigValues(values);
+
+            let message = '';
+            if (results.saved.length > 0) {
+                message += `✓ Saved ${results.saved.length} setting(s)`;
+            }
+            if (results.errors.length > 0) {
+                message += `\n\n✗ Errors:\n${results.errors.join('\n')}`;
+            }
+            if (results.requiresRestart.length > 0) {
+                message += `\n\n⚠️ Restart required for: ${results.requiresRestart.join(', ')}`;
+            }
+
+            alert(message || 'No changes made');
         }
 
         // Service status checks
@@ -1812,6 +2116,79 @@
             alert(data.message || data.error);
         }
 
+        // ============================================================================
+        // All Configuration Card Functions
+        // ============================================================================
+
+        async function refreshConfigCategories() {
+            const refreshIcon = document.getElementById('config-category-refresh');
+            if (refreshIcon) refreshIcon.classList.add('spinning');
+
+            try {
+                const data = await loadSystemConfig(true);  // Force refresh
+
+                if (data.success) {
+                    const select = document.getElementById('config-category-select');
+                    const currentValue = select.value;
+
+                    // Rebuild options
+                    select.innerHTML = '<option value="">-- Select Category --</option>';
+                    for (const category of data.categories) {
+                        const opt = document.createElement('option');
+                        opt.value = category.name;
+                        opt.textContent = `${category.name} (${category.configs.length})`;
+                        select.appendChild(opt);
+                    }
+
+                    // Restore selection if it still exists
+                    if (currentValue && data.categories.find(c => c.name === currentValue)) {
+                        select.value = currentValue;
+                        loadConfigCategory();
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to refresh config categories:', e);
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('spinning');
+            }
+        }
+
+        async function loadConfigCategory() {
+            const select = document.getElementById('config-category-select');
+            const category = select.value;
+            const container = document.getElementById('auto-config-container');
+            const saveBtn = document.getElementById('save-auto-config-btn');
+
+            if (!category) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Select a category to view configuration...</p>';
+                saveBtn.disabled = true;
+                return;
+            }
+
+            container.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+
+            await renderConfigGroup(category, container, {
+                showKey: true,
+                onchange: () => {
+                    // Enable save button when any value changes
+                    saveBtn.disabled = false;
+                }
+            });
+
+            saveBtn.disabled = false;
+        }
+
+        async function saveAutoConfigGroup() {
+            const container = document.getElementById('auto-config-container');
+            const select = document.getElementById('config-category-select');
+            const category = select.value;
+
+            await saveConfigGroup(container, category || 'Config');
+
+            // Refresh to show updated indicators
+            loadConfigCategory();
+        }
+
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             refreshAll();
@@ -1819,6 +2196,7 @@
             loadSTTConfig();
             checkSavedImage();
             refreshTokenBudget();
+            refreshConfigCategories();  // Load config categories for auto-renderer
         });
     </script>
 </body>

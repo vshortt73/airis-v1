@@ -397,7 +397,8 @@ def load_recent_conversation(
     max_tokens: int = None,
     max_messages: int = None,
     verbose_budget: int = None,
-    summary_budget: int = None
+    summary_budget: int = None,
+    headroom_tokens: int = 0
 ) -> List[Dict[str, str]]:
     """
     Load recent conversation history for context with TIERED token budgeting.
@@ -415,6 +416,7 @@ def load_recent_conversation(
         max_messages: Max total messages (safety brake)
         verbose_budget: Token budget for recent full messages (uses VERBOSE_TOKEN_BUDGET config)
         summary_budget: Token budget for older summarized messages (uses SUMMARY_TOKEN_BUDGET config)
+        headroom_tokens: Tokens to reserve for batch trim snapshot growth (reduces summary_budget)
 
     Returns:
         List of message dicts with 'role' and 'content'
@@ -435,6 +437,11 @@ def load_recent_conversation(
         print(f"[persistence.py] Legacy mode: {max_tokens:,} tokens (no summaries)")
     else:
         print(f"[persistence.py] Tiered budgets: {verbose_budget:,} verbose + {summary_budget:,} summary")
+
+    # Apply headroom reduction for batch trim snapshot
+    if headroom_tokens > 0:
+        summary_budget = max(1000, summary_budget - headroom_tokens)
+        print(f"[persistence.py] Batch trim headroom: -{headroom_tokens:,} tokens → summary_budget now {summary_budget:,}")
 
     if max_messages is None:
         max_messages = getattr(config, 'MAX_TOTAL_MESSAGES', 50)

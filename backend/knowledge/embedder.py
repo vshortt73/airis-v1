@@ -19,7 +19,8 @@ from backend.knowledge.extractors import ExtractedDocument
 def generate_chunk_embeddings(
     chunks: List[Chunk],
     doc_title: str,
-    batch_size: int = None
+    batch_size: int = None,
+    force_cpu: bool = False
 ) -> List[Tuple[List[float], List[float]]]:
     """
     Generate dual-facet embeddings for chunks using batch processing
@@ -34,6 +35,7 @@ def generate_chunk_embeddings(
         chunks: List of Chunk objects
         doc_title: Document title for context
         batch_size: Batch size for embedding generation (default from config)
+        force_cpu: If True, force CPU for encoding (avoids CUDA OOM when GPU is full)
 
     Returns:
         List of tuples (content_embedding, context_embedding)
@@ -69,11 +71,11 @@ def generate_chunk_embeddings(
         context_texts.append(context_text)
 
     # Generate embeddings in batches for efficiency
-    print(f"[embedder][generate_chunk_embeddings] Generating content embeddings (batch_size={batch_size})...")
-    content_embeddings = generate_embeddings_batch(content_texts)
+    print(f"[embedder][generate_chunk_embeddings] Generating content embeddings (batch_size={batch_size}, cpu={force_cpu})...")
+    content_embeddings = generate_embeddings_batch(content_texts, batch_size=batch_size, force_cpu=force_cpu)
 
-    print(f"[embedder][generate_chunk_embeddings] Generating context embeddings (batch_size={batch_size})...")
-    context_embeddings = generate_embeddings_batch(context_texts)
+    print(f"[embedder][generate_chunk_embeddings] Generating context embeddings (batch_size={batch_size}, cpu={force_cpu})...")
+    context_embeddings = generate_embeddings_batch(context_texts, batch_size=batch_size, force_cpu=force_cpu)
 
     # Validate
     if not content_embeddings or not context_embeddings:
@@ -82,6 +84,13 @@ def generate_chunk_embeddings(
 
     if len(content_embeddings) != len(chunks) or len(context_embeddings) != len(chunks):
         print(f"[embedder][generate_chunk_embeddings] ✗ Embedding count mismatch")
+        return []
+
+    # Check for individual None entries (can happen if a batch partially fails)
+    null_content = sum(1 for e in content_embeddings if e is None)
+    null_context = sum(1 for e in context_embeddings if e is None)
+    if null_content > 0 or null_context > 0:
+        print(f"[embedder][generate_chunk_embeddings] ✗ {null_content} null content + {null_context} null context embeddings - aborting to prevent NULL entries in database")
         return []
 
     # Combine into tuples

@@ -76,6 +76,14 @@ PORT = 8000
 # Fallback default for document processing
 DOCUMENT_CONTEXT_BUDGET = 8000
 
+# Inference backend (llamacpp or sglang) - overwritten by database
+INFERENCE_BACKEND = "llamacpp"
+
+# Batch trim KV cache optimization - overwritten by database
+BATCH_TRIM_ENABLED = True
+BATCH_TRIM_SIZE = 5
+BATCH_TRIM_HEADROOM_TOKENS = 4000
+
 # # Session
 # SESSION_TIMEOUT_MINUTES = 30
 

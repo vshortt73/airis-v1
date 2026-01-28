@@ -74,10 +74,10 @@ class ComfyUIClient:
                         return data.get("prompt_id")
                     else:
                         error = await resp.text()
-                        print(f"[creative] ComfyUI error: {error}")
+                        print(f"[creative] ComfyUI error: {error}", file=sys.stderr)
                         return None
         except Exception as e:
-            print(f"[creative] Failed to queue prompt: {e}")
+            print(f"[creative] Failed to queue prompt: {e}", file=sys.stderr)
             return None
 
     async def get_history(self, prompt_id: str) -> Optional[Dict]:
@@ -90,7 +90,7 @@ class ComfyUIClient:
                         return data.get(prompt_id)
                     return None
         except Exception as e:
-            print(f"[creative] Failed to get history: {e}")
+            print(f"[creative] Failed to get history: {e}", file=sys.stderr)
             return None
 
     async def wait_for_completion(
@@ -108,16 +108,16 @@ class ComfyUIClient:
                 if status.get("status_str") == "success":
                     return history
                 elif status.get("status_str") == "error":
-                    print(f"[creative] Generation failed: {status.get('messages', [])}")
+                    print(f"[creative] Generation failed: {status.get('messages', [])}", file=sys.stderr)
                     return None
 
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
 
             if int(elapsed) % 10 == 0 and elapsed > 0:
-                print(f"[creative] Still generating... ({int(elapsed)}s)")
+                print(f"[creative] Still generating... ({int(elapsed)}s)", file=sys.stderr)
 
-        print(f"[creative] Generation timed out after {max_wait}s")
+        print(f"[creative] Generation timed out after {max_wait}s", file=sys.stderr)
         return None
 
 
@@ -129,13 +129,13 @@ def load_workflow(name: str) -> Optional[Dict]:
     """Load a workflow template from the workflows directory"""
     workflow_path = WORKFLOW_DIR / f"{name}.json"
     if not workflow_path.exists():
-        print(f"[creative] Workflow not found: {workflow_path}")
+        print(f"[creative] Workflow not found: {workflow_path}", file=sys.stderr)
         return None
     try:
         with open(workflow_path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"[creative] Failed to load workflow: {e}")
+        print(f"[creative] Failed to load workflow: {e}", file=sys.stderr)
         return None
 
 
@@ -164,7 +164,7 @@ def inject_prompt(
         workflow["3"]["inputs"]["steps"] = steps
         workflow["3"]["inputs"]["cfg"] = cfg
 
-    print(f"[creative] Injected: '{prompt[:50]}...', {width}x{height}, seed={seed}")
+    print(f"[creative] Injected: '{prompt[:50]}...', {width}x{height}, seed={seed}", file=sys.stderr)
     return workflow
 
 
@@ -178,7 +178,7 @@ def extract_output_filename(history: Dict) -> Optional[str]:
                 return images[0].get("filename")
         return None
     except Exception as e:
-        print(f"[creative] Failed to extract filename: {e}")
+        print(f"[creative] Failed to extract filename: {e}", file=sys.stderr)
         return None
 
 
@@ -249,19 +249,19 @@ async def image(
         }
 
     config = STYLE_CONFIGS[style]
-    print(f"[creative][image] Action: {action} (style: {style})")
-    print(f"[creative][image] Prompt: {prompt[:100]}...")
+    print(f"[creative][image] Action: {action} (style: {style})", file=sys.stderr)
+    print(f"[creative][image] Prompt: {prompt[:100]}...", file=sys.stderr)
 
     # Request GPU
     try:
         from core.gpu_manager import request_gpu
-        print(f"[creative][image] Requesting GPU for ComfyUI...")
+        print(f"[creative][image] Requesting GPU for ComfyUI...", file=sys.stderr)
         success, error = await request_gpu("comfyui")
         if not success:
             return {"success": False, "error": f"GPU unavailable: {error}"}
-        print(f"[creative][image] GPU acquired")
+        print(f"[creative][image] GPU acquired", file=sys.stderr)
     except ImportError as e:
-        print(f"[creative][image] Warning: GPU manager not available: {e}")
+        print(f"[creative][image] Warning: GPU manager not available: {e}", file=sys.stderr)
 
     # Load workflow
     workflow = load_workflow(config["workflow"])
@@ -294,15 +294,15 @@ async def image(
     )
 
     # Queue prompt
-    print(f"[creative][image] Queueing to ComfyUI...")
+    print(f"[creative][image] Queueing to ComfyUI...", file=sys.stderr)
     prompt_id = await comfyui.queue_prompt(workflow)
     if not prompt_id:
         return {"success": False, "error": "Failed to queue prompt"}
 
-    print(f"[creative][image] Queued: {prompt_id}")
+    print(f"[creative][image] Queued: {prompt_id}", file=sys.stderr)
 
     # Wait for completion
-    print(f"[creative][image] Generating{'(FaceID)' if style == 'self' else ''}...")
+    print(f"[creative][image] Generating{'(FaceID)' if style == 'self' else ''}...", file=sys.stderr)
     history = await comfyui.wait_for_completion(prompt_id, max_wait=config["max_wait"])
     if not history:
         return {"success": False, "error": "Generation timed out or failed"}
@@ -312,7 +312,7 @@ async def image(
     if not filename:
         return {"success": False, "error": "No output image found"}
 
-    print(f"[creative][image] Output: {filename}")
+    print(f"[creative][image] Output: {filename}", file=sys.stderr)
 
     # Read and encode
     image_path = Path(COMFYUI_OUTPUT_DIR) / filename
@@ -324,7 +324,7 @@ async def image(
             image_data = f.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-        print(f"[creative][image] Success ({len(image_data)} bytes)")
+        print(f"[creative][image] Success ({len(image_data)} bytes)", file=sys.stderr)
 
         return {
             "success": True,
@@ -346,12 +346,12 @@ async def image(
 # ============================================================================
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("IRIS CREATIVE SERVER (Unified)")
-    print("=" * 60)
-    print(f"ComfyUI URL: {COMFYUI_URL}")
-    print("Tool: image(action, prompt, ...)")
-    print("Actions: generate, self")
-    print("Starting server...")
-    print("=" * 60)
+    print("=" * 60, file=sys.stderr)
+    print("IRIS CREATIVE SERVER (Unified)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print(f"ComfyUI URL: {COMFYUI_URL}", file=sys.stderr)
+    print("Tool: image(action, prompt, ...)", file=sys.stderr)
+    print("Actions: generate, self", file=sys.stderr)
+    print("Starting server...", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     server.run()

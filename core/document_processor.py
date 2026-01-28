@@ -166,7 +166,7 @@ def extract_document_text(
 async def process_documents_for_conversation(
     documents: List[Dict],
     user_message: Optional[str] = None
-) -> Optional[str]:
+) -> Tuple[Optional[str], List[Dict]]:
     """
     Process multiple documents and return combined context for conversation.
 
@@ -174,15 +174,18 @@ async def process_documents_for_conversation(
     - Splits token budget across multiple documents
     - Uses semantic relevance when user provides a question
     - Keeps document intro + most relevant sections for large docs
+    - Returns full document texts alongside truncated context for background indexing
 
     Args:
         documents: List of dicts with 'content' (base64) and 'filename'
         user_message: Optional user message for semantic relevance filtering
 
     Returns:
-        Combined document text for context, or None if all failed
+        Tuple of (combined_truncated_text, list_of_full_documents)
+        full_documents entries: {"filename", "title", "file_type", "full_text"}
     """
     results = []
+    full_documents = []
     total_budget = get_document_budget()  # tokens
 
     # Split budget across documents
@@ -206,6 +209,19 @@ async def process_documents_for_conversation(
         doc_tokens = estimate_tokens(text)
         title = metadata.get('title', filename)
         file_type = metadata.get('file_type', 'unknown')
+
+        # Capture full document for background indexing
+        # Use original filename for title (extractor may return temp file name)
+        # Use os.path.splitext for file_type (metadata 'file_type' is a category like 'pdf', not '.pdf')
+        _, original_ext = os.path.splitext(filename)
+        index_title = title if title and not title.startswith('tmp') else os.path.splitext(filename)[0]
+        index_file_type = original_ext if original_ext else f".{file_type}" if not file_type.startswith('.') else file_type
+        full_documents.append({
+            "filename": filename,
+            "title": index_title,
+            "file_type": index_file_type,
+            "full_text": text
+        })
 
         # Document fits in budget - include full text
         if doc_tokens <= per_doc_budget:
@@ -266,15 +282,18 @@ async def process_documents_for_conversation(
 
         doc_header = f"=== Document: {title} ({file_type}) - {actual_tokens:,} of {doc_tokens:,} tokens ==="
         if omitted_tokens > 0:
-            doc_header += f"\n[Note: {omitted_tokens:,} tokens omitted. Ask about specific sections if needed.]"
+            doc_header += (
+                f"\n[Note: {omitted_tokens:,} tokens omitted. The COMPLETE document has been saved to the knowledge base. "
+                f"Use knowledge(action=\"search\", query=\"...\") to find specific sections not shown here.]"
+            )
 
         results.append(f"{doc_header}\n\n{combined}")
         print(f"[document_processor] ✓ {filename}: {actual_tokens:,}/{doc_tokens:,} tokens (smart extraction)")
 
     if results:
-        return "\n\n".join(results)
+        return "\n\n".join(results), full_documents
 
-    return None
+    return None, full_documents
 
 
 # For testing

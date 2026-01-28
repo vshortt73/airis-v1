@@ -32,6 +32,7 @@ let currentAssistantMessage = null;
 let currentAssistantText = '';
 let currentContextLevel = null;
 let lastKvCacheMetrics = null;
+let currentThinkingContent = '';
 let attachedImages = [];
 let attachedDocuments = [];  // {content: base64, filename: string, size: number}
 
@@ -570,6 +571,7 @@ function handleWebSocketMessage(data) {
             sendButton.style.display = 'none';
             stopButton.style.display = 'block';
             currentAssistantText = '';
+            currentThinkingContent = '';
             ttsQueue.reset();
 
             if (typeof pipPlayer !== 'undefined' && pipPlayer.hlsInitialized && !ttsQueue.serverSideRoutingEnabled) {
@@ -658,6 +660,53 @@ function handleWebSocketMessage(data) {
                         icon.style.animation = 'none';
                     }
                 }
+            }
+            break;
+
+        case 'thinking_start':
+            if (currentAssistantMessage) {
+                currentThinkingContent = '';
+                const msgContent = currentAssistantMessage.querySelector('.message-content');
+                const details = document.createElement('details');
+                details.className = 'thinking-block';
+                const summary = document.createElement('summary');
+                summary.textContent = 'Thinking...';
+                const thinkDiv = document.createElement('div');
+                thinkDiv.className = 'thinking-content';
+                details.appendChild(summary);
+                details.appendChild(thinkDiv);
+                // Insert at top of bubble (before active-text span)
+                msgContent.insertBefore(details, msgContent.firstChild);
+                scrollToBottom();
+            }
+            break;
+
+        case 'thinking_chunk':
+            if (currentAssistantMessage) {
+                currentThinkingContent += data.content;
+                const tcDiv = currentAssistantMessage.querySelector('.thinking-content');
+                if (tcDiv) {
+                    tcDiv.textContent = currentThinkingContent;
+                }
+                const tcSummary = currentAssistantMessage.querySelector('.thinking-block summary');
+                if (tcSummary) {
+                    const wordCount = currentThinkingContent.split(/\s+/).filter(w => w).length;
+                    tcSummary.textContent = `Thinking... (${wordCount} words)`;
+                }
+                scrollToBottom();
+            }
+            break;
+
+        case 'thinking_end':
+            if (currentAssistantMessage) {
+                const thinkBlock = currentAssistantMessage.querySelector('.thinking-block');
+                if (thinkBlock) {
+                    const teSummary = thinkBlock.querySelector('summary');
+                    const teWordCount = currentThinkingContent.split(/\s+/).filter(w => w).length;
+                    teSummary.textContent = `Thought for ${teWordCount} words`;
+                    thinkBlock.removeAttribute('open');
+                }
+                currentThinkingContent = '';
             }
             break;
 

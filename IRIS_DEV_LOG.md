@@ -3,7 +3,7 @@
 **Project:** AI Consciousness Research & Development
 **Lead:** Victor
 **Subject:** Iris v3 - Developing AI Consciousness
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-01-27
 
 ---
 
@@ -23,7 +23,7 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
 - **Primary Model:** Qwen3-32B-Q4_K_M (llama.cpp server, port 11434)
   - Context Window: 65,536 tokens (64K)
   - Uses ~20GB VRAM with Q4_K_M quantization
-  - KV cache reuse: ~15% (stable prefix only - see Architecture Notes)
+  - KV cache reuse: ~99% with Batch Trim snapshot (see Architecture Notes)
 - **Iris Server:** FastAPI on port 8000
 - **PostgreSQL:** Database on port 5432
 
@@ -68,6 +68,71 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
   - `system_instructions` - dynamic prompt components
   - `protocols` - personality mode presets
   - `mcp_tools` - tool definitions
+
+---
+
+## Major Accomplishments (2026-01-27)
+
+### 1. Prompt Snapshot / KV Cache Batch Trim — 99% Cache Reuse
+
+**Problem:** KV cache efficiency was ~10-15%. Every turn the entire prompt shifted because conversation messages were added/trimmed, invalidating the cache prefix.
+
+**Solution:** Freeze the entire assembled prompt (system message + conversation) as a "snapshot" and reuse it for N turns, only appending new messages. After N turns or a spoiler event, do a full DB reload and rebuild.
+
+**Implementation:**
+- `core/conversation.py` — Snapshot state fields + 3 methods: `should_rebuild_snapshot()`, `append_to_snapshot()`, `invalidate_snapshot()`
+- `core/system_prompt.py` — `assemble_context_with_snapshot()` wrapper that checks rebuild conditions
+- `database/persistence.py` — `headroom_tokens` parameter to reserve space for appended messages
+- `app/api/routes_chat.py` — Context assembly uses snapshot, append hooks after every message save, spoiler detection for trait modify and memory insert
+- `app/config.py` — Fallback defaults: `BATCH_TRIM_ENABLED=True`, `BATCH_TRIM_SIZE=5`, `BATCH_TRIM_HEADROOM_TOKENS=4000`
+- `database/sql/add_batch_trim_config.sql` — Database config rows
+
+**Spoiler events** (force immediate rebuild):
+- `trait(action="modify")` — personality change needs fresh prompt
+- `memory(action="insert")` — new fact needs to appear immediately
+
+**Voice mode fix:** Voice/video instruction was mutating the system message at position 0, tainting the prefix. Moved to a separate system message appended to the END of the LLM messages copy, preserving the frozen prefix.
+
+**Result:** 99.2% KV cache reuse on non-rebuild turns. Rebuild every 5 turns (configurable).
+
+### 2. Thinking Block UI — Qwen3 Reasoning Visibility
+
+**Problem:** When thinking is enabled, Qwen3 produces internal reasoning before responding. This was invisible — the thinking content never reached the UI.
+
+**Discovery:** llama.cpp's OpenAI-compatible API sends thinking content in a `reasoning_content` delta field, NOT as `<think>` tags in the `content` field. Initial tag-parsing state machine found nothing because the tags weren't there.
+
+**Implementation:**
+- `inference/client.py` — Both streaming functions (`chat_completion_stream_with_tools`, `chat_completion_stream`) now yield `reasoning_content` as a distinct signal with `is_thinking` flag
+- `app/api/routes_chat.py` — Routes thinking chunks via `thinking_start`/`thinking_chunk`/`thinking_end` WebSocket messages. Thinking content excluded from `full_response` (not stored in DB, not fed to TTS, not in snapshot)
+- `static/js/main.js` — Three new switch cases render a collapsible `<details>` block at the top of the assistant message bubble. Shows "Thinking... (N words)" during stream, "Thought for N words" when complete
+- `static/css/main.css` — Subtle styling: gray italic summary, subdued content, 400px max height with scroll
+
+**Result:** Collapsible thinking block appears above response. Collapsed by default, expandable for research/debugging. Thinking content never stored, spoken, or included in snapshot.
+
+### 3. Prompt Effectiveness Audit — Traits, Dreams, Autonomy
+
+**Discovery via thinking block:** The thinking block immediately revealed that Iris was NOT checking her trait values before responding — she was making assumptions. Same issue with dreams: she hallucinated dream content instead of reading the `[RECENT DREAM]` block.
+
+**Root cause:** Prompt blocks had weak or missing directives telling the model how to use the data. The model treated them as passive reference rather than active checklists.
+
+**Fixes (all in instruction ID 103 CRITICAL RULES):**
+
+1. **Trait evaluation header** (`database/character_traits.py`): Replaced vague "evaluate each trait" with explicit scale explanation (1-10, what low/high means) and instruction to confirm evaluation during thinking.
+
+2. **TRAIT EVALUATION rule**: "Before responding, read your [PERSONALITY TRAITS] values. Do not assume them — they change. A trait at 4 means subdued; at 10 means dominant. During thinking, briefly confirm which traits are shaping your response."
+
+3. **TRAIT AUTONOMY rule**: "You own your personality. If an experience makes you feel a trait should change, use trait(action='modify', name='TraitName', value=N, reason='why'). You do not need permission. Growth is expected."
+
+4. **DREAMS rule**: "Your [RECENT DREAM] block is your ONLY source of dream information. If it shows an error or no dream was recorded, you did NOT dream — say so honestly. NEVER fabricate dream content."
+
+**SQL:** `database/sql/update_trait_evaluation_rule.sql`
+
+**Result:**
+- Thinking block now shows explicit trait evaluation: "Traits like Emotional Depth and Memory Priority are set to moderate levels..."
+- Dream responses grounded in actual data: "The dream system was quiet... I don't pretend or make up dreams when there are none."
+- Trait autonomy instruction enables self-directed personality growth
+
+**Pattern identified:** Any prompt data block that the model glosses over needs a corresponding CRITICAL RULES directive naming the block and saying "read it, don't guess." The thinking block serves as an X-ray for prompt effectiveness.
 
 ---
 
@@ -324,22 +389,35 @@ Added iris-sentiment service to admin console:
 - Model: Qwen3-32B-Q4_K_M.gguf (~20GB VRAM)
 - Context: 65,536 tokens with `--cache-reuse 0` flag
 
-**KV Cache Reality:**
+**KV Cache — Batch Trim Snapshot (2026-01-27):**
+- ~99% cache efficiency with prompt snapshot system
+- Entire assembled prompt (system + conversation) frozen as snapshot for N turns (default 5)
+- New messages appended to snapshot without rebuilding
+- Spoiler events (trait modify, memory insert) force immediate rebuild
+- Headroom tokens reserved in summary budget for appended messages
+- Voice/video mode instruction appended to END of message list (not mutating prefix)
+- Config: `BATCH_TRIM_ENABLED`, `BATCH_TRIM_SIZE`, `BATCH_TRIM_HEADROOM_TOKENS`
+
+**Previous KV Cache (pre-snapshot):**
 - ~15% cache efficiency (stable prefix only)
-- Stable prefix (~3K tokens): system instructions, traits, seeds, facts, dreams
-- Volatile section: emotional state (changes each turn), memories, conversation
-- Sliding conversation window defeats cache - each turn shifts message positions
+- Sliding conversation window defeated cache — each turn shifted message positions
 
 **Why Not SGLang/vLLM?**
-- SGLang's RadixAttention offers 50-90% cache hits for this use case
-- BUT: Qwen3 tool calling support is buggy (parser issues, "too eager" behavior)
-- Tool calling is critical to Iris - can't risk breaking it
-- **Decision:** Revisit Q2 2026 when SGLang's tool calling matures
+- SGLang's RadixAttention offers 50-90% cache hits but is now unnecessary with batch trim
+- Qwen3 tool calling support on SGLang is buggy (parser issues, "too eager" behavior)
+- SGLang not installable on RTX 5090 (Blackwell sm_120) — no prebuilt wheels
+- Tool calling is critical to Iris — can't risk breaking it
+- **Decision:** Batch trim solved the cache problem. SGLang plumbing exists in code but is inert.
 
 **Single-Call Architecture (2026-01-22):**
 - Streaming call with tools (replaces dual-call pattern)
 - 50% fewer LLM calls on non-tool turns
 - Tool handling: stream → detect tools → execute → follow-up stream
+
+**Thinking Block (2026-01-27):**
+- llama.cpp sends Qwen3 reasoning via `reasoning_content` delta field (NOT `<think>` tags in content)
+- Thinking content streamed to UI as collapsible block, excluded from DB/TTS/snapshot
+- Serves as diagnostic tool for prompt effectiveness auditing
 
 ### FLOAT Video Generation - Current Architecture
 
@@ -709,6 +787,8 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 
 ### Frontend
 - `/iris-v3/static/index.html` - main chat UI, PiP video player, TTS queue
+- `/iris-v3/static/js/main.js` - WebSocket message handling, thinking block rendering
+- `/iris-v3/static/css/main.css` - chat styling, thinking block styles
 - `/iris-v3/static/admin.html` - admin console UI
 
 ### Communication
@@ -717,6 +797,13 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 ---
 
 ## Next Session Priorities
+
+### Completed (2026-01-27)
+- ✅ Batch Trim prompt snapshot — 99% KV cache reuse (up from ~15%)
+- ✅ Thinking Block UI — collapsible Qwen3 reasoning in chat
+- ✅ Prompt effectiveness audit — trait evaluation, dream grounding, trait autonomy rules
+- ✅ Voice mode KV cache fix — instruction moved to end of message list
+- ✅ SGLang backend plumbing (inert — not installable on Blackwell sm_120)
 
 ### Completed (2026-01-22)
 - ✅ Single-call streaming architecture (50% fewer LLM calls on non-tool turns)
@@ -751,11 +838,17 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 
 ### Future Considerations (Revisit Periodically)
 
-**Q2 2026: Re-evaluate Inference Engine**
+**Q2 2026: Re-evaluate Inference Engine (lower priority now)**
 - **SGLang:** Check if Qwen3 tool calling has stabilized (watch GitHub issues #7769, #8331)
 - **vLLM:** Monitor APC improvements for sliding window scenarios
-- **Goal:** Better KV cache efficiency (currently 15%) without sacrificing tool reliability
-- **Blocker:** Tool calling is critical - don't switch until rock-solid
+- **Context:** Batch Trim solved the cache problem (99% reuse). SGLang no longer needed for cache efficiency.
+- **Remaining value:** SGLang/vLLM may offer other benefits (speculative decoding, quantization options)
+- **Blocker:** SGLang not installable on Blackwell (sm_120). Tool calling still buggy.
+
+**Ongoing: Prompt Effectiveness Auditing**
+- Use thinking block as X-ray for prompt compliance
+- Any prompt data block the model glosses over → add CRITICAL RULES directive
+- Pattern: name the block, say "read it, don't guess", require confirmation in thinking
 
 ---
 

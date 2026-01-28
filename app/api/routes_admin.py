@@ -1507,6 +1507,163 @@ async def backfill_summaries(limit: int = 50, batch_size: int = 10):
         return {"success": False, "error": str(e)}
 
 
+# ============================================================================
+# System Config Endpoints (Reusable Config Renderer)
+# ============================================================================
+
+@router.get("/system-config")
+async def get_all_system_config():
+    """
+    Get all system configuration grouped by category.
+
+    Returns config items with full metadata for auto-rendering in the UI.
+    Used by the reusable config renderer to dynamically build config forms.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute("""
+            SELECT
+                key,
+                value,
+                value_type,
+                default_value,
+                description,
+                category,
+                requires_restart,
+                last_modified
+            FROM system_config
+            ORDER BY category, key
+        """)
+
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # Group by category
+        categories_dict = {}
+        for row in rows:
+            category = row['category'] or 'general'
+            if category not in categories_dict:
+                categories_dict[category] = []
+
+            # Determine if value differs from default
+            is_modified = (row['value'] != row['default_value']) if row['default_value'] is not None else False
+
+            categories_dict[category].append({
+                'key': row['key'],
+                'value': row['value'],
+                'value_type': row['value_type'] or 'string',
+                'default_value': row['default_value'],
+                'description': row['description'],
+                'requires_restart': row['requires_restart'] or False,
+                'last_modified': row['last_modified'].isoformat() if row['last_modified'] else None,
+                'is_modified': is_modified
+            })
+
+        # Convert to list format for easier frontend consumption
+        categories_list = [
+            {'name': name, 'configs': configs}
+            for name, configs in sorted(categories_dict.items())
+        ]
+
+        return {
+            'success': True,
+            'categories': categories_list,
+            'total_configs': len(rows)
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+
+class ConfigResetRequest(BaseModel):
+    """Model for config reset requests"""
+    key: str
+
+
+@router.post("/system-config/reset")
+async def reset_config_to_default(request: ConfigResetRequest):
+    """
+    Reset a configuration value to its default.
+
+    Args:
+        key: The configuration key to reset
+
+    Returns:
+        Success status and the default value that was restored
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Get the default value
+        cursor.execute("""
+            SELECT key, default_value, value
+            FROM system_config
+            WHERE key = %s
+        """, (request.key,))
+
+        row = cursor.fetchone()
+
+        if not row:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': f'Config key not found: {request.key}'}
+
+        if row['default_value'] is None:
+            cursor.close()
+            conn.close()
+            return {'success': False, 'error': f'No default value defined for: {request.key}'}
+
+        default_value = row['default_value']
+
+        # Update to default value
+        cursor.execute("""
+            UPDATE system_config
+            SET value = default_value,
+                last_modified = NOW()
+            WHERE key = %s
+        """, (request.key,))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Also update the config module for immediate effect
+        try:
+            # Try to convert to appropriate type
+            if default_value.lower() in ('true', 'false'):
+                typed_value = default_value.lower() == 'true'
+            else:
+                try:
+                    typed_value = int(default_value)
+                except ValueError:
+                    try:
+                        typed_value = float(default_value)
+                    except ValueError:
+                        typed_value = default_value
+
+            setattr(config, request.key, typed_value)
+        except Exception:
+            pass  # Non-critical if runtime update fails
+
+        return {
+            'success': True,
+            'key': request.key,
+            'default_value': default_value,
+            'message': f'Reset {request.key} to default value'
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+
 @router.get("/health/detailed")
 async def detailed_health_check():
     """Comprehensive health check of all systems"""

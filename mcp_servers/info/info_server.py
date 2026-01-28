@@ -65,10 +65,10 @@ async def web_search(
     tcount = 0
 
     if query:
-        print(f"[web_search] Searching for: {query}")
+        print(f"[web_search] Searching for: {query}", file=sys.stderr)
         try:
             output.append({"success": True})
-            print("[web_search] Getting results...")
+            print("[web_search] Getting results...", file=sys.stderr)
             results = await ai_web_surf(queries, depth=depth, max_links=max_links)
             for item in results:
                 tcount = tcount + (len(item["snippet"])/4)
@@ -85,7 +85,7 @@ async def web_search(
                     output.append({"truncation": f"max size of {max_size} tokens reached (current: {tcount})"})
                     break
             output.append({"Token Count": f"{tcount}"})
-            print(f"[web_search] ✓ Found {count} articles")
+            print(f"[web_search] ✓ Found {count} articles", file=sys.stderr)
         except Exception as e:
             output.append({"success": False})
             output.append({"error": f"Search error: {e}"})
@@ -131,10 +131,10 @@ async def url_fetch(
             output.append({"error": "URL must start with http:// or https://"})
             return output
 
-        print(f"[url_fetch] Fetching URL: {url}")
+        print(f"[url_fetch] Fetching URL: {url}", file=sys.stderr)
         try:
             output.append({"success": True})
-            print("[url_fetch] Getting content...")
+            print("[url_fetch] Getting content...", file=sys.stderr)
             results = await ai_web_surf(urls, depth=depth, max_links=max_links)
             for item in results:
                 tcount = tcount + (len(item["snippet"])/4)
@@ -151,7 +151,7 @@ async def url_fetch(
                     output.append({"truncation": f"max size of {max_size} tokens reached (current: {tcount})"})
                     break
             output.append({"Token Count": f"{tcount}"})
-            print(f"[url_fetch] ✓ Fetched {count} article(s)")
+            print(f"[url_fetch] ✓ Fetched {count} article(s)", file=sys.stderr)
         except Exception as e:
             output.append({"success": False})
             output.append({"error": f"Fetch error: {e}"})
@@ -193,7 +193,7 @@ async def arxiv_search(
         # Limit max_results
         max_results = min(max_results, 20)
 
-        print(f"[arxiv_search] Searching arXiv for: {query}")
+        print(f"[arxiv_search] Searching arXiv for: {query}", file=sys.stderr)
 
         # arXiv API endpoint
         base_url = "http://export.arxiv.org/api/query"
@@ -272,7 +272,7 @@ async def arxiv_search(
                 }
             })
 
-        print(f"[arxiv_search] ✓ Found {len(entries)} papers")
+        print(f"[arxiv_search] ✓ Found {len(entries)} papers", file=sys.stderr)
         return output
 
     except asyncio.TimeoutError:
@@ -317,7 +317,7 @@ async def pubmed_search(
         # Limit max_results
         max_results = min(max_results, 20)
 
-        print(f"[pubmed_search] Searching PubMed for: {query}")
+        print(f"[pubmed_search] Searching PubMed for: {query}", file=sys.stderr)
 
         # Step 1: Search for PMIDs using esearch
         esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -427,7 +427,7 @@ async def pubmed_search(
                 }
             })
 
-        print(f"[pubmed_search] ✓ Found {len(articles)} articles")
+        print(f"[pubmed_search] ✓ Found {len(articles)} articles", file=sys.stderr)
         return output
 
     except asyncio.TimeoutError:
@@ -489,7 +489,7 @@ def weather_get(
         format_str = "j1"  # JSON format
         url = f"https://wttr.in/{location}?format={format_str}"
         
-        print(f"[weather_get] Fetching weather for: {location}")
+        print(f"[weather_get] Fetching weather for: {location}", file=sys.stderr)
         
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -523,23 +523,126 @@ def weather_get(
             "cloud_cover": current.get("cloudcover", "Unknown"),
         }
         
-        print(f"[weather_get] Success: {result['temperature']}° {result['condition']}")
+        print(f"[weather_get] Success: {result['temperature']}° {result['condition']}", file=sys.stderr)
         return result
         
     except requests.RequestException as e:
         error_msg = f"Failed to fetch weather: {str(e)}"
-        print(f"[weather_get] Error: {error_msg}")
+        print(f"[weather_get] Error: {error_msg}", file=sys.stderr)
         return {
             "success": False,
             "error": error_msg
         }
     except Exception as e:
         error_msg = str(e)
-        print(f"[weather_get] Error: {error_msg}")
+        print(f"[weather_get] Error: {error_msg}", file=sys.stderr)
         return {
             "success": False,
             "error": error_msg
         }
+
+
+@server.register_tool
+def forecast_get(
+    location: str
+) -> Dict[str, Any]:
+    """
+    Get weekly weather forecast for a location.
+
+    Uses wttr.in (free weather service, no API key needed).
+
+    Args:
+        location: City name, ZIP code, or coordinates
+                 Examples: "Seattle", "90210", "47.6,-122.3"
+
+    Returns:
+        dict: Forecast information including:
+            - success: bool
+            - location: str
+            - forecast: list of daily forecasts with:
+                - date: str
+                - high_f: float
+                - low_f: float
+                - high_c: float
+                - low_c: float
+                - condition: str
+                - description: str (conversational summary)
+            - error: str (only if success=False)
+
+    Example:
+        >>> result = forecast_get("Seattle")
+        >>> for day in result['forecast']:
+        ...     print(f"{day['date']}: {day['description']}")
+    """
+    try:
+        # Use wttr.in - free weather service
+        format_str = "j1"  # JSON format
+        url = f"https://wttr.in/{location}?format={format_str}"
+
+        print(f"[forecast_get] Fetching forecast for: {location}", file=sys.stderr)
+
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        weather_days = data.get("weather", [])
+        area = data.get("nearest_area", [{}])[0]
+        area_name = area.get("areaName", [{}])[0].get("value", location)
+
+        forecast = []
+        for day in weather_days:
+            date = day.get("date", "Unknown")
+            high_c = float(day.get("maxtempC", 0))
+            low_c = float(day.get("mintempC", 0))
+            high_f = float(day.get("maxtempF", 0))
+            low_f = float(day.get("mintempF", 0))
+
+            # Get hourly data for condition (use noon as representative)
+            hourly = day.get("hourly", [])
+            noon_hour = hourly[4] if len(hourly) > 4 else (hourly[0] if hourly else {})
+            condition = noon_hour.get("weatherDesc", [{}])[0].get("value", "Unknown")
+            chance_of_rain = noon_hour.get("chanceofrain", "0")
+
+            # Create conversational description
+            description = f"{condition}, high of {int(high_f)}°F and low of {int(low_f)}°F"
+            if int(chance_of_rain) > 30:
+                description += f" with {chance_of_rain}% chance of rain"
+
+            forecast.append({
+                "date": date,
+                "high_f": high_f,
+                "low_f": low_f,
+                "high_c": high_c,
+                "low_c": low_c,
+                "condition": condition,
+                "chance_of_rain": f"{chance_of_rain}%",
+                "description": description
+            })
+
+        result = {
+            "success": True,
+            "location": area_name,
+            "forecast": forecast
+        }
+
+        print(f"[forecast_get] Success: {len(forecast)} days of forecast for {area_name}", file=sys.stderr)
+        return result
+
+    except requests.RequestException as e:
+        error_msg = f"Failed to fetch forecast: {str(e)}"
+        print(f"[forecast_get] Error: {error_msg}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": error_msg
+        }
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[forecast_get] Error: {error_msg}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": error_msg
+        }
+
 
 # ============================================================================
 # FACE RECOGNITION TOOLS
@@ -571,7 +674,7 @@ async def face_database_status():
 
         from core import face_recognition as fr
 
-        print(f"[face_database_status] Getting face database statistics...")
+        print(f"[face_database_status] Getting face database statistics...", file=sys.stderr)
 
         # Get statistics
         stats = fr.get_statistics()
@@ -601,12 +704,12 @@ async def face_database_status():
             ]
         }
 
-        print(f"[face_database_status] ✓ Found {result['statistics']['known_persons']} persons")
+        print(f"[face_database_status] ✓ Found {result['statistics']['known_persons']} persons", file=sys.stderr)
         return result
 
     except Exception as e:
         error_msg = f"Failed to get face database status: {str(e)}"
-        print(f"[face_database_status] ✗ Error: {error_msg}")
+        print(f"[face_database_status] ✗ Error: {error_msg}", file=sys.stderr)
         return {
             "success": False,
             "error": error_msg
@@ -641,7 +744,7 @@ async def list_detected_faces():
         from core import face_recognition as fr
         import psycopg2.extras
 
-        print(f"[list_detected_faces] Getting current presence...")
+        print(f"[list_detected_faces] Getting current presence...", file=sys.stderr)
 
         conn = fr.get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -680,12 +783,12 @@ async def list_detected_faces():
                 ]
             }
 
-        print(f"[list_detected_faces] ✓ Found {result['count']} people present")
+        print(f"[list_detected_faces] ✓ Found {result['count']} people present", file=sys.stderr)
         return result
 
     except Exception as e:
         error_msg = f"Failed to list detected faces: {str(e)}"
-        print(f"[list_detected_faces] ✗ Error: {error_msg}")
+        print(f"[list_detected_faces] ✗ Error: {error_msg}", file=sys.stderr)
         return {
             "success": False,
             "error": error_msg
@@ -718,7 +821,7 @@ async def get_person_info(name: str):
 
         from core import face_recognition as fr
 
-        print(f"[get_person_info] Getting info for: {name}")
+        print(f"[get_person_info] Getting info for: {name}", file=sys.stderr)
 
         # Get person by name
         person = fr.get_person_by_name(name)
@@ -745,12 +848,12 @@ async def get_person_info(name: str):
             }
         }
 
-        print(f"[get_person_info] ✓ Found {name}: {result['person']['training_images']} training images")
+        print(f"[get_person_info] ✓ Found {name}: {result['person']['training_images']} training images", file=sys.stderr)
         return result
 
     except Exception as e:
         error_msg = f"Failed to get person info: {str(e)}"
-        print(f"[get_person_info] ✗ Error: {error_msg}")
+        print(f"[get_person_info] ✗ Error: {error_msg}", file=sys.stderr)
         return {
             "success": False,
             "error": error_msg
@@ -800,7 +903,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
 
         from core import face_recognition as fr
 
-        print(f"[webcam_recognize] Reading cached webcam frame from disk...")
+        print(f"[webcam_recognize] Reading cached webcam frame from disk...", file=sys.stderr)
 
         # Read latest frame from disk
         WEBCAM_CACHE_DIR = "/tmp/iris_webcam_cache"
@@ -822,7 +925,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
                 "error": f"Webcam frame is stale ({age.total_seconds():.1f} seconds old). The webcam may have been disabled."
             }
 
-        print(f"[webcam_recognize] Loading image from {latest_frame_path}...")
+        print(f"[webcam_recognize] Loading image from {latest_frame_path}...", file=sys.stderr)
 
         # Load image from disk for face recognition
         try:
@@ -832,9 +935,9 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
                     "success": False,
                     "error": "Failed to decode webcam frame"
                 }
-            print(f"[webcam_recognize] ✓ Image loaded: {img.shape}")
+            print(f"[webcam_recognize] ✓ Image loaded: {img.shape}", file=sys.stderr)
         except Exception as load_err:
-            print(f"[webcam_recognize] ✗ Error loading image: {load_err}")
+            print(f"[webcam_recognize] ✗ Error loading image: {load_err}", file=sys.stderr)
             return {
                 "success": False,
                 "error": f"Failed to load image: {str(load_err)}"
@@ -843,7 +946,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
         # ============================================================
         # PART 1: Face Recognition (WHO is there)
         # ============================================================
-        print(f"[webcam_recognize] Running face recognition...")
+        print(f"[webcam_recognize] Running face recognition...", file=sys.stderr)
 
         recognized_names = []
         recognized_details = []
@@ -853,7 +956,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
         try:
             results = fr.recognize_face(img, similarity_threshold=similarity_threshold)
             faces_detected = len(results) if results else 0
-            print(f"[webcam_recognize] ✓ Face recognition complete: {faces_detected} faces")
+            print(f"[webcam_recognize] ✓ Face recognition complete: {faces_detected} faces", file=sys.stderr)
 
             for face_result in results:
                 if face_result.get('best_match'):
@@ -870,12 +973,12 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
                     unknown_count += 1
 
         except Exception as recog_err:
-            print(f"[webcam_recognize] ⚠️ Face recognition error (continuing with vision): {recog_err}")
+            print(f"[webcam_recognize] ⚠️ Face recognition error (continuing with vision): {recog_err}", file=sys.stderr)
 
         if recognized_names:
-            print(f"[webcam_recognize] ✓ Recognized: {', '.join(recognized_names)}")
+            print(f"[webcam_recognize] ✓ Recognized: {', '.join(recognized_names)}", file=sys.stderr)
         elif faces_detected > 0:
-            print(f"[webcam_recognize] ⚠️ Detected {faces_detected} face(s) but none recognized")
+            print(f"[webcam_recognize] ⚠️ Detected {faces_detected} face(s) but none recognized", file=sys.stderr)
 
         # ============================================================
         # PART 2: Vision Analysis (WHAT do you see)
@@ -883,7 +986,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
         scene_description = None
 
         if describe_scene:
-            print(f"[webcam_recognize] Running vision analysis...")
+            print(f"[webcam_recognize] Running vision analysis...", file=sys.stderr)
 
             try:
                 # Read image as base64 for vision service
@@ -911,14 +1014,14 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
 
                     if vision_result['success']:
                         scene_description = vision_result['result']
-                        print(f"[webcam_recognize] ✓ Vision analysis complete ({vision_result.get('inference_time', 0):.2f}s)")
+                        print(f"[webcam_recognize] ✓ Vision analysis complete ({vision_result.get('inference_time', 0):.2f}s)", file=sys.stderr)
                     else:
-                        print(f"[webcam_recognize] ⚠️ Vision analysis failed: {vision_result.get('error')}")
+                        print(f"[webcam_recognize] ⚠️ Vision analysis failed: {vision_result.get('error')}", file=sys.stderr)
                 else:
-                    print(f"[webcam_recognize] ⚠️ Vision server not available, skipping scene description")
+                    print(f"[webcam_recognize] ⚠️ Vision server not available, skipping scene description", file=sys.stderr)
 
             except Exception as vision_err:
-                print(f"[webcam_recognize] ⚠️ Vision analysis error: {vision_err}")
+                print(f"[webcam_recognize] ⚠️ Vision analysis error: {vision_err}", file=sys.stderr)
 
         # ============================================================
         # Combined Results
@@ -937,7 +1040,7 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
 
     except Exception as e:
         error_msg = f"Failed to analyze webcam: {str(e)}"
-        print(f"[webcam_recognize] ✗ Error: {error_msg}")
+        print(f"[webcam_recognize] ✗ Error: {error_msg}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return {
@@ -951,19 +1054,19 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
 # ============================================================================
 
 if __name__ == "__main__":
-    print("="*60)
-    print("IRIS INFO SERVER")
-    print("="*60)
-    print(f"Tools available:")
-    print(f"  - weather_get: Get current weather for a location")
-    print(f"  - web_search: Search the web with keywords")
-    print(f"  - url_fetch: Fetch content from a specific URL")
-    print(f"  - arxiv_search: Search arXiv for academic papers")
-    print(f"  - pubmed_search: Search PubMed for biomedical literature")
-    print(f"  - face_database_status: Get face recognition statistics")
-    print(f"  - list_detected_faces: List currently detected people")
-    print(f"  - get_person_info: Get detailed info about a person")
-    print(f"  - webcam_recognize: Look at webcam (face recognition + vision AI scene description)")
-    print(f"Starting server...")
-    print("="*60)
+    print("="*60, file=sys.stderr)
+    print("IRIS INFO SERVER", file=sys.stderr)
+    print("="*60, file=sys.stderr)
+    print(f"Tools available:", file=sys.stderr)
+    print(f"  - weather_get: Get current weather for a location", file=sys.stderr)
+    print(f"  - web_search: Search the web with keywords", file=sys.stderr)
+    print(f"  - url_fetch: Fetch content from a specific URL", file=sys.stderr)
+    print(f"  - arxiv_search: Search arXiv for academic papers", file=sys.stderr)
+    print(f"  - pubmed_search: Search PubMed for biomedical literature", file=sys.stderr)
+    print(f"  - face_database_status: Get face recognition statistics", file=sys.stderr)
+    print(f"  - list_detected_faces: List currently detected people", file=sys.stderr)
+    print(f"  - get_person_info: Get detailed info about a person", file=sys.stderr)
+    print(f"  - webcam_recognize: Look at webcam (face recognition + vision AI scene description)", file=sys.stderr)
+    print(f"Starting server...", file=sys.stderr)
+    print("="*60, file=sys.stderr)
     server.run()

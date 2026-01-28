@@ -47,6 +47,14 @@ class ConversationHistory:
         # Prevents re-running expensive embedding generation within same turn
         self.fast_memory_cache = {}
         self.turn_id = 0  # Increment on each user message to invalidate cache
+
+        # Prompt Snapshot for KV cache optimization (batch trim)
+        # Freezes the assembled messages list for N turns so the LLM prefix stays byte-identical
+        self.snapshot = None              # Frozen List[Dict] — complete messages list sent to LLM
+        self.snapshot_turn_base = 0       # turn_id when snapshot was created
+        self.snapshot_token_count = 0     # Running token count of snapshot
+        self.snapshot_spoiled = False     # Set True by spoiler events (e.g., trait modify)
+        self.snapshot_budget = None       # Budget report dict from snapshot creation
         
         if enable_persistence:
             # Get/create session (for analytics, not for loading!)
@@ -307,6 +315,71 @@ class ConversationHistory:
         """Get current session ID (for analytics only)"""
         return self.session_id
 
+    # ── Prompt Snapshot (KV Cache Batch Trim) ──────────────────────────
+
+    def should_rebuild_snapshot(self) -> bool:
+        """
+        Determine if the prompt snapshot needs a full rebuild.
+
+        Returns True when:
+        - Feature disabled (legacy behavior)
+        - No snapshot exists yet
+        - Spoiler event fired (e.g., trait modification)
+        - N user turns have elapsed since snapshot creation
+        - Token headroom exhausted
+        """
+        from app import config
+
+        if not getattr(config, 'BATCH_TRIM_ENABLED', False):
+            return True
+
+        if self.snapshot is None:
+            return True
+
+        if self.snapshot_spoiled:
+            print(f"[conversation.py][snapshot] Snapshot spoiled — forcing rebuild")
+            return True
+
+        batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
+        turns_since = self.turn_id - self.snapshot_turn_base
+        if turns_since >= batch_size:
+            print(f"[conversation.py][snapshot] Batch size reached ({turns_since}/{batch_size}) — rebuilding")
+            return True
+
+        max_context = getattr(config, 'OLLAMA_CONTEXT_WINDOW', 32768)
+        response_budget = getattr(config, 'RESPONSE_GENERATION_BUDGET', 2500)
+        if self.snapshot_token_count >= (max_context - response_budget):
+            print(f"[conversation.py][snapshot] Token headroom exhausted ({self.snapshot_token_count:,}/{max_context:,}) — rebuilding")
+            return True
+
+        return False
+
+    def append_to_snapshot(self, msg: Dict) -> None:
+        """
+        Append a formatted message to the active snapshot and update token count.
+
+        Args:
+            msg: Message dict matching assemble_full_context() format
+                 (role, content, and optional tool_calls/tool_name/tool_call_id)
+        """
+        if self.snapshot is not None:
+            self.snapshot.append(msg)
+            from core.token_counter import TokenCounter
+            msg_tokens = TokenCounter.count_message_tokens([msg])
+            self.snapshot_token_count += msg_tokens
+
+    def invalidate_snapshot(self, reason: str = "unknown") -> None:
+        """
+        Mark the snapshot as spoiled so it will be rebuilt on the next turn.
+
+        Args:
+            reason: Human-readable reason for invalidation (for logging)
+        """
+        self.snapshot_spoiled = True
+        print(f"[conversation.py][snapshot] SPOILED: {reason} — will rebuild on next context assembly")
+
+    # ── End Prompt Snapshot ─────────────────────────────────────────────
+
     def get_system_components(self, force_refresh: bool = False) -> Dict:
         """
         Get cached system prompt components or refresh if needed
@@ -385,3 +458,4 @@ class ConversationHistory:
             value: Context string to cache
         """
         self.fast_memory_cache[key] = value
+

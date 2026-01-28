@@ -3,23 +3,48 @@ export IRIS_DB_PASSWORD='yourpassword'
 cd "$(dirname "$0")/.."
 
 # ============================================
-# PREFLIGHT: Check llama-server
+# PREFLIGHT: Check inference backend
 # ============================================
 echo "=== Iris Preflight Checks ==="
 echo ""
 
-# Check llama-server health endpoint
-echo -n "Checking llama-server (port 11434)... "
-if curl -s http://localhost:11434/health 2>/dev/null | grep -q '"status":"ok"'; then
-    echo "✓ Running"
+# Detect backend from database (default: llamacpp)
+BACKEND=$(psql -h localhost -U irisuser -d irisdb -t -A -c \
+    "SELECT value FROM system_config WHERE key = 'INFERENCE_BACKEND'" 2>/dev/null)
+BACKEND=${BACKEND:-llamacpp}
+echo "Inference backend: $BACKEND"
+
+if [ "$BACKEND" = "sglang" ]; then
+    # SGLang health check
+    echo -n "Checking SGLang server (port 11434)... "
+    if curl -s http://localhost:11434/v1/models 2>/dev/null | grep -q '"data"'; then
+        echo "✓ Running"
+    elif curl -s http://localhost:11434/health 2>/dev/null | grep -q '"status"'; then
+        echo "✓ Running"
+    else
+        echo "✗ Not accessible"
+        echo ""
+        echo "SGLang server is not running on port 11434."
+        echo "Start it with:"
+        echo "  sudo systemctl start iris-sglang"
+        echo "  # or: ./scripts/sglang_server_start.sh"
+        echo ""
+        exit 1
+    fi
 else
-    echo "✗ Not accessible"
-    echo ""
-    echo "llama-server is not running on port 11434."
-    echo "Please start it manually:"
-    echo "  llama-server -m /path/to/model.gguf --port 11434 --ctx-size 32768"
-    echo ""
-    exit 1
+    # llama-server health check (existing behavior)
+    echo -n "Checking llama-server (port 11434)... "
+    if curl -s http://localhost:11434/health 2>/dev/null | grep -q '"status":"ok"'; then
+        echo "✓ Running"
+    else
+        echo "✗ Not accessible"
+        echo ""
+        echo "llama-server is not running on port 11434."
+        echo "Please start it manually:"
+        echo "  llama-server -m /path/to/model.gguf --port 11434 --ctx-size 32768"
+        echo ""
+        exit 1
+    fi
 fi
 
 # Quick API test

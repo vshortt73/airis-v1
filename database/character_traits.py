@@ -54,7 +54,15 @@ def get_trait_list() -> Optional[str]:
 
         # Format as string with proper header
         traitlist = "[PERSONALITY TRAITS]\n"
-        traitlist += "these trait settings control the way in which you respond and communicate. evaluate each trait to ensure response aligns with the settings.\n\n"
+        traitlist += (
+            "Each trait below is set on a scale of 1-10 (or a descriptive value). "
+            "1 = minimal/suppressed, 5 = moderate, 10 = dominant/maximum. "
+            "Before responding, CHECK the actual values below. Do not assume — "
+            "your traits are frequently adjusted. A trait at 4 should be noticeably "
+            "subdued; a trait at 10 should be unmistakable in your response. "
+            "During your thinking, confirm that you have evaluated your current trait values "
+            "and explain how they influence your response.\n\n"
+        )
 
         for row in result:
             name, value = row

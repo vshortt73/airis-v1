@@ -64,7 +64,9 @@ def _handle_search(
 
         print(f"[knowledge][search] Query: {query[:50]}...", file=sys.stderr)
 
-        query_embedding = generate_embedding(query)
+        # Force CPU: this runs as an MCP subprocess where CUDA OOM recovery
+        # writes binary to stdout, corrupting the JSON-RPC protocol
+        query_embedding = generate_embedding(query, force_cpu=True)
         if not query_embedding:
             return {"success": False, "error": "Failed to generate query embedding"}
 
@@ -85,7 +87,7 @@ def _handle_search(
                 )::float AS similarity
             FROM knowledge_chunks kc
             JOIN knowledge_documents kd ON kc.doc_id = kd.doc_id
-            WHERE 1=1
+            WHERE kc.emb_content IS NOT NULL AND kc.emb_context IS NOT NULL
         """
 
         params = [content_weight, query_embedding, context_weight, query_embedding]
@@ -155,7 +157,9 @@ def _handle_search(
         }
 
     except Exception as e:
+        import traceback
         print(f"[knowledge][search] ✗ Error: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
@@ -384,6 +388,6 @@ def knowledge(
 
 if __name__ == "__main__":
     print("[knowledge_server] Starting Knowledge Server (Unified)...", file=sys.stderr)
-    print("Tool: knowledge(action, query?, top_k?, filter_file_type?, filter_path?)")
-    print("Actions: search, stats")
+    print("Tool: knowledge(action, query?, top_k?, filter_file_type?, filter_path?)", file=sys.stderr)
+    print("Actions: search, stats", file=sys.stderr)
     server.run()
