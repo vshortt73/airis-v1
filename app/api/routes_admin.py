@@ -1723,3 +1723,32 @@ async def detailed_health_check():
 
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@router.post("/snapshot/invalidate")
+async def invalidate_snapshot():
+    """
+    Force the prompt snapshot to rebuild on the next turn.
+
+    Use this when bad examples get cached in the snapshot and cause
+    Iris to describe tool calls instead of making them, or when
+    conversation history has been manually cleaned.
+    """
+    try:
+        from app.api.routes_chat import active_conversation
+
+        if active_conversation is None:
+            return {"success": False, "error": "No active conversation"}
+
+        active_conversation.invalidate_snapshot(reason="Admin forced invalidation")
+
+        # Also clear the system component cache so instructions reload fresh
+        if hasattr(active_conversation, 'system_cache'):
+            active_conversation.system_cache = {}
+
+        return {
+            "success": True,
+            "message": "Snapshot invalidated. Next message will rebuild context from scratch."
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

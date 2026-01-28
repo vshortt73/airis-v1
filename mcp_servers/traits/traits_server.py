@@ -8,7 +8,7 @@ import os
 import psycopg2
 from psycopg2.extras import DictCursor
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -117,14 +117,32 @@ def _handle_list() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def _handle_modify(name: str, value: float, reason: str) -> Dict[str, Any]:
-    """Modify a trait's value with logging"""
-    # Validate value range
-    if value < 0 or value > 10:
-        return {
-            "success": False,
-            "error": "Value must be between 0 and 10"
-        }
+def _handle_modify(name: str, value, reason: str) -> Dict[str, Any]:
+    """Modify a trait's value with logging
+
+    Args:
+        name: Trait name
+        value: New value - can be number (0-10) for numeric traits or string for text traits
+        reason: Reason for modification
+    """
+    # Determine if this is a numeric or text value
+    is_numeric = isinstance(value, (int, float))
+
+    # Validate numeric values are in range
+    if is_numeric:
+        if value < 0 or value > 10:
+            return {
+                "success": False,
+                "error": "Numeric value must be between 0 and 10"
+            }
+    else:
+        # Text value - ensure it's a non-empty string
+        value = str(value).strip()
+        if not value:
+            return {
+                "success": False,
+                "error": "Text value cannot be empty"
+            }
 
     try:
         conn = get_db_connection()
@@ -147,13 +165,26 @@ def _handle_modify(name: str, value: float, reason: str) -> Dict[str, Any]:
         old_value = row[0]
 
         # Check if value is actually changing
-        if float(old_value) == float(value):
-            cursor.close()
-            conn.close()
-            return {
-                "success": False,
-                "error": "New value is the same as current value"
-            }
+        # Handle both numeric and text comparisons
+        if is_numeric:
+            try:
+                if float(old_value) == float(value):
+                    cursor.close()
+                    conn.close()
+                    return {
+                        "success": False,
+                        "error": "New value is the same as current value"
+                    }
+            except (ValueError, TypeError):
+                pass  # Old value was text, new is numeric - that's a change
+        else:
+            if str(old_value).strip().lower() == str(value).lower():
+                cursor.close()
+                conn.close()
+                return {
+                    "success": False,
+                    "error": "New value is the same as current value"
+                }
 
         # Update trait and log the change
         cursor.execute("""
@@ -199,7 +230,7 @@ def _handle_modify(name: str, value: float, reason: str) -> Dict[str, Any]:
 def trait(
     action: str,
     name: Optional[str] = None,
-    value: Optional[float] = None,
+    value: Optional[Union[float, str]] = None,
     reason: Optional[str] = None
 ) -> Dict[str, Any]:
     """

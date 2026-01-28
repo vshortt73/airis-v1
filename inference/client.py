@@ -303,7 +303,8 @@ async def chat_completion_with_tools(
     # Add tools if provided
     if tools:
         payload["tools"] = tools
-        print(f"[client.py][chat_completion_with_tools] Sending {len(tools)} tools to llama-server")
+        payload["parallel_tool_calls"] = True
+        print(f"[client.py][chat_completion_with_tools] Sending {len(tools)} tools to llama-server (parallel_tool_calls=True)")
         print(json.dumps(payload['tools'][0], indent=2))
         print(f"[client.py][chat_completion_with_tools] Tool count: {len(payload['tools'])}")
 
@@ -499,7 +500,8 @@ async def chat_completion_stream_with_tools(
     # Add tools if provided
     if tools:
         payload["tools"] = tools
-        print(f"[client.py][chat_completion_stream_with_tools] Sending {len(tools)} tools (streaming)")
+        payload["parallel_tool_calls"] = True
+        print(f"[client.py][chat_completion_stream_with_tools] Sending {len(tools)} tools (streaming, parallel_tool_calls=True)")
 
     print(f"[client.py][chat_completion_stream_with_tools] POST {url} (backend: {_get_backend()})")
 

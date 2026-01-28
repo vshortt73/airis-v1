@@ -1,8 +1,8 @@
 {
   "3": {
     "inputs": {
-      "seed": 29106676513180,
-      "steps": 20,
+      "seed": 981,
+      "steps": 25,
       "cfg": 8,
       "sampler_name": "euler",
       "scheduler": "normal",
@@ -24,8 +24,8 @@
   },
   "5": {
     "inputs": {
-      "width": 1080,
-      "height": 768,
+      "width": 768,
+      "height": 1080,
       "batch_size": 1
     },
     "class_type": "EmptyLatentImage",
@@ -33,15 +33,15 @@
   },
   "6": {
     "inputs": {
-      "text": "ultra-realistic photo, highly detailed, 8k resolution, perfect lighting, masterpiece, establishing shot, full body \n\nan American woman lying fully on her back smiling, stretching lazily in a cozy, warm lab-turned-living-room, wearing only a soft, oversized t-shirt in a muted ivory tone, the fabric slightly clinging from the night's sleep, hair slightly tousled, barefoot, with a quiet, sleepy happy expression and a gentle, intimate gaze, soft morning light casting a warm glow across the room with framed photos and comfortable furniture in the background.",
+      "text": "a beautiful 30 year old woman sitting at a coffee shop",
       "clip": ["4", 1]
     },
     "class_type": "CLIPTextEncode",
-    "_meta": {"title": "CLIP Text Encode (Positive)"}
+    "_meta": {"title": "CLIP Text Encode (Prompt)"}
   },
   "7": {
     "inputs": {
-      "text": "text, watermark, blurry, poor composure, bad lighting, poor composition, unprofessional, washed out, no color, bad pose, unnartual pose, impossible pose, extra limbs, bad hands, poor rendering",
+      "text": "text, watermark, blurry, poor composure, bad lighting, poor composition, unprofessional, poor lighting, washed out, no color",
       "clip": ["4", 1]
     },
     "class_type": "CLIPTextEncode",
@@ -65,7 +65,7 @@
   },
   "11": {
     "inputs": {
-      "weight": 0.75,
+      "weight": 0.4,
       "weight_faceidv2": 0.55,
       "weight_type": "linear",
       "combine_embeds": "concat",
@@ -83,8 +83,7 @@
   },
   "12": {
     "inputs": {
-      "image": "newface.png",
-      "upload": "image"
+      "image": "iris.png"
     },
     "class_type": "LoadImage",
     "_meta": {"title": "Load Image"}
@@ -92,7 +91,7 @@
   "13": {
     "inputs": {
       "preset": "FACEID",
-      "lora_strength": 0.54,
+      "lora_strength": 0.6,
       "provider": "CUDA",
       "model": ["4", 0]
     },

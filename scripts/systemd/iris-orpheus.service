@@ -1,0 +1,19 @@
+[Unit]
+Description=Iris Orpheus TTS Server
+After=network.target iris-llama.service
+# Orpheus requires llama.cpp server running for token generation
+# Can run alongside XTTS on GPU 1
+
+[Service]
+Type=simple
+User=captain
+WorkingDirectory=/home/captain/node2-mount/programs/orpheus-tts-local
+Environment="CUDA_VISIBLE_DEVICES=1"
+Environment="ORPHEUS_LLAMA_URL=http://localhost:8080/v1/completions"
+Environment="SNAC_MODEL_PATH=/models/audio/snac"
+ExecStart=/home/captain/venvs/orpheus/bin/python orpheus_server.py --port 8701
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

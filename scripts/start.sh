@@ -1,5 +1,5 @@
 #!/bin/bash
-export IRIS_DB_PASSWORD='yourpassword'
+
 cd "$(dirname "$0")/.."
 
 # ============================================
@@ -7,6 +7,9 @@ cd "$(dirname "$0")/.."
 # ============================================
 echo "=== Iris Preflight Checks ==="
 echo ""
+
+export IRIS_DB_PASSWORD='yourpassword'
+export PGPASSWORD='yourpassword'
 
 # Detect backend from database (default: llamacpp)
 BACKEND=$(psql -h localhost -U irisuser -d irisdb -t -A -c \

@@ -652,12 +652,11 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
 
 
 
-    temporal_message = f"""[CRITICAL INFORMATION]
-    CURRENT DATE AND TIME: {current_datetime}
-    your training stopped on July 1, 2023. information after your training date is still valid.
-
-    """
-    #sections.append(temporal_message)
+    temporal_message = f"""[CURRENT DATE AND TIME]
+Today is {current_datetime.strftime('%A, %B %d, %Y')} at {current_datetime.strftime('%I:%M %p')}.
+Your knowledge training stopped in early 2024, but information after that date is still valid.
+"""
+    sections.append(temporal_message)
 
     # CRITICAL: Build instructions with traits inserted at correct priority
     # We want: Identity → Traits (header + values) → Tool directive → Everything else

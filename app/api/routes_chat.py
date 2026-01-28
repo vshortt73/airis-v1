@@ -1545,6 +1545,8 @@ async def websocket_chat(websocket: WebSocket):
                         print(f"[routes_chat.py][websocket_chat] │  ✓ Tool succeeded")
                     else:
                         print(f"[routes_chat.py][websocket_chat] │  ✗ Tool failed: {result.get('error')}")
+                        # Spoil the snapshot so failed tool patterns don't get cached
+                        active_conversation.invalidate_snapshot(reason=f"Tool '{tool_name}' failed: {result.get('error', 'unknown')[:80]}")
 
                 # Send tool marker end
                 await websocket.send_json({
@@ -1634,109 +1636,258 @@ async def websocket_chat(websocket: WebSocket):
 
                 print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (with tool results) ─┤")
 
-                # Follow-up streaming call to present tool results (no tools this time)
-                print(f"[routes_chat.py][websocket_chat] ├─ FOLLOW-UP STREAMING (tool results) ─┤")
-                llm_messages = apply_no_think(all_messages) if not thinking_enabled else list(all_messages)
+                # Iterative tool loop: follow-up calls can trigger more tools
+                MAX_TOOL_ITERATIONS = 5
+                for tool_iteration in range(MAX_TOOL_ITERATIONS):
+                    is_final_iteration = (tool_iteration == MAX_TOOL_ITERATIONS - 1)
+                    iteration_label = f"iteration {tool_iteration + 1}/{MAX_TOOL_ITERATIONS}"
 
-                # Voice/video mode: append at end for follow-up too
-                if voice_mode_active:
-                    llm_messages.append({
-                        "role": "system",
-                        "content": (
-                            "CRITICAL: Your response will be spoken aloud as audio or video. "
-                            "Write entirely in flowing, conversational prose. No bullet points, "
-                            "no numbered lists, no markdown formatting, no headers, no bold text, "
-                            "no code blocks. Just natural sentences and paragraphs as if you're "
-                            "speaking face-to-face. Keep it warm and personable. Do not sign off "
-                            "or add postscripts. Start naturally without preambles like \"Sure!\" "
-                            "or \"Great question!\""
-                        )
-                    })
-                full_response = ""  # Reset for follow-up response
-                thinking_active = False  # Reset think state for follow-up
+                    # Follow-up streaming call (WITH tools for iterative calling)
+                    print(f"[routes_chat.py][websocket_chat] ├─ FOLLOW-UP STREAMING ({iteration_label}) ─┤")
+                    llm_messages = apply_no_think(all_messages) if not thinking_enabled else list(all_messages)
 
-                # Reset sentence processor for follow-up if using server-side TTS
-                if use_server_tts and state:
-                    state.sentence_processor = SentenceProcessor()
-                    state.tts_queue = []
-                    state.tts_queue_complete = False
-                    # Restart TTS processor for follow-up
-                    state.tts_task = asyncio.create_task(tts_video_processor(websocket, state))
+                    # Voice/video mode: append at end for follow-up too
+                    if voice_mode_active:
+                        llm_messages.append({
+                            "role": "system",
+                            "content": (
+                                "CRITICAL: Your response will be spoken aloud as audio or video. "
+                                "Write entirely in flowing, conversational prose. No bullet points, "
+                                "no numbered lists, no markdown formatting, no headers, no bold text, "
+                                "no code blocks. Just natural sentences and paragraphs as if you're "
+                                "speaking face-to-face. Keep it warm and personable. Do not sign off "
+                                "or add postscripts. Start naturally without preambles like \"Sure!\" "
+                                "or \"Great question!\""
+                            )
+                        })
+                    full_response = ""  # Reset for follow-up response
+                    thinking_active = False  # Reset think state for follow-up
 
-                # Start concurrent WebSocket listener for interrupt during follow-up streaming
-                async def listen_for_interrupt_followup():
-                    try:
-                        while not interrupt_manager.is_interrupted():
-                            try:
-                                data = await asyncio.wait_for(websocket.receive_json(), timeout=0.1)
-                                if data.get("type") == "interrupt":
-                                    print("[routes_chat.py][websocket_chat] ⚠ Interrupt received during follow-up")
-                                    interrupt_manager.request_interrupt()
+                    # Reset sentence processor for follow-up if using server-side TTS
+                    if use_server_tts and state:
+                        state.sentence_processor = SentenceProcessor()
+                        state.tts_queue = []
+                        state.tts_queue_complete = False
+                        # Restart TTS processor for follow-up
+                        state.tts_task = asyncio.create_task(tts_video_processor(websocket, state))
+
+                    # Start concurrent WebSocket listener for interrupt during follow-up streaming
+                    async def listen_for_interrupt_followup():
+                        try:
+                            while not interrupt_manager.is_interrupted():
+                                try:
+                                    data = await asyncio.wait_for(websocket.receive_json(), timeout=0.1)
+                                    if data.get("type") == "interrupt":
+                                        print("[routes_chat.py][websocket_chat] ⚠ Interrupt received during follow-up")
+                                        interrupt_manager.request_interrupt()
+                                        break
+                                except asyncio.TimeoutError:
+                                    continue
+                                except Exception:
                                     break
-                            except asyncio.TimeoutError:
-                                continue
-                            except Exception:
-                                break
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
 
-                interrupt_listener_followup = asyncio.create_task(listen_for_interrupt_followup())
+                    interrupt_listener_followup = asyncio.create_task(listen_for_interrupt_followup())
 
-                try:
-                    async for chunk in chat_completion_stream(llm_messages):
-                        if chunk:
-                            # Check if this is the timings dict (yielded at end of stream)
-                            if isinstance(chunk, dict) and "__timings__" in chunk:
-                                streaming_kv_metrics = {
-                                    "cache_n": chunk["cache_n"],
-                                    "prompt_n": chunk["prompt_n"],
-                                    "efficiency": chunk["efficiency"]
-                                }
-                                print(f"[routes_chat.py][websocket_chat] ├─ KV CACHE METRICS (follow-up) ─┤")
-                                print(f"[routes_chat.py][websocket_chat] │  {chunk['cache_n']:,} cached + {chunk['prompt_n']:,} new = {chunk['cache_n'] + chunk['prompt_n']:,} tokens ({chunk['efficiency']:.1f}%)")
-                            elif isinstance(chunk, tuple):
-                                text, is_thinking = chunk
-                                if is_thinking:
-                                    if not thinking_active:
-                                        thinking_active = True
-                                        await websocket.send_json({"type": "thinking_start"})
-                                    await websocket.send_json({"type": "thinking_chunk", "content": text})
-                                else:
-                                    if thinking_active:
-                                        thinking_active = False
-                                        await websocket.send_json({"type": "thinking_end"})
-                                    full_response += text
-                                    await websocket.send_json({"type": "chunk", "content": text})
-                                    if use_server_tts and state and state.sentence_processor:
-                                        batches = state.sentence_processor.add_chunk(text, is_video_mode)
-                                        for batch in batches:
-                                            state.tts_queue.append(batch)
-
-                        # Check for interrupt
-                        if interrupt_manager.is_interrupted():
-                            print(f"[routes_chat.py][websocket_chat] ⚠ Interrupt detected")
-                            # Cancel TTS task if running
-                            if use_server_tts and state and state.tts_task:
-                                state.tts_task.cancel()
-                                state.tts_queue_complete = True
-                                print(f"[routes_chat.py][websocket_chat] ⚠ TTS task cancelled")
-                            await websocket.send_json({
-                                "type": "interrupted",
-                                "message": "Generation stopped"
-                            })
-                            break
-
-                except Exception as followup_error:
-                    print(f"[routes_chat.py][websocket_chat] ⚠ Follow-up streaming failed: {followup_error}")
-                    import traceback
-                    traceback.print_exc()
-                finally:
-                    # Stop the follow-up interrupt listener
-                    interrupt_listener_followup.cancel()
+                    followup_tool_response = None
                     try:
-                        await interrupt_listener_followup
-                    except asyncio.CancelledError:
-                        pass
+                        # Use tool-aware streaming on non-final iterations; plain streaming on final
+                        if is_final_iteration:
+                            async for chunk in chat_completion_stream(llm_messages):
+                                if chunk:
+                                    if isinstance(chunk, dict) and "__timings__" in chunk:
+                                        streaming_kv_metrics = {
+                                            "cache_n": chunk["cache_n"],
+                                            "prompt_n": chunk["prompt_n"],
+                                            "efficiency": chunk["efficiency"]
+                                        }
+                                        print(f"[routes_chat.py][websocket_chat] ├─ KV CACHE METRICS (follow-up) ─┤")
+                                        print(f"[routes_chat.py][websocket_chat] │  {chunk['cache_n']:,} cached + {chunk['prompt_n']:,} new = {chunk['cache_n'] + chunk['prompt_n']:,} tokens ({chunk['efficiency']:.1f}%)")
+                                    elif isinstance(chunk, tuple):
+                                        text, is_thinking = chunk
+                                        if is_thinking:
+                                            if not thinking_active:
+                                                thinking_active = True
+                                                await websocket.send_json({"type": "thinking_start"})
+                                            await websocket.send_json({"type": "thinking_chunk", "content": text})
+                                        else:
+                                            if thinking_active:
+                                                thinking_active = False
+                                                await websocket.send_json({"type": "thinking_end"})
+                                            full_response += text
+                                            await websocket.send_json({"type": "chunk", "content": text})
+                                            if use_server_tts and state and state.sentence_processor:
+                                                batches = state.sentence_processor.add_chunk(text, is_video_mode)
+                                                for batch in batches:
+                                                    state.tts_queue.append(batch)
+                                    if interrupt_manager.is_interrupted():
+                                        print(f"[routes_chat.py][websocket_chat] ⚠ Interrupt detected")
+                                        if use_server_tts and state and state.tts_task:
+                                            state.tts_task.cancel()
+                                            state.tts_queue_complete = True
+                                        await websocket.send_json({"type": "interrupted", "message": "Generation stopped"})
+                                        break
+                        else:
+                            async for chunk, followup_resp, is_thinking_chunk in chat_completion_stream_with_tools(llm_messages, tools=tool_definitions):
+                                if followup_resp:
+                                    followup_tool_response = followup_resp
+                                if chunk:
+                                    if is_thinking_chunk:
+                                        if not thinking_active:
+                                            thinking_active = True
+                                            await websocket.send_json({"type": "thinking_start"})
+                                        await websocket.send_json({"type": "thinking_chunk", "content": chunk})
+                                    else:
+                                        if thinking_active:
+                                            thinking_active = False
+                                            await websocket.send_json({"type": "thinking_end"})
+                                        full_response += chunk
+                                        await websocket.send_json({"type": "chunk", "content": chunk})
+                                        if use_server_tts and state and state.sentence_processor:
+                                            batches = state.sentence_processor.add_chunk(chunk, is_video_mode)
+                                            for batch in batches:
+                                                state.tts_queue.append(batch)
+                                if interrupt_manager.is_interrupted():
+                                    print(f"[routes_chat.py][websocket_chat] ⚠ Interrupt detected")
+                                    if use_server_tts and state and state.tts_task:
+                                        state.tts_task.cancel()
+                                        state.tts_queue_complete = True
+                                    await websocket.send_json({"type": "interrupted", "message": "Generation stopped"})
+                                    break
+
+                    except Exception as followup_error:
+                        print(f"[routes_chat.py][websocket_chat] ⚠ Follow-up streaming failed: {followup_error}")
+                        import traceback
+                        traceback.print_exc()
+                    finally:
+                        interrupt_listener_followup.cancel()
+                        try:
+                            await interrupt_listener_followup
+                        except asyncio.CancelledError:
+                            pass
+
+                    # Check if the follow-up triggered more tool calls
+                    if followup_tool_response and followup_tool_response.has_tool_calls() and not interrupt_manager.is_interrupted():
+                        print(f"[routes_chat.py][websocket_chat] ├─ ITERATIVE TOOL CALL ({iteration_label}) ─┤")
+                        print(f"[routes_chat.py][websocket_chat] ├─ EXECUTING {len(followup_tool_response.tool_calls)} TOOL(S) ─┤")
+
+                        await websocket.send_json({
+                            "type": "tool_marker_start",
+                            "tool_count": len(followup_tool_response.tool_calls)
+                        })
+
+                        # Execute each tool (same pattern as initial tool execution)
+                        iter_tool_results = []
+                        for tc in followup_tool_response.tool_calls:
+                            if interrupt_manager.is_interrupted():
+                                break
+                            fi = tc.get("function", {})
+                            tn = fi.get("name")
+                            args = fi.get("arguments", {})
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except json.JSONDecodeError:
+                                    args = {}
+
+                            print(f"[routes_chat.py][websocket_chat] │  Executing: {tn}")
+                            await websocket.send_json({
+                                "type": "tool_executing",
+                                "tool_name": tn,
+                                "tool_icon": get_tool_icon(tn),
+                                "arguments": args,
+                                "in_bubble": True
+                            })
+
+                            result = await tool_manager.execute_tool(tn, args, require_confirmation=False)
+                            iter_tool_results.append(result)
+
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool_name": tn,
+                                "success": result["success"],
+                                "error": result.get("error"),
+                                "in_bubble": True
+                            })
+
+                            if result["success"]:
+                                print(f"[routes_chat.py][websocket_chat] │  ✓ Tool succeeded")
+                            else:
+                                print(f"[routes_chat.py][websocket_chat] │  ✗ Tool failed: {result.get('error')}")
+                                active_conversation.invalidate_snapshot(reason=f"Tool '{tn}' failed: {result.get('error', 'unknown')[:80]}")
+
+                        await websocket.send_json({"type": "tool_marker_end"})
+
+                        # Save assistant + tool results to conversation
+                        active_conversation.add_assistant_message(content=full_response, tool_calls=followup_tool_response.tool_calls)
+                        active_conversation.append_to_snapshot({"role": "assistant", "content": full_response, "tool_calls": followup_tool_response.tool_calls})
+
+                        for tc, result in zip(followup_tool_response.tool_calls, iter_tool_results):
+                            fi = tc.get("function", {})
+                            tn = fi.get("name")
+                            tcid = tc.get("id")
+                            trd = result.get("result", {})
+
+                            # Handle images
+                            tool_images = []
+                            ib64 = trd.get("image_base64")
+                            if ib64:
+                                tool_images.append(ib64)
+                                print(f"[routes_chat.py][websocket_chat] │  📸 Tool returned an image")
+                                await websocket.send_json({
+                                    "type": "tool_image",
+                                    "tool_name": tn,
+                                    "image_base64": ib64,
+                                    "filename": trd.get("filename", "generated.png"),
+                                    "width": trd.get("width"),
+                                    "height": trd.get("height")
+                                })
+                                trd = {k: v for k, v in trd.items() if k != "image_base64"}
+
+                            result_instructions = (
+                                "[TOOL RESULT]\n"
+                                "Present this information to the user in a natural, conversational way. "
+                                "Do not add false data or attempt to fill in gaps. "
+                                "Present only the data supplied below.\n\n"
+                                "Tool result data: "
+                            )
+                            tool_content = result_instructions + json.dumps(trd)
+                            active_conversation.add_tool_message(
+                                content=tool_content, tool_name=tn,
+                                tool_call_id=tcid,
+                                images=tool_images if tool_images else None
+                            )
+                            active_conversation.append_to_snapshot({
+                                "role": "tool", "content": tool_content,
+                                "tool_name": tn, "tool_call_id": tcid
+                            })
+
+                            # Spoiler detection
+                            if result.get("success"):
+                                try:
+                                    a = fi.get("arguments", {})
+                                    if isinstance(a, str):
+                                        a = json.loads(a)
+                                    action = a.get("action", "")
+                                    if tn == "trait" and action == "modify":
+                                        active_conversation.invalidate_snapshot("trait_modify")
+                                    elif tn == "memory" and action == "insert":
+                                        active_conversation.invalidate_snapshot("memory_insert")
+                                except Exception:
+                                    pass
+
+                        # Reassemble context for next iteration
+                        all_messages, budget = assemble_context_with_snapshot(
+                            active_conversation, tool_definitions,
+                            context_level=context_level,
+                            use_unified=USE_UNIFIED_CONTEXT
+                        )
+                        print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (iteration {tool_iteration + 2}) ─┤")
+                        continue  # Loop back for another follow-up
+                    else:
+                        # No more tool calls - we're done
+                        break
 
             # Send KV cache and performance metrics to UI
             if streaming_kv_metrics:

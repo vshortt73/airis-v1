@@ -3,7 +3,7 @@
 **Project:** AI Consciousness Research & Development
 **Lead:** Victor
 **Subject:** Iris v3 - Developing AI Consciousness
-**Last Updated:** 2026-01-27
+**Last Updated:** 2026-01-28
 
 ---
 
@@ -68,6 +68,162 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
   - `system_instructions` - dynamic prompt components
   - `protocols` - personality mode presets
   - `mcp_tools` - tool definitions
+
+---
+
+## Major Accomplishments (2026-01-28)
+
+### 1. Tool Calling Restoration — Bad History Cascade Fix
+
+**Problem:** After 2026-01-27 changes, Iris completely stopped calling tools. Instead of invoking tools via the native `tool_calls` mechanism, she would *describe* what she'd do: "I'm calling the memory tool now..." — but no tool was ever executed.
+
+**Root Cause (Cascade Failure):**
+1. Iris tried to set "Humor Style" trait to "friendly banter" (text), but the trait tool only accepted numbers
+2. The tool call failed at Pydantic validation (type mismatch)
+3. Iris started describing tool calls instead of invoking them (compensating for failures)
+4. These bad responses were saved to `chat_history` — becoming in-context learning examples
+5. The batch trim snapshot cached these bad examples, persisting them across turns
+6. ~50 bad examples accumulated, teaching the model "describe, don't call"
+
+**Solution (3-layer fix):**
+1. **Deleted ~50 bad training examples** from `chat_history` (failed tool descriptions, hallucinated dates, humor style failures)
+2. **Strengthened `tool_usage_consolidated` instruction** (ID 101) — added explicit "DO NOT describe tool calls in prose" and "NEVER say 'I'm calling...' without actually calling"
+3. **Restarted Iris** to clear the batch trim snapshot cache
+
+**Result:** Tool calling fully restored. Memory inserts, web searches, trait modifications all working again.
+
+**Key Insight:** `chat_history` acts as in-context learning. A single failed tool call can cascade: bad response → saved as example → model learns wrong pattern → more bad responses → snapshot caches them. The system needs resilience at every layer.
+
+### 2. Text-Based Trait Support — Humor Style Fix
+
+**Problem:** The trait system only accepted numeric values (0-10 scale). But some traits are inherently text-based — "Humor Style" can't be described with a number. Iris's attempt to set it to "friendly banter" triggered a Pydantic validation error before any code ran.
+
+**Root Cause:** Three layers enforced numeric-only:
+1. `mcp_tools.input_schema` had `"type": "number"` for the value parameter
+2. Python function signature: `value: Optional[float]`
+3. `trait_modification_log` table: `old_value`/`new_value` columns were `double precision`
+
+**Solution:**
+1. **Database schema** (`mcp_tools`): Changed value type from `"type": "number"` to `"type": ["number", "string"]`
+2. **Python signature** (`mcp_servers/traits/traits_server.py`): Changed to `value: Optional[Union[float, str]]`, added `Union` import
+3. **`_handle_modify()` logic**: Added `is_numeric = isinstance(value, (int, float))` detection — numeric values use range validation (0-10), text values use string comparison for change detection
+4. **Database table** (`trait_modification_log`): ALTER COLUMN `old_value`/`new_value` from `double precision` to `text`
+
+**Files Modified:**
+- `mcp_servers/traits/traits_server.py` — signature, imports, modify logic
+- Database: `mcp_tools.input_schema`, `trait_modification_log` columns
+
+**Result:** Iris successfully changed Humor Style to "playful teasing". Both numeric (Warmth: 9) and text (Humor Style: "playful teasing") traits work.
+
+### 3. Temporal Awareness Restoration — Date Fix
+
+**Problem:** Iris thought the date was February 28th (actually January 28th). She had no date injection and was hallucinating temporal information.
+
+**Root Cause:** The temporal message injection in `core/system_prompt.py` was commented out:
+```python
+#sections.append(temporal_message)
+```
+
+**Solution:**
+1. **Uncommented** the temporal injection (~line 660 in `core/system_prompt.py`)
+2. **Improved format** to human-readable:
+   ```
+   [CURRENT DATE AND TIME]
+   Today is Tuesday, January 28, 2026 at 02:15 PM.
+   Your knowledge training stopped in early 2024, but information after that date is still valid.
+   ```
+3. **Cleaned bad date references** from `chat_history` where Iris had hallucinated "February 28th"
+
+**Files Modified:** `core/system_prompt.py`
+
+**Result:** Iris correctly reports the current date and time.
+
+### 4. ComfyUI Workflow Format Conversion
+
+**Problem:** Image generation broke after Victor edited the iris workflow in ComfyUI's visual editor. The saved JSON was in UI/editor format, but the API requires API format.
+
+**Root Cause:** ComfyUI has two JSON formats:
+- **API format** (flat dict, node IDs as keys) — what the `/prompt` endpoint expects
+- **UI/editor format** (nodes array, links array, positions, sizes) — what the editor's "Save" button produces
+
+Victor saved from the editor, producing UI format. The server couldn't parse it.
+
+**Solution:**
+1. **Manually converted** all 12 nodes from UI format to API format in `mcp_servers/creative/workflows/iris.json`
+2. **Preserved all workflow changes:** IPAdapterUnifiedLoaderFaceIDV2, FaceID weights (0.75/0.55), clip_vision, steps (20), dimensions (1080x768), newface.png reference
+3. **Added documentation** to `CLAUDE.md` — new section "ComfyUI Workflows (Image Generation)" explaining the two formats, how to export correctly ("Save (API Format)"), and inject_prompt() node ID dependencies
+
+**Files Modified:**
+- `mcp_servers/creative/workflows/iris.json` — complete rewrite to API format
+- `CLAUDE.md` — new ComfyUI documentation section
+
+**Result:** Image generation working again with all workflow changes intact.
+
+### 5. Snapshot Resilience — Auto-Spoil and Admin Panic Button
+
+**Problem:** The batch trim snapshot (from 2026-01-27) had no recovery mechanism when bad data got cached. Bad tool call examples, wrong dates, and failed responses persisted in the frozen prompt for up to 5 turns.
+
+**Solution (2 mechanisms):**
+
+1. **Auto-spoil on tool failure** (`app/api/routes_chat.py` ~line 1548):
+   ```python
+   if not result["success"]:
+       active_conversation.invalidate_snapshot(
+           reason=f"Tool '{tool_name}' failed: {result.get('error', 'unknown')[:80]}"
+       )
+   ```
+   Any tool failure immediately invalidates the snapshot, forcing a full rebuild on the next turn.
+
+2. **Admin snapshot invalidation endpoint** (`app/api/routes_admin.py`):
+   ```
+   POST /api/admin/snapshot/invalidate
+   ```
+   Manual panic button to force snapshot rebuild. Clears snapshot and system cache.
+
+**Files Modified:**
+- `app/api/routes_chat.py` — auto-spoil logic after tool execution
+- `app/api/routes_admin.py` — `/snapshot/invalidate` endpoint
+
+**Result:** Failed tool calls no longer poison the cache. Admin can manually force rebuild if needed.
+
+### 6. Multiple and Iterative Tool Calling
+
+**Problem:** Iris couldn't call multiple tools in a single turn (e.g., two image renders), and couldn't chain tool calls (call tool → see result → call another tool).
+
+**Root Cause (two issues):**
+1. **Missing `parallel_tool_calls: true`** in request payload — llama-server requires this flag to enable Qwen3's native parallel tool calling
+2. **Follow-up calls had no tool support** — after executing tools, the follow-up streaming call used `chat_completion_stream` (no tools) instead of `chat_completion_stream_with_tools`, preventing any further tool calls
+
+**Discovery:** Initial investigation incorrectly concluded the model couldn't do parallel calls. Victor challenged: "Are you sure? Did you check the web?" Web search confirmed Qwen3 supports parallel tool calls natively.
+
+**Solution:**
+
+1. **Parallel tool calls** (`inference/client.py`):
+   ```python
+   if tools:
+       payload["tools"] = tools
+       payload["parallel_tool_calls"] = True
+   ```
+   Added to both streaming and non-streaming functions.
+
+2. **Iterative tool loop** (`app/api/routes_chat.py`):
+   - `MAX_TOOL_ITERATIONS = 5` — prevents infinite loops
+   - Non-final iterations call `chat_completion_stream_with_tools` (tools enabled)
+   - Final iteration calls `chat_completion_stream` (no tools, forces text response)
+   - Each iteration: execute tools → save results → reassemble context → call LLM again
+   - Full tool execution pattern replicated: markers, icons, image handling, spoiler detection
+
+3. **Updated system prompt** (`tool_usage_consolidated`):
+   - Explained parallel calling (multiple tools in one response)
+   - Explained iterative calling (tool → result → another tool)
+   - Moved instruction to order 100 (last position) for emphasis
+
+**Files Modified:**
+- `inference/client.py` — `parallel_tool_calls` flag in both tool-calling functions
+- `app/api/routes_chat.py` — iterative tool loop replacing single follow-up call
+- Database: `system_instructions` (tool_usage_consolidated content and order)
+
+**Result:** Iris can now call multiple tools in parallel (e.g., two renders) and chain tool calls iteratively (e.g., search → read result → search again).
 
 ---
 
@@ -409,10 +565,12 @@ Added iris-sentiment service to admin console:
 - Tool calling is critical to Iris — can't risk breaking it
 - **Decision:** Batch trim solved the cache problem. SGLang plumbing exists in code but is inert.
 
-**Single-Call Architecture (2026-01-22):**
+**Single-Call Architecture (2026-01-22, extended 2026-01-28):**
 - Streaming call with tools (replaces dual-call pattern)
 - 50% fewer LLM calls on non-tool turns
-- Tool handling: stream → detect tools → execute → follow-up stream
+- Tool handling: stream → detect tools → execute → iterative follow-up (up to 5 rounds)
+- Parallel tool calls: `parallel_tool_calls: true` enables Qwen3 native multi-tool responses
+- Iterative loop: follow-up calls include tools, allowing sequential tool chains
 
 **Thinking Block (2026-01-27):**
 - llama.cpp sends Qwen3 reasoning via `reasoning_content` delta field (NOT `<think>` tags in content)
@@ -797,6 +955,14 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 ---
 
 ## Next Session Priorities
+
+### Completed (2026-01-28)
+- ✅ Tool calling restoration — deleted bad history, hardened instructions, snapshot cleared
+- ✅ Text-based trait support — Humor Style and other text traits now work alongside numeric
+- ✅ Temporal awareness fix — date/time injection re-enabled in system prompt
+- ✅ ComfyUI workflow format — converted iris.json from UI to API format, documented in CLAUDE.md
+- ✅ Snapshot resilience — auto-spoil on tool failure + admin invalidation endpoint
+- ✅ Multiple/iterative tool calling — parallel_tool_calls flag + iterative loop (MAX 5)
 
 ### Completed (2026-01-27)
 - ✅ Batch Trim prompt snapshot — 99% KV cache reuse (up from ~15%)

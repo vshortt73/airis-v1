@@ -319,6 +319,52 @@ SELECT tool_name, input_schema FROM mcp_tools WHERE tool_name = 'seed';
 
 ---
 
+## ComfyUI Workflows (Image Generation) - IMPORTANT
+
+The creative server (`mcp_servers/creative/`) uses ComfyUI on Node2 for image generation.
+
+**Workflow files:** `mcp_servers/creative/workflows/`
+
+| File | Purpose |
+|------|---------|
+| `iris.json` | Self-portrait with IPAdapter FaceID (face preservation) |
+| `non-iris.json` | General image generation (no face preservation) |
+| `newface.png` | Iris's reference face image for FaceID |
+
+### CRITICAL: Workflow JSON Format
+
+ComfyUI has **TWO different JSON formats**. The creative server requires the **API format**:
+
+**API format (CORRECT)** - flat dict, node IDs as top-level keys:
+```json
+{
+  "3": { "inputs": {...}, "class_type": "KSampler", "_meta": {...} },
+  "4": { "inputs": {...}, "class_type": "CheckpointLoaderSimple", "_meta": {...} }
+}
+```
+
+**UI/Editor format (WRONG)** - exported from ComfyUI's "Save" button:
+```json
+{
+  "id": "000...",
+  "nodes": [{"id": 3, "type": "KSampler", "pos": [...], ...}],
+  "links": [[16, 11, 0, 3, 0, "MODEL"], ...],
+  "groups": [], "config": {}, "extra": {...}
+}
+```
+
+**When updating workflows in ComfyUI:** Use **"Save (API Format)"** or **"Export (API)"**, NOT the regular "Save" button. The regular save exports the UI format which the `/prompt` API endpoint will reject.
+
+The `inject_prompt()` function in `creative_server.py` modifies workflows by node ID:
+- Node `"3"` = KSampler (seed, steps, cfg)
+- Node `"5"` = EmptyLatentImage (width, height)
+- Node `"6"` = Positive prompt (CLIP text encode)
+- Node `"7"` = Negative prompt (CLIP text encode)
+
+If you change node IDs in the workflow, `inject_prompt()` must be updated to match.
+
+---
+
 ## Configuration - DATABASE IS SOURCE OF TRUTH
 
 **IMPORTANT:** All configuration should live in the `system_config` database table. The `config.py` file contains **fallback defaults only** - used if database is unavailable.
