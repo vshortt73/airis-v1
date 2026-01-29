@@ -219,10 +219,17 @@ Budget Allocation:
 ├── Episodic Memories:    2,500 tokens
 ├── Emotional State:        200 tokens
 ├── Tool Definitions:     1,500 tokens
-├── Tool Results:        15,000 tokens
+├── Tool Results:        15,000 tokens  ← per-result truncation enforced
 ├── Conversation History: 7,000 tokens (verbose + summary)
 ├── Document Context:     8,000 tokens
 └── Response Reserve:     2,000 tokens
+
+Overflow Protection (two layers):
+1. Tool results exceeding TOOL_RESULTS_BUDGET are truncated at the
+   token level before entering the prompt (routes_chat.py).
+2. preflight_check() in inference/client.py validates the total prompt
+   fits within CONTEXT_WINDOW - RESPONSE_BUDGET before every LLM call.
+   If over budget, oldest conversation messages are trimmed.
 ```
 
 ## Data Flow
@@ -267,6 +274,7 @@ User Input
 4. **Multi-Facet Embeddings** - 5-7 embedding vectors per memory
 5. **GPU Resource Coordination** - Mutex for Node2 GPU 0 services
 6. **Tiered Context Loading** - Verbose recent + summarized older messages
+7. **Context Overflow Protection** - Tool result truncation + preflight check before every LLM call
 
 ---
 

@@ -1597,6 +1597,23 @@ async def websocket_chat(websocket: WebSocket):
                         "Tool result data: "
                     )
                     tool_content = result_instructions + json.dumps(tool_result_data)
+
+                    # ── Enforce tool result token budget ──
+                    from core.token_counter import TokenCounter
+                    tool_result_budget = getattr(config, 'TOOL_RESULTS_BUDGET', 15000)
+                    tool_content_tokens = TokenCounter.count_tokens(tool_content)
+                    if tool_content_tokens > tool_result_budget:
+                        encoder = TokenCounter.get_encoder()
+                        encoded = encoder.encode(tool_content)
+                        truncated_encoded = encoded[:tool_result_budget - 50]
+                        tool_content = encoder.decode(truncated_encoded)
+                        tool_content += (
+                            "\n\n[TRUNCATED — Result exceeded token budget "
+                            f"({tool_content_tokens:,} > {tool_result_budget:,} tokens). "
+                            "Data above is incomplete. Do not fabricate the missing portion.]"
+                        )
+                        print(f"[routes_chat.py] ⚠ Tool result truncated: {tool_content_tokens:,} → {tool_result_budget:,} tokens")
+
                     active_conversation.add_tool_message(
                         content=tool_content,
                         tool_name=tool_name,

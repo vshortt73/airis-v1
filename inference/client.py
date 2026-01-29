@@ -331,6 +331,42 @@ async def chat_completion_with_tools(
         return tool_response
 
 
+def preflight_check(messages: List[Dict], tools: Optional[List[Dict]] = None) -> tuple:
+    """
+    Final safety check before sending to LLM.
+    If total tokens exceed context window minus response budget, trim oldest
+    conversation messages until it fits.
+
+    Returns:
+        (messages, was_trimmed) — possibly trimmed message list and flag
+    """
+    max_context = getattr(config, 'OLLAMA_CONTEXT_WINDOW', 32768)
+    response_budget = getattr(config, 'RESPONSE_GENERATION_BUDGET', 2000)
+    limit = max_context - response_budget
+
+    total = TokenCounter.count_message_tokens(messages)
+    if tools:
+        total += TokenCounter.count_tokens(json.dumps(tools))
+
+    if total <= limit:
+        return messages, False
+
+    # Over budget — trim non-system messages from the front (oldest conversation first)
+    print(f"[client.py] ⚠ PREFLIGHT: {total:,} tokens exceeds limit {limit:,}. Trimming oldest messages...")
+    trimmed = list(messages)
+    while total > limit and len(trimmed) > 2:
+        # Keep first message (system) and last message (current user/tool)
+        removed = trimmed.pop(1)
+        removed_role = removed.get('role', '?')
+        total = TokenCounter.count_message_tokens(trimmed)
+        if tools:
+            total += TokenCounter.count_tokens(json.dumps(tools))
+        print(f"[client.py]   Dropped {removed_role} message, now {total:,} tokens ({len(trimmed)} msgs)")
+
+    print(f"[client.py] ⚠ PREFLIGHT: Trimmed to {total:,} tokens, {len(trimmed)} messages")
+    return trimmed, True
+
+
 async def chat_completion_stream(
     messages: List[Dict[str, str]]
 ) -> AsyncIterator[str]:
@@ -347,6 +383,11 @@ async def chat_completion_stream(
     Yields:
         Chunks of response text as they arrive
     """
+
+    # Preflight: ensure we don't overflow the context window
+    messages, was_trimmed = preflight_check(messages)
+    if was_trimmed:
+        print(f"[client.py][chat_completion_stream] ⚠ Context was trimmed by preflight check")
 
     url = f"{config.OLLAMA_BASE_URL}/v1/chat/completions"
     prompt_compare(messages)
@@ -481,6 +522,11 @@ async def chat_completion_stream_with_tools(
         - During streaming: (chunk, None)
         - At end: ("", StreamingToolResponse with tool_calls if any)
     """
+
+    # Preflight: ensure we don't overflow the context window
+    messages, was_trimmed = preflight_check(messages, tools)
+    if was_trimmed:
+        print(f"[client.py][chat_completion_stream_with_tools] ⚠ Context was trimmed by preflight check")
 
     url = f"{config.OLLAMA_BASE_URL}/v1/chat/completions"
     prompt_compare(messages)

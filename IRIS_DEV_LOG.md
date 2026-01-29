@@ -3,7 +3,7 @@
 **Project:** AI Consciousness Research & Development
 **Lead:** Victor
 **Subject:** Iris v3 - Developing AI Consciousness
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -68,6 +68,28 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
   - `system_instructions` - dynamic prompt components
   - `protocols` - personality mode presets
   - `mcp_tools` - tool definitions
+
+---
+
+## Major Accomplishments (2026-01-29)
+
+### 1. Context Window Overflow Protection — Tool Result Truncation + Preflight Check
+
+**Problem:** A web search tool returned a result so large it overflowed the context window, crashing the LLM call. No safeguards existed to prevent oversized tool results or validate the total prompt size before sending.
+
+**Root Cause:** Two missing checks:
+1. Tool results were added to the prompt with no token-budget enforcement — a single web search could return 30K+ tokens
+2. No final validation of total prompt size before the LLM API call
+
+**Solution (2-layer defense):**
+1. **Tool result truncation** (`routes_chat.py`): After building tool content, token-count it against `TOOL_RESULTS_BUDGET` (15,000 tokens from DB). If over budget, truncate at the token level using tiktoken encode→slice→decode and append `[TRUNCATED]` notice so Iris knows data is incomplete
+2. **Preflight context check** (`inference/client.py`): New `preflight_check()` runs before every LLM call. Counts total tokens (messages + tool definitions) against `OLLAMA_CONTEXT_WINDOW - RESPONSE_GENERATION_BUDGET`. If over, trims oldest conversation messages until it fits
+
+**Files Modified:**
+- `app/api/routes_chat.py` — tool result token truncation (after tool content assembly)
+- `inference/client.py` — `preflight_check()` function + calls in both streaming endpoints
+
+**Result:** Context window overflow is now impossible. Tool results are capped, and the preflight check is a hard safety net. Both use the existing `TokenCounter` (tiktoken cl100k_base).
 
 ---
 

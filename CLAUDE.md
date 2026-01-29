@@ -200,6 +200,10 @@ curl http://node2:11437/health  # Sentiment
 
 10. **Prompt Effectiveness Pattern**: Any system prompt data block (traits, dreams, memories) must have a corresponding CRITICAL RULES directive in instruction ID 103 that says "read it, don't guess." The thinking block serves as an audit tool to verify compliance.
 
+11. **Tool Result Token Budget**: Individual tool results are token-counted before entering the prompt. If a result exceeds `TOOL_RESULTS_BUDGET` (default 15,000 tokens), it is truncated at the token level and a `[TRUNCATED]` notice is appended so the model knows the data is incomplete. Enforced in `routes_chat.py`.
+
+12. **Preflight Context Check**: Before every LLM call, `inference/client.py` runs `preflight_check()` which counts total tokens (messages + tool definitions) against `OLLAMA_CONTEXT_WINDOW - RESPONSE_GENERATION_BUDGET`. If over budget, it trims the oldest conversation messages until it fits. This is the last line of defense against context window overflow.
+
 ### Module Structure
 
 ```
@@ -253,7 +257,7 @@ backend/
     └── new/               # Memory creation pipeline
 
 inference/
-├── client.py              # Streaming chat API client with tool calling (llama.cpp)
+├── client.py              # Streaming chat API client with tool calling + preflight context check
 └── vision_service.py      # Vision model API client
 
 mcp_servers/
@@ -695,6 +699,11 @@ asyncio.run(test())
 - `app/api/routes_admin.py` - Admin API
 - `static/admin.html` - Admin console UI
 
+### Context Safety
+- `inference/client.py` → `preflight_check()` - Final overflow guard before LLM calls
+- `app/api/routes_chat.py` - Tool result token truncation (after line ~1601)
+- `core/token_counter.py` - tiktoken-based token counting used by both
+
 ### Node2 Services
 - `/etc/systemd/system/iris-*.service` on Node2
 
@@ -719,11 +728,25 @@ Location: `/etc/systemd/system/` on node2
 
 ## Additional Documentation
 
-- `EMOTIONAL_STATE_TRACKER.md` - Emotional state system
+### System Data Flow Docs (detailed pipeline traces)
+
+- `docs/PROMPT_ASSEMBLY.md` - Prompt assembly pipeline (message → LLM call)
+- `docs/MEMORY_PIPELINE.md` - Memory generation (nightly + real-time paths)
+- `docs/DREAM_SYSTEM.md` - Dream processing (Freud/Iris dialogue)
+- `docs/EMOTIONAL_STATE.md` - Emotional state tracking (sentiment → decay → prompt)
+
+### Other Documentation
+
+- `docs/ARCHITECTURE.md` - Architecture overview and token budgets
+- `docs/API_REFERENCE.md` - API endpoint reference
+- `docs/MCP_TOOLS.md` - MCP tool development guide
+- `docs/DATABASE.md` - Database schema reference
+- `docs/DEPLOYMENT.md` - Deployment guide
+- `EMOTIONAL_STATE_TRACKER.md` - Emotional state system (legacy, see `docs/EMOTIONAL_STATE.md`)
 - `backend/knowledge/README.md` - Knowledge base / RAG system
 - `PROTOCOL_SYSTEM_README.md` - Protocol configuration
 - `scripts/README_NIGHTLY_MEMORY.md` - Memory creation cron
 
 ---
 
-*Last updated: 2026-01-20*
+*Last updated: 2026-01-29*
