@@ -1531,6 +1531,23 @@ async def websocket_chat(websocket: WebSocket):
                 print(f"[routes_chat.py][websocket_chat] ├─ UNIFIED CONTEXT MODE (KV cache optimized) ─┤")
 
             # ============================================
+            # STRUCTURAL REPETITION ANALYSIS
+            # ============================================
+            # Use Mistral 7B to detect structural patterns in recent
+            # assistant messages (formulaic openings, repeated metaphors,
+            # stage directions, etc.). Result injected into per-turn tail.
+            # Falls back to n-gram avoidance if Mistral unavailable.
+            # ============================================
+            structural_feedback = None
+            try:
+                from core.repetition_gate import analyze_structural_patterns, build_structural_avoidance
+                patterns = await analyze_structural_patterns(active_conversation.get_messages())
+                if patterns:
+                    structural_feedback = build_structural_avoidance(patterns)
+            except Exception as e:
+                print(f"[routes_chat.py][websocket_chat] │  Structural analysis failed (non-fatal): {e}")
+
+            # ============================================
             # VISION PROCESSING (if images present)
             # ============================================
             # Process images through dedicated vision model (llava on GPU 1)
@@ -1704,7 +1721,8 @@ async def websocket_chat(websocket: WebSocket):
                 active_conversation, tool_definitions,
                 context_level=context_level,
                 user_message=user_message,
-                use_unified=USE_UNIFIED_CONTEXT
+                use_unified=USE_UNIFIED_CONTEXT,
+                structural_feedback=structural_feedback
             )
 
             # ============================================
@@ -2076,7 +2094,8 @@ async def websocket_chat(websocket: WebSocket):
                     active_conversation, tool_definitions,
                     context_level=context_level,
                     user_message=user_message,
-                    use_unified=USE_UNIFIED_CONTEXT
+                    use_unified=USE_UNIFIED_CONTEXT,
+                    structural_feedback=structural_feedback
                 )
 
                 print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (with tool results) ─┤")
@@ -2411,7 +2430,8 @@ async def websocket_chat(websocket: WebSocket):
                             active_conversation, tool_definitions,
                             context_level=context_level,
                             user_message=user_message,
-                            use_unified=USE_UNIFIED_CONTEXT
+                            use_unified=USE_UNIFIED_CONTEXT,
+                            structural_feedback=structural_feedback
                         )
                         print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (iteration {tool_iteration + 2}) ─┤")
                         continue  # Loop back for another follow-up
@@ -2470,7 +2490,8 @@ async def websocket_chat(websocket: WebSocket):
                         active_conversation, tool_definitions,
                         context_level=context_level,
                         user_message=user_message,
-                        use_unified=USE_UNIFIED_CONTEXT
+                        use_unified=USE_UNIFIED_CONTEXT,
+                        structural_feedback=structural_feedback
                     )
                     retry_llm_messages = apply_no_think(list(retry_messages)) if not thinking_enabled else list(retry_messages)
 
@@ -2571,7 +2592,8 @@ async def websocket_chat(websocket: WebSocket):
                             active_conversation, tool_definitions,
                             context_level=context_level,
                             user_message=user_message,
-                            use_unified=USE_UNIFIED_CONTEXT
+                            use_unified=USE_UNIFIED_CONTEXT,
+                            structural_feedback=structural_feedback
                         )
                         followup_llm = apply_no_think(list(followup_msgs)) if not thinking_enabled else list(followup_msgs)
 

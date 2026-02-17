@@ -894,11 +894,17 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
     }
 
 
-def build_per_turn_context(user_message=None, conversation=None, protocol=None):
+def build_per_turn_context(user_message=None, conversation=None, protocol=None, structural_feedback=None):
     """
     Build per-turn system message appended AFTER conversation history.
     Contains volatile data that changes every turn.
     Lives outside the snapshot — never cached, always fresh.
+
+    Args:
+        user_message: Current user message for fast reactive memory
+        conversation: ConversationHistory instance
+        protocol: Active protocol settings (if None, will load automatically)
+        structural_feedback: Pre-computed LLM structural variety directive (replaces n-gram fallback)
 
     Returns:
         Dict with role/content, or None if no sections to include
@@ -1000,14 +1006,17 @@ def build_per_turn_context(user_message=None, conversation=None, protocol=None):
         except Exception as e:
             print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Fast memory error: {e}")
 
-    # Repetition gate — proactive avoidance block
-    if conversation:
+    # Repetition gate — structural LLM feedback (preferred) or n-gram fallback
+    if structural_feedback:
+        sections.append(structural_feedback)
+        print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.YELLOW + " Structural variety directive included (LLM)")
+    elif conversation:
         try:
             from core.repetition_gate import build_avoidance_block
             avoidance = build_avoidance_block(conversation.get_messages())
             if avoidance:
                 sections.append(avoidance)
-                print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.YELLOW + " Repetition avoidance block included")
+                print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.YELLOW + " Repetition avoidance block included (n-gram fallback)")
         except Exception as e:
             print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Repetition gate error: {e}")
 
@@ -1068,11 +1077,14 @@ def get_last_prompt():
     return None
 
 def assemble_prompt(conversation, tool_definitions=None, context_level="FULL",
-                    user_message=None, use_unified=False):
+                    user_message=None, use_unified=False, structural_feedback=None):
     """
     Single code path for assembling the complete LLM context.
     Snapshot + per-turn tail. Every LLM call goes through here.
     Actual storage happens later in client.py after preflight_check.
+
+    Args:
+        structural_feedback: Pre-computed LLM structural variety directive string
 
     Returns:
         (messages_list, budget_dict)
@@ -1082,7 +1094,11 @@ def assemble_prompt(conversation, tool_definitions=None, context_level="FULL",
         context_level=context_level,
         use_unified=use_unified
     )
-    per_turn_msg = build_per_turn_context(user_message=user_message, conversation=conversation)
+    per_turn_msg = build_per_turn_context(
+        user_message=user_message,
+        conversation=conversation,
+        structural_feedback=structural_feedback
+    )
     if per_turn_msg:
         all_messages = list(all_messages) + [per_turn_msg]
     return all_messages, budget

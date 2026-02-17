@@ -6,17 +6,23 @@ recent outputs in conversation context.  Sampling penalties help within a
 single generation but don't prevent the model from re-using the same
 *concepts* across turns.
 
-Two mechanisms:
-1. PROACTIVE — build_avoidance_block() extracts distinctive phrases from
-   recent assistant messages and injects a <do_not_reuse> XML block into
-   the per-turn tail.  The model sees this before generating.
-2. DETECTIVE — score_repetition() checks a new response against recent
+Three mechanisms:
+1. STRUCTURAL (LLM) — analyze_structural_patterns() sends recent assistant
+   messages to Mistral 7B for structural repetition analysis. Results are
+   formatted by build_structural_avoidance() as a <structural_variety_directive>.
+2. PROACTIVE (n-gram) — build_avoidance_block() extracts distinctive phrases
+   from recent assistant messages and injects a <do_not_reuse> XML block into
+   the per-turn tail.  Fallback when Mistral is unavailable.
+3. DETECTIVE — score_repetition() checks a new response against recent
    messages and returns a 0-1 score for observability / logging.
 """
 
+import json
 import re
 from collections import Counter
 from typing import List, Dict, Optional, Tuple
+
+import httpx
 
 # ── N-gram extraction ─────────────────────────────────────────────────
 
@@ -162,6 +168,164 @@ This is not optional. Using any of the above phrases will make you sound like a 
 
     print(f"[repetition_gate] Avoidance block: {len(phrases)} phrases flagged")
     return block
+
+
+# ── Structural: LLM-powered pattern detection ────────────────────────
+
+_STRUCTURAL_ANALYSIS_PROMPT = """Analyze these recent AI assistant responses for STRUCTURAL repetition patterns.
+These are ONLY the assistant's own messages — no user messages or system data.
+For each category, note if the same pattern appears in 2+ messages:
+
+1. OPENING: How does each message begin? Same formula?
+2. METAPHORS: Same type of comparison used repeatedly?
+3. STAGE DIRECTIONS: Same parenthetical actions? (Leans in, Pauses, Smirks)
+4. MEMORY REFERENCES: Same "I remember..." callback pattern?
+5. CLOSING: Same type of ending or sign-off?
+6. SENTENCE STRUCTURE: Same narrative flow or formula?
+
+Messages:
+"""
+
+_STRUCTURAL_ANALYSIS_SUFFIX = """
+
+Return JSON with only patterns found in 2+ messages:
+{"patterns": [{"category": "OPENING", "observation": "4/5 messages start with 'Captain—' followed by restating the user's topic", "count": 4}]}
+Return {"patterns": []} if no structural repetition detected.
+JSON only, no commentary."""
+
+
+async def analyze_structural_patterns(
+    conversation_messages: List[Dict[str, str]],
+    recent_n: int = 6,
+) -> List[Dict]:
+    """
+    Use Mistral 7B to analyze recent assistant messages for structural repetition.
+
+    Sends the last N assistant messages (stripped of HTML/markdown) to Mistral
+    and asks it to identify repeated structural patterns (openings, metaphors,
+    stage directions, closings, etc.).
+
+    Args:
+        conversation_messages: Full message list (will filter to assistant only)
+        recent_n: How many recent assistant messages to analyze
+
+    Returns:
+        List of pattern dicts with category, observation, count.
+        Empty list on failure or if no patterns detected.
+    """
+    from app import config
+
+    mistral_url = getattr(config, 'MISTRAL_URL', None)
+    if not mistral_url:
+        print("[repetition_gate] No MISTRAL_URL configured, skipping structural analysis")
+        return []
+
+    # Extract assistant-only messages
+    assistant_msgs = [
+        m.get('content', '')
+        for m in conversation_messages
+        if m.get('role') == 'assistant' and m.get('content')
+    ]
+
+    recent = assistant_msgs[-recent_n:]
+
+    if len(recent) < 3:
+        return []  # Need at least 3 messages for meaningful structural analysis
+
+    # Clean messages for analysis
+    cleaned = [_normalize(msg) for msg in recent]
+
+    # Build numbered message list for the prompt
+    msg_block = "\n\n".join(
+        f"[Message {i+1}]: {text}" for i, text in enumerate(cleaned)
+    )
+
+    prompt = _STRUCTURAL_ANALYSIS_PROMPT + msg_block + _STRUCTURAL_ANALYSIS_SUFFIX
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                mistral_url,
+                json={
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 600,
+                }
+            )
+
+            if response.status_code != 200:
+                print(f"[repetition_gate] Mistral returned {response.status_code}")
+                return []
+
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            # Parse JSON from response (handle markdown code blocks)
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+
+            parsed = json.loads(content.strip())
+            patterns = parsed.get("patterns", [])
+
+            # Validate structure
+            valid = []
+            for p in patterns:
+                if isinstance(p, dict) and "category" in p and "observation" in p:
+                    valid.append({
+                        "category": str(p["category"]),
+                        "observation": str(p["observation"]),
+                        "count": int(p.get("count", 2)),
+                    })
+
+            print(f"[repetition_gate] Structural analysis: {len(valid)} patterns detected")
+            return valid
+
+    except (httpx.TimeoutException, httpx.ConnectError) as e:
+        print(f"[repetition_gate] Mistral connection failed (non-fatal): {e}")
+        return []
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(f"[repetition_gate] Failed to parse Mistral response (non-fatal): {e}")
+        return []
+    except Exception as e:
+        print(f"[repetition_gate] Structural analysis error (non-fatal): {e}")
+        return []
+
+
+def build_structural_avoidance(patterns: List[Dict]) -> Optional[str]:
+    """
+    Format structural analysis results as an XML directive for the per-turn tail.
+
+    Takes pattern dicts from analyze_structural_patterns() and builds a
+    <structural_variety_directive> block that gives the model specific,
+    actionable feedback about structural repetition to avoid.
+
+    Args:
+        patterns: List of dicts with category, observation, count
+
+    Returns:
+        XML string for prompt injection, or None if no patterns
+    """
+    if not patterns:
+        return None
+
+    lines = [
+        "<structural_variety_directive>",
+        "Your recent responses follow predictable structural patterns. You MUST break these:",
+    ]
+
+    for p in patterns:
+        lines.append(f"- {p['category']}: {p['observation']}")
+
+    lines.append(
+        "Vary your STRUCTURE and FORM, not just your vocabulary. "
+        "A formulaic response with different words is still repetitive."
+    )
+    lines.append("</structural_variety_directive>")
+
+    print(f"[repetition_gate] Structural avoidance block: {len(patterns)} patterns flagged")
+    return "\n".join(lines)
 
 
 # ── Detective: Post-generation scoring ────────────────────────────────
