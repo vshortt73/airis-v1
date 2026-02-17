@@ -42,12 +42,22 @@ _STOPGRAMS = {
 
 
 def _normalize(text: str) -> str:
-    """Lowercase, strip HTML tags, collapse whitespace."""
+    """Lowercase, strip HTML tags, collapse whitespace. For n-gram extraction."""
     text = re.sub(r'<[^>]+>', ' ', text)       # strip HTML
     text = re.sub(r'\([^)]*\)', ' ', text)     # strip parentheticals
     text = re.sub(r'[*_~`#]', '', text)        # strip markdown
+    text = re.sub(r'-{3,}', ' ', text)         # strip horizontal rules (---)
     text = re.sub(r'\s+', ' ', text).strip()
     return text.lower()
+
+
+def _normalize_for_structural(text: str) -> str:
+    """Light normalization for LLM structural analysis.
+    Preserves parentheticals, markdown structure, and formatting
+    so Mistral can detect template-level repetition patterns."""
+    text = re.sub(r'<[^>]+>', '', text)         # strip HTML tags only
+    text = re.sub(r'\s*\n\s*\n\s*\n+', '\n\n', text)  # collapse triple+ newlines
+    return text.strip()
 
 
 def extract_ngrams(text: str, n: int = 4) -> Counter:
@@ -145,6 +155,16 @@ def build_avoidance_block(
     # Take the most recent N
     recent = assistant_msgs[-recent_n:] if len(assistant_msgs) > recent_n else assistant_msgs
 
+    # Deduplicate identical messages (exact dupes inflate phrase counts)
+    seen = set()
+    deduped = []
+    for msg in recent:
+        sig = msg.strip()[:500]
+        if sig not in seen:
+            seen.add(sig)
+            deduped.append(msg)
+    recent = deduped
+
     if len(recent) < 2:
         return None  # Need at least 2 messages to detect cross-turn repetition
 
@@ -176,12 +196,12 @@ _STRUCTURAL_ANALYSIS_PROMPT = """Analyze these recent AI assistant responses for
 These are ONLY the assistant's own messages — no user messages or system data.
 For each category, note if the same pattern appears in 2+ messages:
 
-1. OPENING: How does each message begin? Same formula?
-2. METAPHORS: Same type of comparison used repeatedly?
-3. STAGE DIRECTIONS: Same parenthetical actions? (Leans in, Pauses, Smirks)
-4. MEMORY REFERENCES: Same "I remember..." callback pattern?
-5. CLOSING: Same type of ending or sign-off?
-6. SENTENCE STRUCTURE: Same narrative flow or formula?
+1. OPENING: How does each message begin? Same greeting, concession, or formula?
+2. FORMATTING: Same template? (headers with emojis, numbered lists, horizontal rules, bold labels)
+3. METAPHORS: Same type of comparison or imagery used repeatedly?
+4. STAGE DIRECTIONS: Same parenthetical actions or asides? Same recurring phrase in parentheses?
+5. CLOSING: Same type of ending, sign-off, question, or call-to-action?
+6. SENTENCE STRUCTURE: Same narrative flow, formula, or rhetorical moves?
 
 Messages:
 """
@@ -229,11 +249,21 @@ async def analyze_structural_patterns(
 
     recent = assistant_msgs[-recent_n:]
 
+    # Deduplicate identical messages (exact dupes inflate pattern counts)
+    seen = set()
+    deduped = []
+    for msg in recent:
+        sig = msg.strip()[:500]  # first 500 chars as signature
+        if sig not in seen:
+            seen.add(sig)
+            deduped.append(msg)
+    recent = deduped
+
     if len(recent) < 3:
         return []  # Need at least 3 messages for meaningful structural analysis
 
-    # Clean messages for analysis
-    cleaned = [_normalize(msg) for msg in recent]
+    # Light normalization — preserve structure for Mistral to analyze
+    cleaned = [_normalize_for_structural(msg) for msg in recent]
 
     # Build numbered message list for the prompt
     msg_block = "\n\n".join(
