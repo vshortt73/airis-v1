@@ -11,7 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import sys
 import os
 import json
-from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision, routes_protocols, routes_ephemeral, routes_stt, routes_faces, routes_admin, routes_video, routes_florence2, routes_paddleocr, routes_gpu
+
+# Suppress huggingface tokenizers fork warning that pollutes journal on every subprocess spawn
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision, routes_protocols, routes_ephemeral, routes_stt, routes_faces, routes_admin, routes_video, routes_florence2, routes_paddleocr, routes_gpu, routes_meeting, routes_observability
 
 # Add project root to path
 import os; PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..' if '__file__' in dir() else '.')); sys.path.insert(0, PROJECT_ROOT)
@@ -20,7 +23,6 @@ from app import config
 from core.conversation import ConversationHistory
 from app.api import routes_chat, routes_session, routes_context, routes_tts, routes_vision, routes_protocols, routes_ephemeral
 from database.character_traits import get_trait_list
-from core.system_prompt import build_system_message
 
 
 @asynccontextmanager
@@ -29,17 +31,53 @@ async def lifespan(app: FastAPI):
     # === STARTUP ===
     print("[main.py] Starting background services...")
 
-    # Detect current GPU service on Node2
+    # Log startup event for gap report
     try:
-        from core.gpu_manager import get_gpu_manager
-        gpu = get_gpu_manager()
-        current = await gpu.detect_current_service()
-        if current:
-            print(f"[main.py] ✓ Node2 GPU 0: {current} running")
-        else:
-            print(f"[main.py] Node2 GPU 0: no service detected")
+        from database.service_events import log_service_event
+        log_service_event("startup", "iris_server", "lifespan")
+    except Exception:
+        pass
+
+    # Sync context window from running llama-server
+    try:
+        import httpx
+        url = f"{config.OLLAMA_BASE_URL}/props"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url)
+            props = resp.json()
+            actual_ctx = props["default_generation_settings"]["n_ctx"]
+            if actual_ctx != config.OLLAMA_CONTEXT_WINDOW:
+                print(f"[main.py] Context window sync: DB={config.OLLAMA_CONTEXT_WINDOW}, server={actual_ctx} → updating")
+                config.OLLAMA_CONTEXT_WINDOW = actual_ctx
+                config.CONTEXT_WINDOW = actual_ctx
+            else:
+                print(f"[main.py] ✓ Context window: {actual_ctx} (matches DB)")
     except Exception as e:
-        print(f"[main.py] ✗ Failed to detect Node2 GPU service: {e}")
+        print(f"[main.py] ⚠ Could not sync context window from server: {e} (using DB value: {config.OLLAMA_CONTEXT_WINDOW})")
+
+    # Detect current GPU service on Node2
+    if getattr(config, 'NODE2_ENABLED', True) and getattr(config, 'GPU_MANAGER_ENABLED', True):
+        try:
+            from core.gpu_manager import get_gpu_manager
+            gpu = get_gpu_manager()
+            current = await gpu.detect_current_service()
+            if current:
+                print(f"[main.py] ✓ Node2 GPU 0: {current} running")
+            else:
+                print(f"[main.py] Node2 GPU 0: no service detected")
+        except Exception as e:
+            print(f"[main.py] ✗ Failed to detect Node2 GPU service: {e}")
+    else:
+        print("[main.py] Node2 GPU manager disabled in config")
+
+    # Write initial service status file and start background refresh
+    try:
+        from core.service_status import write_service_status, start_background_refresh
+        await write_service_status()
+        start_background_refresh(60)
+        print("[main.py] ✓ Service status file written, background refresh started")
+    except Exception as e:
+        print(f"[main.py] ✗ Service status file setup failed: {e}")
 
     # Start face monitoring service
     try:
@@ -57,6 +95,13 @@ async def lifespan(app: FastAPI):
 
     # === SHUTDOWN ===
     print("[main.py] Stopping background services...")
+
+    # Log shutdown event for gap report
+    try:
+        from database.service_events import log_service_event
+        log_service_event("shutdown", "iris_server", "lifespan")
+    except Exception:
+        pass
 
     try:
         from services import face_monitor
@@ -120,37 +165,23 @@ app.include_router(routes_video.router, tags=["video"])
 app.include_router(routes_florence2.router, tags=["florence2"])
 app.include_router(routes_paddleocr.router, tags=["ocr"])
 app.include_router(routes_gpu.router, tags=["gpu"])
+app.include_router(routes_meeting.router, tags=["meeting"])
+app.include_router(routes_observability.router, tags=["observability"])
 
 @app.get("/prompt")
 def show_prompt():
     """
-    Show the complete system prompt that would be sent to Ollama
-    
-    This mirrors what assemble_full_context() does:
-    1. Loads recent conversation
-    2. Extracts last user message
-    3. Builds system message with fast reactive context
+    Ground truth: returns the EXACT payload sent to the LLM.
+    Includes messages, tools, temperature, and all other parameters.
+    Stored at send-time by client.py, falls back to DB after restart.
     """
-    from database.persistence import load_recent_conversation
-    
-    # Load recent conversation to get last user message
-    # (same as what happens in real chat)
-    recent = load_recent_conversation(max_messages=10)
-    
-    # Find last user message (same logic as in assemble_full_context)
-    user_message = None
-    for msg in reversed(recent):
-        if msg.get('role') == 'user':
-            user_message = msg.get('content', '')
-            break
-    
-    # Build system message with fast reactive context
-    # (if there's a user message, fast memory will search)
-    msg = build_system_message(user_message=user_message)
-    
-    # Return the system message
-    # This shows EXACTLY what Iris sees, including fast context if found
-    return msg
+    from core.system_prompt import get_last_prompt
+
+    payload = get_last_prompt()
+    if not payload:
+        return {"error": "No prompt captured yet — send a message first"}
+
+    return payload
 
 
 
@@ -189,6 +220,13 @@ async def admin_console():
     with open(admin_path, "r") as f:
         return HTMLResponse(content=f.read())
 
+@app.get("/observability")
+async def observability_dashboard():
+    """Serve the observability dashboard"""
+    obs_path = os.path.join(os.path.dirname(__file__), "..", "static", "observability.html")
+    with open(obs_path, "r") as f:
+        return HTMLResponse(content=f.read())
+
 @app.get("/florence2")
 async def florence2_lab():
     """Serve the Florence2 experiment UI"""
@@ -206,7 +244,21 @@ async def health():
         "session_timeout_minutes": config.SESSION_TIMEOUT_MINUTES,
         "max_conversation_turns": config.MAX_CONVERSATION_TURNS,
         "max_context_tokens": config.MAX_CONTEXT_TOKENS,
-        "vision_enabled": config.VISION_ENABLED
+        "vision_enabled": config.VISION_ENABLED,
+        "node2_enabled": getattr(config, 'NODE2_ENABLED', True)
+    }
+
+@app.get("/api/capabilities")
+async def capabilities():
+    """Feature flags for UI — which Node2-dependent controls are available"""
+    from core.node2_check import is_node2_service_enabled
+    return {
+        "node2_enabled": getattr(config, 'NODE2_ENABLED', True),
+        "tts": is_node2_service_enabled("TTS_ENABLED"),
+        "stt": is_node2_service_enabled("STT_ENABLED"),
+        "video": is_node2_service_enabled("VIDEO_ENABLED"),
+        "vision": is_node2_service_enabled("VISION_ENABLED"),
+        "transcribe": is_node2_service_enabled("TRANSCRIBE_ENABLED"),
     }
 
 @app.get("/api/ui-videos")

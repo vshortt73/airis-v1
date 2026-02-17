@@ -2763,6 +2763,9 @@ async def websocket_chat(websocket: WebSocket):
                                 for mem in _retrieval_scored:
                                     mem_emb = mem.get("emb_minilm") or mem.get("emb_takeaway") or mem.get("emb_key_details")
                                     if mem_emb:
+                                        # pgvector returns strings like "[0.1,0.2,...]" without the pgvector adapter
+                                        if isinstance(mem_emb, str):
+                                            mem_emb = [float(x) for x in mem_emb.strip("[]").split(",")]
                                         mem_arr = np.array(mem_emb, dtype=np.float32)
                                         mem_norm = np.linalg.norm(mem_arr)
                                         if mem_norm > 0:

@@ -31,8 +31,8 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Mistral endpoint (llama.cpp on port 11436)
-MISTRAL_URL = getattr(config, 'MISTRAL_URL', "http://localhost:11436/v1/chat/completions")
+# Mistral endpoint (database source of truth)
+MISTRAL_URL = config.MISTRAL_URL
 
 # ============================================
 # EMOTIONAL STATES - The core feelings we track
@@ -491,7 +491,8 @@ class EmotionalStateTracker:
             user_message: The user's message
 
         Returns:
-            Dict with analysis results and updated emotional state
+            Dict with analysis results, updated emotional state,
+            and before/after snapshots for observability
         """
         # Ensure state is loaded
         if not self.current_state:
@@ -499,6 +500,9 @@ class EmotionalStateTracker:
 
         # Apply time-based decay first
         self._apply_time_decay()
+
+        # Snapshot state BEFORE processing for observability
+        state_before = dict(self.current_state.states) if self.current_state else {}
 
         # Analyze message with Mistral
         analysis = await self.analyzer.analyze(user_message)
@@ -523,11 +527,15 @@ class EmotionalStateTracker:
             await self.save_state()
             print(f"[emotional_state.py][process_message] No analysis available, applied decay only")
 
+        state_after = dict(self.current_state.states) if self.current_state else {}
+
         return {
             "analysis": analysis,
             "emotional_state": self.current_state.to_dict() if self.current_state else None,
             "dominant_emotions": self.current_state.get_dominant_emotions() if self.current_state else [],
-            "summary": self.current_state.get_state_summary() if self.current_state else ""
+            "summary": self.current_state.get_state_summary() if self.current_state else "",
+            "state_before": state_before,
+            "state_after": state_after,
         }
 
     def get_state_for_prompt(self) -> str:

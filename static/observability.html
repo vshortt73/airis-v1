@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iris Observability</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --primary: #0000cc;
+            --primary-hover: #3b82f6;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #a3a3a3;
+            --border: #404040;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 { font-size: 1.75rem; font-weight: 600; }
+
+        .header-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--border); }
+        .btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+        .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 1.5rem; }
+
+        /* Summary cards */
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+        .card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.25rem; }
+        .card-value { font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .card-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+        /* Chart panels */
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .chart-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .chart-panel.full-width { grid-column: 1 / -1; }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .chart-title { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); }
+        .chart-range { display: flex; gap: 0.25rem; }
+        .chart-wrapper { position: relative; height: 280px; }
+
+        .status-dot {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; margin-right: 0.5rem;
+        }
+        .status-dot.green { background: var(--success); }
+        .status-dot.yellow { background: var(--warning); }
+        .status-dot.red { background: var(--danger); }
+
+        .empty-state {
+            display: flex; align-items: center; justify-content: center;
+            height: 200px; color: var(--text-secondary); font-size: 0.875rem;
+        }
+
+        @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Iris Observability</h1>
+        <div class="header-actions">
+            <button class="btn" onclick="refresh()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Summary Cards -->
+        <div class="cards">
+            <div class="card">
+                <div class="card-label">Centroid Drift Velocity</div>
+                <div class="card-value" id="card-drift">--</div>
+                <div class="card-sub" id="card-drift-sub">voice change rate</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Memory Influence</div>
+                <div class="card-value" id="card-influence">--</div>
+                <div class="card-sub">avg max memory influence (24h)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Unexplained Ratio</div>
+                <div class="card-value" id="card-unexplained">--</div>
+                <div class="card-sub">spontaneity proxy (24h)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Emotional Delta</div>
+                <div class="card-value" id="card-emotional">--</div>
+                <div class="card-sub">avg per-turn emotional shift (24h)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">KV Cache Efficiency</div>
+                <div class="card-value" id="card-cache">--</div>
+                <div class="card-sub">avg cache hit rate (24h)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Turns (24h)</div>
+                <div class="card-value" id="card-turns">--</div>
+                <div class="card-sub" id="card-response-ms">--</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-grid">
+            <!-- Emotional Trajectory -->
+            <div class="chart-panel full-width">
+                <div class="chart-header">
+                    <span class="chart-title">Emotional Trajectory (11 dimensions)</span>
+                    <div class="chart-range" id="range-emotional"></div>
+                </div>
+                <div class="chart-wrapper"><canvas id="chart-emotional"></canvas></div>
+            </div>
+
+            <!-- Memory Influence -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">Memory Influence per Turn</span>
+                    <div class="chart-range" id="range-memory"></div>
+                </div>
+                <div class="chart-wrapper"><canvas id="chart-memory"></canvas></div>
+            </div>
+
+            <!-- KV Cache -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">KV Cache Efficiency</span>
+                    <div class="chart-range" id="range-cache"></div>
+                </div>
+                <div class="chart-wrapper"><canvas id="chart-cache"></canvas></div>
+            </div>
+
+            <!-- Centroid Drift -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">Centroid Drift (weekly)</span>
+                    <div class="chart-range" id="range-drift"></div>
+                </div>
+                <div class="chart-wrapper"><canvas id="chart-drift"></canvas></div>
+            </div>
+
+            <!-- Diversity / Entropy -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <span class="chart-title">Retrieval Diversity / Vocabulary Entropy</span>
+                    <div class="chart-range" id="range-diversity"></div>
+                </div>
+                <div class="chart-wrapper"><canvas id="chart-diversity"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // ── Chart configuration ──
+    // Each chart has its own range (in hours), data source, and options
+    const chartConfig = {
+        emotional:  { hours: 24,    source: 'turn',  options: [1, 6, 24, 72, 168, 720] },
+        memory:     { hours: 24,    source: 'turn',  options: [1, 6, 24, 72, 168, 720] },
+        cache:      { hours: 168,   source: 'turn',  options: [1, 6, 24, 72, 168, 720] },
+        drift:      { hours: 0,     source: 'drift', options: [720, 2160, 4320, 8760, 0] },  // 30d,90d,180d,1y,All
+        diversity:  { hours: 0,     source: 'drift', options: [720, 2160, 4320, 8760, 0] },
+    };
+
+    const HOUR_LABELS = {
+        1: '1h', 6: '6h', 24: '24h', 72: '3d', 168: '7d',
+        720: '30d', 2160: '90d', 4320: '180d', 8760: '1y', 0: 'All'
+    };
+
+    const charts = {};
+
+    // ── Chart.js defaults ──
+    Chart.defaults.color = '#a3a3a3';
+    Chart.defaults.borderColor = '#404040';
+    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    Chart.defaults.font.size = 11;
+
+    const EMOTION_COLORS = {
+        Calm: '#10b981', Joy: '#f59e0b', Desire: '#ef4444',
+        Excitement: '#f97316', Trust: '#3b82f6', Longing: '#8b5cf6',
+        Intimacy: '#ec4899', Desperation: '#dc2626', Closeness: '#14b8a6',
+        Vulnerability: '#a78bfa', Devotion: '#6366f1'
+    };
+
+    // ── Range helpers ──
+    function hoursToRange(hours) {
+        const end = new Date().toISOString();
+        if (hours === 0) return { start: '2020-01-01T00:00:00Z', end };
+        const s = new Date(Date.now() - hours * 3600000);
+        return { start: s.toISOString(), end };
+    }
+
+    function fmt(v, decimals = 2) {
+        if (v == null || isNaN(v)) return '--';
+        return parseFloat(v).toFixed(decimals);
+    }
+
+    // ── Build range buttons for each chart ──
+    function buildRangeButtons() {
+        for (const [name, cfg] of Object.entries(chartConfig)) {
+            const container = document.getElementById(`range-${name}`);
+            if (!container) continue;
+            cfg.options.forEach(h => {
+                const btn = document.createElement('button');
+                btn.className = `btn btn-sm${h === cfg.hours ? ' active' : ''}`;
+                btn.dataset.hours = h;
+                btn.textContent = HOUR_LABELS[h] || `${h}h`;
+                btn.onclick = () => setChartRange(name, h);
+                container.appendChild(btn);
+            });
+        }
+    }
+
+    async function setChartRange(chartName, hours) {
+        const cfg = chartConfig[chartName];
+        cfg.hours = hours;
+
+        // Update button state
+        const container = document.getElementById(`range-${chartName}`);
+        container.querySelectorAll('.btn-sm').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.hours) === hours);
+        });
+
+        // Fetch data and re-render just this chart
+        const range = hoursToRange(hours);
+        const qs = `start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`;
+
+        try {
+            if (cfg.source === 'turn') {
+                const data = await fetchJSON(`/api/observability/turn-metrics?${qs}&limit=2000`);
+                const updaters = { emotional: updateEmotionalChart, memory: updateMemoryChart, cache: updateCacheChart };
+                updaters[chartName](data.metrics, range);
+            } else {
+                // Drift charts: always fetch all, zoom via X bounds
+                const [driftData, eventData] = await Promise.all([
+                    fetchJSON('/api/observability/drift-metrics'),
+                    fetchJSON(`/api/observability/events?${qs}`),
+                ]);
+                const updaters = { drift: (d, r) => updateDriftChart(d, eventData.events, r), diversity: updateDiversityChart };
+                updaters[chartName](driftData.metrics, range);
+            }
+        } catch (err) {
+            console.error(`${chartName} refresh failed:`, err);
+        }
+    }
+
+    // ── Data fetching ──
+    async function fetchJSON(url) {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+        return resp.json();
+    }
+
+    async function refresh() {
+        // Each chart fetches data for its own range
+        const fetches = {};
+        const ranges = {};
+
+        // Group by source to minimize duplicate API calls
+        const turnRangesNeeded = new Set();
+        for (const [name, cfg] of Object.entries(chartConfig)) {
+            ranges[name] = hoursToRange(cfg.hours);
+            if (cfg.source === 'turn') {
+                turnRangesNeeded.add(JSON.stringify({ hours: cfg.hours, name }));
+            }
+        }
+
+        try {
+            // Fetch turn data per unique range
+            const turnDataByChart = {};
+            const turnPromises = [];
+            for (const entry of turnRangesNeeded) {
+                const { hours, name } = JSON.parse(entry);
+                const range = hoursToRange(hours);
+                const qs = `start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`;
+                turnPromises.push(
+                    fetchJSON(`/api/observability/turn-metrics?${qs}&limit=2000`)
+                        .then(d => { turnDataByChart[name] = d.metrics; })
+                );
+            }
+
+            // Always fetch drift + events + summary
+            const [_, driftData, eventData, summary] = await Promise.all([
+                Promise.all(turnPromises),
+                fetchJSON('/api/observability/drift-metrics'),
+                fetchJSON('/api/observability/events'),
+                fetchJSON('/api/observability/summary'),
+            ]);
+
+            updateCards(summary);
+            updateEmotionalChart(turnDataByChart.emotional || [], ranges.emotional);
+            updateMemoryChart(turnDataByChart.memory || [], ranges.memory);
+            updateCacheChart(turnDataByChart.cache || [], ranges.cache);
+            updateDriftChart(driftData.metrics, eventData.events, ranges.drift);
+            updateDiversityChart(driftData.metrics, ranges.diversity);
+        } catch (err) {
+            console.error('Refresh failed:', err);
+        }
+    }
+
+    // ── Cards ──
+    function updateCards(summary) {
+        const r = summary.recent_24h || {};
+        const d = summary.drift_latest || {};
+
+        document.getElementById('card-influence').textContent = fmt(r.avg_memory_influence);
+        document.getElementById('card-unexplained').textContent = fmt(r.avg_unexplained);
+        document.getElementById('card-emotional').textContent = fmt(r.avg_emotional_delta, 3);
+        document.getElementById('card-cache').textContent = r.avg_cache_efficiency != null ? fmt(r.avg_cache_efficiency, 1) + '%' : '--';
+        document.getElementById('card-turns').textContent = r.turn_count || '0';
+        document.getElementById('card-response-ms').textContent = r.avg_response_ms != null ? `avg ${Math.round(r.avg_response_ms)}ms` : '--';
+
+        const drift = d.centroid_drift_velocity;
+        document.getElementById('card-drift').textContent = drift ? fmt(drift.metric_value, 4) : '--';
+    }
+
+    // ── Emotional Trajectory ──
+    function updateEmotionalChart(metrics, range) {
+        const sorted = [...metrics].reverse();
+
+        const datasets = Object.keys(EMOTION_COLORS).map(emotion => ({
+            label: emotion,
+            borderColor: EMOTION_COLORS[emotion],
+            backgroundColor: EMOTION_COLORS[emotion] + '20',
+            data: sorted
+                .filter(m => m.emotional_state_after)
+                .map(m => ({
+                    x: new Date(m.timestamp),
+                    y: m.emotional_state_after[emotion] ?? null,
+                })),
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.3,
+        }));
+
+        renderChart('chart-emotional', datasets, { min: 0, max: 1 }, range);
+    }
+
+    // ── Memory Influence ──
+    function updateMemoryChart(metrics, range) {
+        const sorted = [...metrics].reverse();
+
+        const datasets = [
+            {
+                label: 'Max Memory Influence',
+                borderColor: '#3b82f6',
+                backgroundColor: '#3b82f680',
+                data: sorted.filter(m => m.max_memory_influence != null).map(m => ({
+                    x: new Date(m.timestamp), y: m.max_memory_influence,
+                })),
+                borderWidth: 1.5, pointRadius: 3, tension: 0.2,
+            },
+            {
+                label: 'Unexplained Ratio',
+                borderColor: '#ef4444',
+                backgroundColor: '#ef444440',
+                data: sorted.filter(m => m.unexplained_ratio != null).map(m => ({
+                    x: new Date(m.timestamp), y: m.unexplained_ratio,
+                })),
+                borderWidth: 1.5, pointRadius: 3, tension: 0.2,
+            },
+        ];
+
+        renderChart('chart-memory', datasets, { min: 0, max: 1 }, range);
+    }
+
+    // ── KV Cache ──
+    function updateCacheChart(metrics, range) {
+        const sorted = [...metrics].reverse();
+
+        const datasets = [{
+            label: 'Cache Efficiency %',
+            borderColor: '#10b981',
+            backgroundColor: '#10b98140',
+            data: sorted.filter(m => m.kv_cache_efficiency != null).map(m => ({
+                x: new Date(m.timestamp), y: m.kv_cache_efficiency,
+            })),
+            borderWidth: 1.5, pointRadius: 2, tension: 0.2, fill: true,
+        }];
+
+        renderChart('chart-cache', datasets, { min: 0, max: 100 }, range);
+    }
+
+    // ── Centroid Drift ──
+    function updateDriftChart(driftMetrics, events, range) {
+        const driftData = driftMetrics.filter(m => m.metric_name === 'centroid_drift_velocity');
+
+        const datasets = [{
+            label: 'Drift Velocity',
+            borderColor: '#8b5cf6',
+            backgroundColor: '#8b5cf640',
+            data: driftData.map(m => ({
+                x: new Date(m.window_end), y: m.metric_value,
+            })),
+            borderWidth: 2, pointRadius: 3, tension: 0.2,
+        }];
+
+        renderChart('chart-drift', datasets, {}, range);
+    }
+
+    // ── Retrieval Diversity / Vocab Entropy ──
+    function updateDiversityChart(driftMetrics, range) {
+        const diversity = driftMetrics.filter(m => m.metric_name === 'retrieval_diversity');
+        const entropy = driftMetrics.filter(m => m.metric_name === 'vocabulary_entropy');
+
+        const datasets = [];
+        if (diversity.length) {
+            datasets.push({
+                label: 'Retrieval Diversity',
+                borderColor: '#14b8a6',
+                data: diversity.map(m => ({ x: new Date(m.window_end), y: m.metric_value })),
+                borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: 'y',
+            });
+        }
+        if (entropy.length) {
+            datasets.push({
+                label: 'Vocabulary Entropy',
+                borderColor: '#f97316',
+                data: entropy.map(m => ({ x: new Date(m.window_end), y: m.metric_value })),
+                borderWidth: 2, pointRadius: 3, tension: 0.2, yAxisID: 'y1',
+            });
+        }
+
+        if (!datasets.length) {
+            renderChart('chart-diversity', [], {}, range);
+            return;
+        }
+
+        // Dual-axis needs custom rendering
+        const canvas = document.getElementById('chart-diversity');
+        if (charts['chart-diversity']) charts['chart-diversity'].destroy();
+
+        charts['chart-diversity'] = new Chart(canvas, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
+                scales: {
+                    x: { type: 'time', time: { tooltipFormat: 'MMM d, yyyy' }, grid: { color: '#2a2a2a' }, min: range.start, max: range.end },
+                    y: { position: 'left', title: { display: true, text: 'Diversity' }, grid: { color: '#2a2a2a' } },
+                    y1: { position: 'right', title: { display: true, text: 'Entropy' }, grid: { drawOnChartArea: false } },
+                },
+            },
+        });
+    }
+
+    // ── Generic chart renderer ──
+    function renderChart(canvasId, datasets, scaleOpts, range) {
+        const canvas = document.getElementById(canvasId);
+        if (charts[canvasId]) charts[canvasId].destroy();
+
+        charts[canvasId] = new Chart(canvas, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { tooltipFormat: 'MMM d, yyyy HH:mm' },
+                        grid: { color: '#2a2a2a' },
+                        min: range.start,
+                        max: range.end,
+                    },
+                    y: { ...scaleOpts, grid: { color: '#2a2a2a' } },
+                },
+            },
+        });
+    }
+
+    // ── Init ──
+    buildRangeButtons();
+    refresh();
+    setInterval(refresh, 300000);
+</script>
+</body>
+</html>
