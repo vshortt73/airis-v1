@@ -425,12 +425,12 @@ def load_recent_conversation(
 
     # Get tiered budgets from config if not provided
     if verbose_budget is None:
-        verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+        verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 18000)
     if summary_budget is None:
         summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
 
     # Fallback to old behavior if max_tokens specified but not tiered budgets
-    if max_tokens is not None and verbose_budget == 3000 and summary_budget == 17000:
+    if max_tokens is not None and verbose_budget == 18000 and summary_budget == 17000:
         # Old-style call, use max_tokens as total
         verbose_budget = max_tokens
         summary_budget = 0
@@ -462,7 +462,7 @@ def load_recent_conversation(
             cursor.execute("""
                 SELECT ch.role, ch.message, ch.tool_calls, ch.tool_call_id, ch.tool_name,
                        ct.temporal_description, ch.attachments, ct.emotion_bias, ct.display_priority,
-                       ch.c_timestamp, ch.summary
+                       ch.c_timestamp, ch.summary, ch.sender
                 FROM chat_history ch
                 LEFT JOIN chat_history_with_temporal ct ON ct.id = ch.id
                 ORDER BY ch.c_timestamp DESC
@@ -473,7 +473,7 @@ def load_recent_conversation(
             cursor.execute(f"""
                 SELECT role, message, tool_calls, tool_call_id, tool_name,
                        NULL as temporal_description, attachments, NULL as emotion_bias, NULL as display_priority,
-                       c_timestamp, summary
+                       c_timestamp, summary, sender
                 FROM {chat_table}
                 ORDER BY c_timestamp DESC
                 LIMIT %s
@@ -510,8 +510,18 @@ def load_recent_conversation(
         }
         DEFAULT_TOOL_CONTENT_LIMIT = 1000
 
+        # Drive message limiting: only keep the most recent N drive messages
+        MAX_DRIVE_MESSAGES = 2
+        drive_count = 0
+
         for row in all_messages:
-            role, content, tool_calls, tool_call_id, tool_name, temporal_description, attachments_json, emotion_bias, display_priority, c_timestamp, summary = row
+            role, content, tool_calls, tool_call_id, tool_name, temporal_description, attachments_json, emotion_bias, display_priority, c_timestamp, summary, sender = row
+
+            # Limit autonomous drive system messages to prevent context flooding
+            if role == "system" and content and "[AUTONOMOUS DRIVE" in content:
+                drive_count += 1
+                if drive_count > MAX_DRIVE_MESSAGES:
+                    continue  # Skip older drive messages
 
             # Apply tool content limits
             if role == "tool" and content and tool_name:
@@ -527,6 +537,10 @@ def load_recent_conversation(
                 "timeframe": temporal_description or "",
                 "timestamp": c_timestamp.isoformat() if c_timestamp else ""
             }
+
+            # Add sender field if present (for contact messages, etc.)
+            if sender:
+                msg["sender"] = sender
 
             if role == "assistant" and tool_calls:
                 msg["tool_calls"] = tool_calls
@@ -547,8 +561,13 @@ def load_recent_conversation(
                 if verbose_tokens + msg_tokens <= verbose_budget:
                     verbose_messages.insert(0, msg)
                     verbose_tokens += msg_tokens
+                elif verbose_tokens == 0 and msg_tokens > verbose_budget:
+                    # First message exceeds entire budget — skip it, don't kill verbose phase
+                    # (e.g. a huge tool result shouldn't push all real messages to summaries)
+                    print(f"[persistence.py] Skipping oversized message ({msg_tokens:,} tokens > {verbose_budget:,} budget) — role={role}, continuing verbose phase")
+                    continue
                 else:
-                    # Verbose budget full, switch to summary phase
+                    # Verbose budget genuinely full with real content, switch to summary phase
                     verbose_phase = False
                     print(f"[persistence.py] Verbose budget filled: {verbose_tokens:,}/{verbose_budget:,} tokens, {len(verbose_messages)} messages")
 

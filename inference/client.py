@@ -331,6 +331,59 @@ async def chat_completion_with_tools(
         return tool_response
 
 
+async def chat_completion_forced_tool_call(
+    messages: List[Dict[str, str]],
+    tools: List[Dict[str, Any]],
+) -> Optional[Dict]:
+    """
+    Non-streaming chat completion with tool_choice='required'.
+
+    llama-server applies internal grammar constraints when tool_choice=required,
+    making it impossible for the model to produce free text narration. Used by
+    the hallucination intervention system to force actual tool calls.
+
+    Returns:
+        Dict with 'tool_calls' and 'content' keys, or None on failure.
+    """
+    url = f"{config.OLLAMA_BASE_URL}/v1/chat/completions"
+
+    payload = {
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "required",
+        "stream": False,
+        "max_tokens": 2048,
+        "temperature": 0.7,
+    }
+
+    print(f"[client.py][forced_tool_call] POST {url} (tool_choice=required, {len(tools)} tools)")
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+
+            data = response.json()
+            choice = data.get("choices", [{}])[0]
+            message = choice.get("message", {})
+
+            tool_calls = message.get("tool_calls", [])
+            content = message.get("content", "")
+
+            if tool_calls:
+                print(f"[client.py][forced_tool_call] ✓ Got {len(tool_calls)} forced tool call(s)")
+                for tc in tool_calls:
+                    print(f"  - {tc.get('function', {}).get('name')}")
+            else:
+                print(f"[client.py][forced_tool_call] ✗ No tool calls returned despite tool_choice=required")
+
+            return {"tool_calls": tool_calls, "content": content}
+
+    except Exception as e:
+        print(f"[client.py][forced_tool_call] ✗ Failed: {e}")
+        return None
+
+
 def preflight_check(messages: List[Dict], tools: Optional[List[Dict]] = None) -> tuple:
     """
     Final safety check before sending to LLM.
@@ -393,12 +446,17 @@ async def chat_completion_stream(
     prompt_compare(messages)
 
     # OpenAI-compatible payload
+    freq_penalty = getattr(config, 'FREQUENCY_PENALTY', 0.6)
+    pres_penalty = getattr(config, 'PRESENCE_PENALTY', 0.5)
+    temperature = getattr(config, 'TEMPERATURE', 0.75)
     payload = {
         "messages": messages,
         "stream": True,
         "max_tokens": 4096,
-        "temperature": 0.95,
+        "temperature": temperature,
         "top_p": 0.95,
+        "frequency_penalty": freq_penalty,
+        "presence_penalty": pres_penalty,
     }
 
     # SGLang needs stream_options to include usage in final chunk
@@ -406,7 +464,7 @@ async def chat_completion_stream(
         payload["stream_options"] = {"include_usage": True}
 
     print(f"[client.py][chat_completion_stream] POST {url} (backend: {_get_backend()})")
-    print(f"[client.py][chat_completion_stream] Sending {len(messages)} messages")
+    print(f"[client.py][chat_completion_stream] Sending {len(messages)} messages (temp={temperature}, freq_penalty={freq_penalty}, pres_penalty={pres_penalty})")
 
     try:
         async with httpx.AsyncClient(timeout=600.0) as client:
@@ -532,11 +590,16 @@ async def chat_completion_stream_with_tools(
     prompt_compare(messages)
 
     # OpenAI-compatible payload
+    freq_penalty = getattr(config, 'FREQUENCY_PENALTY', 0.6)
+    pres_penalty = getattr(config, 'PRESENCE_PENALTY', 0.5)
+    temperature = getattr(config, 'TEMPERATURE', 0.75)
     payload = {
         "messages": messages,
         "stream": True,
         "max_tokens": 4096,
-        "temperature": 0.7,
+        "temperature": temperature,
+        "frequency_penalty": freq_penalty,
+        "presence_penalty": pres_penalty,
     }
 
     # SGLang needs stream_options to include usage in final chunk
@@ -549,7 +612,7 @@ async def chat_completion_stream_with_tools(
         payload["parallel_tool_calls"] = True
         print(f"[client.py][chat_completion_stream_with_tools] Sending {len(tools)} tools (streaming, parallel_tool_calls=True)")
 
-    print(f"[client.py][chat_completion_stream_with_tools] POST {url} (backend: {_get_backend()})")
+    print(f"[client.py][chat_completion_stream_with_tools] POST {url} (backend: {_get_backend()}, temp={temperature}, freq_penalty={freq_penalty}, pres_penalty={pres_penalty})")
 
     response_obj = StreamingToolResponse()
     chunk_count = 0
