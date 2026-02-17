@@ -18,12 +18,13 @@ import json
 import os
 import sys
 import asyncio
+import re
 import base64
 import httpx
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, PROJECT_ROOT)
-from core.system_prompt import assemble_full_context, assemble_unified_context
-from inference.client import chat_completion_stream, chat_completion_with_tools, chat_completion_stream_with_tools
+from core.system_prompt import assemble_full_context, assemble_unified_context, get_active_protocol
+from inference.client import chat_completion_stream, chat_completion_with_tools, chat_completion_stream_with_tools, chat_completion_forced_tool_call
 from mcp_servers.tool_manager import get_tool_manager
 from database.persistence import get_db_connection, load_recent_conversation
 from database.fast_reactive_memory import FastReactiveMemory
@@ -35,6 +36,144 @@ from core.websocket_broadcast import set_broadcast_function
 from core.want_detector import process_response_async as detect_wants
 from core.sentence_processor import SentenceProcessor, OutputMode, TextBatch
 from app import config
+from core.node2_check import is_node2_service_enabled
+from core.token_counter import TokenCounter
+
+# ---------------------------------------------------------------------------
+# Tool result truncation with cumulative budget tracking
+# ---------------------------------------------------------------------------
+# Per-result cap: no single tool result exceeds this (tokens)
+_PER_TOOL_RESULT_CAP = None  # Loaded from config on first use
+
+# Cumulative cap: total tokens across ALL tool results in one turn
+# Keeps tool output from consuming the entire context window
+_CUMULATIVE_TOOL_CAP = None  # 50% of context window, computed on first use
+
+
+def _get_tool_caps():
+    """Lazy-load tool result budget caps from config."""
+    global _PER_TOOL_RESULT_CAP, _CUMULATIVE_TOOL_CAP
+    if _PER_TOOL_RESULT_CAP is None:
+        _PER_TOOL_RESULT_CAP = getattr(config, 'TOOL_RESULTS_BUDGET', 15000)
+        ctx = getattr(config, 'OLLAMA_CONTEXT_WINDOW', 40960)
+        _CUMULATIVE_TOOL_CAP = int(ctx * 0.50)
+    return _PER_TOOL_RESULT_CAP, _CUMULATIVE_TOOL_CAP
+
+
+def truncate_tool_content(tool_content: str, cumulative_tokens_used: int) -> tuple:
+    """
+    Truncate a single tool result, respecting both per-result and cumulative caps.
+
+    Args:
+        tool_content: The tool result string to (maybe) truncate
+        cumulative_tokens_used: Total tool result tokens already consumed this turn
+
+    Returns:
+        (truncated_content, token_count) — the content and how many tokens it uses
+    """
+    per_cap, cumul_cap = _get_tool_caps()
+
+    token_count = TokenCounter.count_tokens(tool_content)
+
+    # How many tokens remain in the cumulative budget?
+    remaining = max(0, cumul_cap - cumulative_tokens_used)
+
+    # Effective cap is the stricter of per-result and remaining cumulative
+    effective_cap = min(per_cap, remaining)
+
+    if token_count <= effective_cap:
+        return tool_content, token_count
+
+    # Need to truncate
+    target = max(500, effective_cap - 50)  # Leave room for notice, min 500 tokens
+    encoder = TokenCounter.get_encoder()
+    encoded = encoder.encode(tool_content)
+    truncated = encoder.decode(encoded[:target])
+    truncated += (
+        f"\n\n[TRUNCATED — Result exceeded token budget "
+        f"({token_count:,} tokens, cap {effective_cap:,}). "
+        f"Data above is incomplete. Do not fabricate the missing portion.]"
+    )
+    final_count = TokenCounter.count_tokens(truncated)
+    print(f"[routes_chat.py] ⚠ Tool result truncated: {token_count:,} → {final_count:,} tokens "
+          f"(per-result cap: {per_cap:,}, cumulative remaining: {remaining:,})")
+    return truncated, final_count
+
+
+# ---------------------------------------------------------------------------
+# Tool hallucination detection
+# ---------------------------------------------------------------------------
+# When the model narrates tool usage in prose instead of making actual tool
+# calls, the response contaminates context and creates a self-reinforcing
+# loop. This detector catches that pattern so the caller can retry.
+
+def _detect_tool_hallucination(response: str, tool_names: list) -> bool:
+    """Detect when model narrates tool usage without actually calling tools.
+
+    Returns True if the response contains strong signals of fabricated tool use:
+    the model describes using specific tools by name in present/future tense
+    without making actual API calls.
+
+    The threshold is intentionally sensitive — a false positive only costs one
+    retry, while a false negative saves a hallucinated response to context and
+    worsens the self-reinforcing pattern.
+    """
+    if not response or len(response) < 40:
+        return False
+
+    response_lower = response.lower()
+
+    # Narration phrases that precede or surround tool names
+    narration_phrases = [
+        "i'll use", "let me use", "i'm using", "i will use", "i'm going to use",
+        "i'll call", "let me call", "i'm calling", "i will call",
+        "let me search", "i'll search", "i'm searching", "i will search",
+        "let me look up", "i'll look up", "i'm looking up",
+        "let me fetch", "i'll fetch", "i'm fetching",
+        "let me check", "i'll check", "i'm checking",
+        "let me retrieve", "i'll retrieve", "i'm retrieving",
+        "using the", "calling the", "invoking the",
+    ]
+
+    indicators = 0
+
+    # Check 1: Known tool names mentioned in narration context
+    tool_set = {name.lower() for name in tool_names if name}
+    for tool_name in tool_set:
+        if tool_name not in response_lower:
+            continue
+
+        idx = 0
+        while True:
+            idx = response_lower.find(tool_name, idx)
+            if idx == -1:
+                break
+
+            # Get surrounding context
+            before = response_lower[max(0, idx - 80):idx]
+            after = response_lower[idx:min(len(response_lower), idx + len(tool_name) + 60)]
+
+            if any(phrase in before or phrase in after for phrase in narration_phrases):
+                indicators += 1
+
+            idx += len(tool_name) + 1
+
+    # Check 2: Generic "tool" narration patterns (no specific name needed)
+    generic_patterns = [
+        r"(?:i'll|let me|i'm going to|i will)\s+(?:use|call|invoke|run)\s+(?:the\s+)?\w+\s+tool",
+        r"(?:i'll|let me|i'm going to|i will)\s+(?:search|look up|fetch|retrieve)\s+(?:that|this|the|some|for)",
+    ]
+    for pattern in generic_patterns:
+        if re.search(pattern, response_lower):
+            indicators += 1
+
+    if indicators >= 1:
+        # Log matched indicators for debugging
+        print(f"[routes_chat.py] ⚠ TOOL HALLUCINATION DETECTED ({indicators} indicator(s))")
+        return True
+
+    return False
+
 
 # PHASE 2: Use unified context (KV cache optimized) instead of tiered query classifier
 # Setting this to True enables the new unified prompt system
@@ -266,51 +405,31 @@ async def ensure_tool_manager_connected():
         print("[routes_chat.py] Connecting to MCP servers...")
         await tool_manager.connect()
 
-async def refresh_memories_if_needed(message_count: int):
+async def _run_memory_retrieval_inline() -> list:
     """
-    Refresh episodic memories every 10 messages
+    Run memory retrieval v2 inline every turn (~200ms with warm model).
 
-    Args:
-        message_count: Total number of messages in conversation
+    Writes to live_memories table (forensics + prompt assembly reads from it).
+    If retrieval fails, live_memories retains last-known-good state.
+
+    Returns:
+        List of scored memory dicts with keys: id, final_score, topic_sim,
+        emo_congruence, recency, tier (empty list on failure).
     """
-    # Trigger memory refresh every 10 messages
-    if message_count % 10 == 0 and message_count > 0:
-        print(f"[routes_chat.py][refresh_memories] 🧠 Refreshing memories (message count: {message_count})")
-        try:
-            # Run iris_memory_retrieval.py asynchronously
-            memory_script = os.path.join(PROJECT_ROOT, "backend", "memory", "iris_memory_retrieval.py")
-
-            # Run in background, don't wait for completion
-            process = await asyncio.create_subprocess_exec(
-                "python",
-                memory_script,
-                "--top_k", "10",
-                "--insert", "true",
-                "--mode", "replace",
-                env={**os.environ, "IRIS_DB_PASSWORD": os.environ.get("IRIS_DB_PASSWORD", "yourpassword")},
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            # Don't await - let it run in background
-            asyncio.create_task(_wait_for_memory_refresh(process))
-
-            print(f"[routes_chat.py][refresh_memories] ✓ Memory refresh triggered in background")
-        except Exception as e:
-            print(f"[routes_chat.py][refresh_memories] ✗ Error triggering memory refresh: {e}")
-
-async def _wait_for_memory_refresh(process):
-    """Helper to wait for memory refresh completion and log result"""
     try:
-        stdout, stderr = await process.communicate()
-        if process.returncode == 0:
-            print(f"[routes_chat.py][memory_refresh] ✓ Memory refresh completed successfully")
-        else:
-            print(f"[routes_chat.py][memory_refresh] ✗ Memory refresh failed with code {process.returncode}")
-            if stderr:
-                print(f"[routes_chat.py][memory_refresh] Error: {stderr.decode()[:200]}")
+        from backend.memory.memory_retrieval_v2 import run_retrieval_v2, DB_CFG
+        import time
+        t0 = time.time()
+        scored = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: run_retrieval_v2(DB_CFG, top_k=10, insert=True, mode="replace", show=False)
+        )
+        elapsed = time.time() - t0
+        print(f"[routes_chat.py][memory_retrieval] ✓ Retrieval v2 completed in {elapsed:.3f}s")
+        return scored or []
     except Exception as e:
-        print(f"[routes_chat.py][memory_refresh] ✗ Error waiting for memory refresh: {e}")
+        print(f"[routes_chat.py][memory_retrieval] ✗ Retrieval v2 failed (live_memories unchanged): {e}")
+        return []
 
 
 # ============================================
@@ -852,7 +971,7 @@ async def system_trigger(trigger_request: SystemTriggerRequest):
         active_conversation.messages = []
         for msg in recent_messages:
             role = msg.get('role')
-            content = msg.get('message', '')
+            content = msg.get('content', '')  # Fixed: was 'message', should be 'content'
 
             # Build message dict WITHOUT saving to database
             # (these are already in the database - we're just reloading them to memory)
@@ -872,7 +991,21 @@ async def system_trigger(trigger_request: SystemTriggerRequest):
 
             # System messages are handled by the context assembler
 
-        tool_definitions = tool_manager.get_tool_definitions_for_ollama()
+        # Smart tool selection for system triggers — use same logic as websocket
+        if getattr(config, 'SMART_TOOL_SELECTION', False):
+            recent_texts = [m["content"] for m in active_conversation.messages
+                            if m.get("role") == "user"][-getattr(config, 'BATCH_TRIM_SIZE', 5):]
+            # Get blocked_tools from active protocol
+            protocol = get_active_protocol()
+            blocked_tools = protocol.get('blocked_tools', [])
+            tool_definitions = tool_manager.get_tools_for_context(
+                recent_texts,
+                active_conversation.snapshot_force_groups,
+                blocked_tools=blocked_tools
+            )
+            active_conversation.snapshot_force_groups = set()
+        else:
+            tool_definitions = tool_manager.get_tool_definitions_for_ollama()
 
         # Use context_mode from request (default FULL, but can be GREETING for minimal context)
         context_mode = trigger_request.context_mode
@@ -948,6 +1081,69 @@ async def system_trigger(trigger_request: SystemTriggerRequest):
         assistant_response = ""
         has_clients = len(connection_manager.active_connections) > 0
 
+        # Ensure trigger content is the last message in context
+        # The trigger system message saved to chat_history may get squeezed out
+        # by tight GREETING token budgets. Append it explicitly so the model
+        # knows what to respond to. Uses role=user to prevent
+        # "prefill incompatible with enable_thinking" errors (trailing
+        # role=assistant or role=system can cause this with llama-server).
+        # Note: stored in DB as role=system so Iris doesn't attribute it to Victor.
+        # The [SYSTEM] prefix makes it clear this is an automated trigger, not user speech.
+        context.append({
+            "role": "user",
+            "content": f"[SYSTEM TRIGGER] {trigger_request.content}"
+        })
+        print(f"[routes_chat.py][system_trigger] Appended trigger as final user message ({len(trigger_request.content)} chars)")
+
+        # Strip tool-related messages from context when not using tools
+        # llama-server rejects role:"tool" messages and tool_calls fields
+        # when no tool definitions are provided in the request payload
+        if not trigger_request.allow_tools or not tool_calls:
+            clean_context = []
+            stripped = 0
+            for msg in context:
+                if msg.get("role") == "tool":
+                    stripped += 1
+                    continue
+                if "tool_calls" in msg:
+                    # Remove tool_calls field from assistant messages
+                    msg = {k: v for k, v in msg.items() if k != "tool_calls"}
+                    # Ensure content is not empty after stripping
+                    if not msg.get("content"):
+                        msg["content"] = "(tool interaction omitted)"
+                clean_context.append(msg)
+            if stripped > 0:
+                print(f"[routes_chat.py][system_trigger] Stripped {stripped} tool messages from context (no tools in payload)")
+            context = clean_context
+
+        # ============================================
+        # SERVER-SIDE TTS/VIDEO ROUTING SETUP (for greeting)
+        # ============================================
+        use_server_tts = False
+        tts_state = None
+        tts_websocket = None
+        is_video_mode = False
+
+        if has_clients and config.SERVER_SIDE_TTS_ROUTING and is_node2_service_enabled('TTS_ENABLED'):
+            # Get first connected client's state for TTS routing
+            for ws in connection_manager.active_connections:
+                state = connection_manager.get_state(ws)
+                if state and state.output_mode != OutputMode.TEXT:
+                    tts_state = state
+                    tts_websocket = ws
+                    use_server_tts = True
+                    is_video_mode = state.output_mode == OutputMode.VIDEO
+                    break
+
+        if use_server_tts:
+            tts_state.sentence_processor = SentenceProcessor()
+            tts_state.tts_queue = []
+            tts_state.tts_queue_complete = False
+            tts_state.tts_task = asyncio.create_task(tts_video_processor(tts_websocket, tts_state))
+            print(f"[routes_chat.py][system_trigger] ├─ SERVER-SIDE TTS ROUTING ({tts_state.output_mode.value}) ─┤")
+        else:
+            print(f"[routes_chat.py][system_trigger] TTS routing: {'no clients' if not has_clients else 'browser-side or text mode'}")
+
         # Send 'start' message if clients are connected
         if has_clients:
             await connection_manager.broadcast({
@@ -958,20 +1154,68 @@ async def system_trigger(trigger_request: SystemTriggerRequest):
         async for content_chunk in chat_completion_stream(
             messages=context
         ):
-            # chat_completion_stream yields strings directly, not dicts
-            if content_chunk:
-                assistant_response += content_chunk
+            if not content_chunk:
+                continue
 
-                # Broadcast chunk to WebSocket clients (if any)
-                if has_clients:
-                    await connection_manager.broadcast({
-                        "type": "chunk",
-                        "content": content_chunk
-                    })
+            # chat_completion_stream yields tuples (text, is_thinking) or timing dicts
+            if isinstance(content_chunk, dict):
+                # Timing metrics — skip for greeting
+                continue
+            if isinstance(content_chunk, tuple):
+                text, is_thinking = content_chunk
+                if is_thinking or not text:
+                    continue  # Skip thinking content for greetings
+                content_chunk = text
+
+            assistant_response += content_chunk
+
+            # Broadcast chunk to WebSocket clients (if any)
+            if has_clients:
+                await connection_manager.broadcast({
+                    "type": "chunk",
+                    "content": content_chunk
+                })
+
+            # Feed chunk to server-side TTS sentence processor
+            if use_server_tts and tts_state and tts_state.sentence_processor:
+                batches = tts_state.sentence_processor.add_chunk(content_chunk, is_video_mode)
+                for batch in batches:
+                    tts_state.tts_queue.append(batch)
+
+        # ============================================
+        # FINALIZE SERVER-SIDE TTS ROUTING
+        # ============================================
+        if use_server_tts and tts_state and tts_state.sentence_processor:
+            final_batches = tts_state.sentence_processor.finalize(is_video_mode)
+            for batch in final_batches:
+                tts_state.tts_queue.append(batch)
+            tts_state.tts_queue_complete = True
+
+            if tts_state.tts_task:
+                try:
+                    await asyncio.wait_for(tts_state.tts_task, timeout=300.0)
+                except asyncio.TimeoutError:
+                    print(f"[routes_chat.py][system_trigger] ⚠ TTS processor timed out")
+                    tts_state.tts_task.cancel()
+                except Exception as e:
+                    print(f"[routes_chat.py][system_trigger] ⚠ TTS processor error: {e}")
+
+            print(f"[routes_chat.py][system_trigger] ├─ TTS ROUTING COMPLETE ─┤")
 
         # 5. Save assistant response to database
         active_conversation.add_assistant_message(assistant_response)
         print(f"[routes_chat.py][system_trigger] ✓ Response generated: {assistant_response[:80]}...")
+
+        # Repetition gate — post-generation scoring (observability only)
+        try:
+            from core.repetition_gate import score_repetition
+            rep_score, rep_phrases = score_repetition(assistant_response, active_conversation.get_messages())
+            if rep_score > 0:
+                print(f"[routes_chat.py][system_trigger] Repetition score: {rep_score} ({len(rep_phrases)} shared phrases)")
+            if rep_score >= 0.3:
+                print(f"[routes_chat.py][system_trigger] ⚠ HIGH REPETITION: {rep_phrases[:5]}")
+        except Exception as e:
+            print(f"[routes_chat.py][system_trigger] Repetition scoring error: {e}")
 
         # 6. Handle completion
         if has_clients:
@@ -993,6 +1237,110 @@ async def system_trigger(trigger_request: SystemTriggerRequest):
 
     except Exception as e:
         print(f"[routes_chat.py][system_trigger] ✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+class ContactMessageRequest(BaseModel):
+    """Request model for contact message endpoint (autonomous drive contact_victor)"""
+    content: str
+    source: str = "autonomous_drive"  # Source identifier for logging
+    reason: str = ""  # Why Iris reached out (e.g., "lonely_and_curious") - shown to LLM, hidden from UI
+
+
+@router.post("/api/contact/message")
+async def save_contact_message(request: ContactMessageRequest):
+    """
+    Save Iris's autonomous contact message as an assistant message.
+
+    Used by the autonomous drive system when Iris initiates contact (contact_victor).
+    This saves the message to chat_history as an assistant message so it appears
+    in the conversation history, allowing Victor to see and respond to it.
+
+    Unlike system_trigger, this does NOT generate a new response - the content
+    IS Iris's message.
+
+    Args:
+        request: ContactMessageRequest with content and source
+
+    Returns:
+        {"success": True/False, "message_id": int or None, "error": "..."}
+    """
+    print(f"[routes_chat.py][contact_message] ┌── CONTACT MESSAGE ──┐")
+    print(f"[routes_chat.py][contact_message] Source: {request.source}")
+    print(f"[routes_chat.py][contact_message] Content: {request.content[:100]}...")
+
+    try:
+        content = request.content
+        if not content:
+            return {"success": False, "error": "Missing 'content' field"}
+
+        # Save as assistant message to chat_history
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get current session
+        session_id = active_conversation.get_session_id()
+        if not session_id:
+            cursor.execute("""
+                SELECT session_id FROM chat_sessions
+                ORDER BY start_time DESC
+                LIMIT 1
+            """)
+            result = cursor.fetchone()
+            session_id = result[0] if result else None
+
+        # Encode reason in sender field: "contact_victor:reason"
+        # This allows LLM to see why Iris reached out, while UI just shows the badge
+        sender_with_reason = request.source
+        if request.reason:
+            sender_with_reason = f"{request.source}:{request.reason}"
+            print(f"[routes_chat.py][contact_message] Reason: {request.reason}")
+
+        # Insert as assistant message with sender tag (includes reason for LLM context)
+        cursor.execute("""
+            INSERT INTO chat_history (session_id, role, message, c_timestamp, sender)
+            VALUES (%s, 'assistant', %s, %s, %s)
+            RETURNING id
+        """, (session_id, content, datetime.now(), sender_with_reason))
+
+        message_id = cursor.fetchone()[0]
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        print(f"[routes_chat.py][contact_message] ✓ Saved as assistant message (id={message_id})")
+
+        # Also add to in-memory conversation so it's immediately visible
+        active_conversation.messages.append({
+            "role": "assistant",
+            "content": content,
+            "sender": sender_with_reason
+        })
+
+        # Broadcast to WebSocket clients - use base source for UI (reason is LLM-only)
+        if connection_manager.active_connections:
+            await connection_manager.broadcast({
+                "type": "contact_message",
+                "role": "assistant",
+                "content": content,
+                "sender": request.source  # UI only needs base source for badge
+            })
+
+        print(f"[routes_chat.py][contact_message] └── COMPLETE ──┘")
+
+        return {
+            "success": True,
+            "message_id": message_id
+        }
+
+    except Exception as e:
+        print(f"[routes_chat.py][contact_message] ✗ Error: {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -1037,7 +1385,7 @@ async def websocket_chat(websocket: WebSocket):
                 video_session_id = None
                 print(f"[routes_chat.py][set_output_mode] Requested mode: {mode.value}, SERVER_SIDE_TTS_ROUTING: {config.SERVER_SIDE_TTS_ROUTING}")
 
-                if mode == OutputMode.VIDEO and config.SERVER_SIDE_TTS_ROUTING:
+                if mode == OutputMode.VIDEO and config.SERVER_SIDE_TTS_ROUTING and is_node2_service_enabled('TTS_ENABLED'):
                     # Start video session for this connection
                     print(f"[routes_chat.py][set_output_mode] Starting video session for VIDEO mode...")
                     state = connection_manager.get_state(websocket)
@@ -1109,9 +1457,26 @@ async def websocket_chat(websocket: WebSocket):
             # Append user message to prompt snapshot (if active)
             active_conversation.append_to_snapshot({"role": "user", "content": user_message})
 
-            # Check if we should refresh memories (every 10 messages)
-            message_count = len(active_conversation.get_messages())
-            await refresh_memories_if_needed(message_count)
+            # ── OBSERVABILITY: init turn metrics dict ──
+            import time as _time
+            _turn_start = _time.time()
+            _turn_metrics = {"session_id": str(active_conversation.get_session_id()) if active_conversation.get_session_id() else None}
+
+            # Memory retrieval runs inline every turn (~200ms with warm model)
+            # Writes to live_memories table for forensics + prompt assembly reads from it
+            _retrieval_scored = await _run_memory_retrieval_inline()
+
+            # ── OBSERVABILITY: capture memory retrieval provenance ──
+            if _retrieval_scored:
+                _turn_metrics["memories_in_context"] = len(_retrieval_scored)
+                _turn_metrics["memory_ids"] = [s["id"] for s in _retrieval_scored]
+                _turn_metrics["memory_tiers"] = [s["tier"] for s in _retrieval_scored]
+                _turn_metrics["memory_scores"] = [round(s["final_score"], 4) for s in _retrieval_scored]
+                _turn_metrics["avg_topic_similarity"] = round(sum(s["topic_sim"] for s in _retrieval_scored) / len(_retrieval_scored), 4)
+                _turn_metrics["avg_emotional_congruence"] = round(sum(s["emo_congruence"] for s in _retrieval_scored) / len(_retrieval_scored), 4)
+                _turn_metrics["avg_recency"] = round(sum(s["recency"] for s in _retrieval_scored) / len(_retrieval_scored), 4)
+            else:
+                _turn_metrics["memories_in_context"] = 0
 
             # ============================================
             # EMOTIONAL STATE PROCESSING
@@ -1119,7 +1484,7 @@ async def websocket_chat(websocket: WebSocket):
             # Analyze user message and update Iris's emotional state
             # This happens BEFORE context assembly so state is included in prompt
             # ============================================
-            if config.EMOTIONAL_STATE and user_message:
+            if is_node2_service_enabled('EMOTIONAL_STATE') and user_message:
                 try:
                     print(f"[routes_chat.py][websocket_chat] ├─ EMOTIONAL STATE PROCESSING ─┤")
                     emotional_result = await emotional_tracker.process_message(user_message)
@@ -1130,6 +1495,17 @@ async def websocket_chat(websocket: WebSocket):
                         print(f"[routes_chat.py][websocket_chat] │  Dominant emotions: {dominant_str}")
                     else:
                         print(f"[routes_chat.py][websocket_chat] │  No emotional analysis available")
+
+                    # ── OBSERVABILITY: capture emotional state delta ──
+                    if emotional_result.get("state_before") and emotional_result.get("state_after"):
+                        import math
+                        before = emotional_result["state_before"]
+                        after = emotional_result["state_after"]
+                        _turn_metrics["emotional_state_before"] = before
+                        _turn_metrics["emotional_state_after"] = after
+                        delta = math.sqrt(sum((after.get(k, 0) - before.get(k, 0)) ** 2 for k in after))
+                        _turn_metrics["emotional_delta"] = round(delta, 4)
+                        _turn_metrics["dominant_emotion"] = max(after, key=after.get) if after else None
                 except Exception as e:
                     print(f"[routes_chat.py][websocket_chat] │  ✗ Emotional state error: {e}")
 
@@ -1160,7 +1536,7 @@ async def websocket_chat(websocket: WebSocket):
             # Process images through dedicated vision model (llava on GPU 1)
             # Add vision analysis as context before main chat model
             # ============================================
-            if user_images and config.VISION_ENABLED:
+            if user_images and is_node2_service_enabled('VISION_ENABLED'):
                 print(f"[routes_chat.py][websocket_chat] ├─ VISION PROCESSING: {len(user_images)} image(s) ─┤")
 
                 # Notify client
@@ -1282,17 +1658,52 @@ async def websocket_chat(websocket: WebSocket):
                         "error": str(e)
                     })
 
-            # Get tool definitions first (needed for dynamic budgeting)
-            tool_definitions = tool_manager.get_tool_definitions_for_ollama()
+            # Get tool definitions — smart selection at snapshot boundaries
+            # Mid-snapshot pivot check: if the current message triggers groups
+            # not in the snapshot, spoil it so the rebuild picks them up.
+            if (getattr(config, 'SMART_TOOL_SELECTION', False)
+                    and active_conversation.snapshot_tools is not None
+                    and user_message
+                    and not active_conversation.should_rebuild_snapshot()):
+                from mcp_servers.tool_manager import check_message_for_missing_groups
+                missing = check_message_for_missing_groups(user_message, active_conversation.snapshot_tools)
+                if missing:
+                    active_conversation.snapshot_force_groups.update(missing)
+                    active_conversation.invalidate_snapshot(
+                        f"topic_pivot: user message needs {', '.join(missing)} group(s)")
+
+            if getattr(config, 'SMART_TOOL_SELECTION', False) and active_conversation.should_rebuild_snapshot():
+                # Snapshot is about to rebuild — recalculate tool selection from recent context
+                recent_texts = [m["content"] for m in active_conversation.messages
+                                if m.get("role") == "user"][-getattr(config, 'BATCH_TRIM_SIZE', 5):]
+                # Get blocked_tools from active protocol (uses cache if available)
+                system_cache = active_conversation.get_system_components()
+                blocked_tools = system_cache.get('protocol', {}).get('blocked_tools', [])
+                tool_definitions = tool_manager.get_tools_for_context(
+                    recent_texts,
+                    active_conversation.snapshot_force_groups,
+                    blocked_tools=blocked_tools
+                )
+                active_conversation.snapshot_tools = [
+                    t["function"]["name"] for t in tool_definitions
+                ]
+                active_conversation.snapshot_force_groups = set()
+            elif getattr(config, 'SMART_TOOL_SELECTION', False) and active_conversation.snapshot_tools is not None:
+                # Reuse the tool set from current snapshot
+                tool_definitions = tool_manager.get_tools_by_names(active_conversation.snapshot_tools)
+            else:
+                # Feature disabled or first turn — send all tools
+                tool_definitions = tool_manager.get_tool_definitions_for_ollama()
             print(f"[routes_chat.py][websocket_chat] ├─ TOOLS AVAILABLE: {len(tool_definitions)} ─┤")
 
             # Assemble context with prompt snapshot (KV cache batch trim optimization)
             # When batch trim is enabled, reuses a frozen snapshot for N turns
             # instead of rebuilding every turn — keeps prefix byte-identical for KV cache
-            from core.system_prompt import assemble_context_with_snapshot
-            all_messages, budget = assemble_context_with_snapshot(
+            from core.system_prompt import assemble_prompt
+            all_messages, budget = assemble_prompt(
                 active_conversation, tool_definitions,
                 context_level=context_level,
+                user_message=user_message,
                 use_unified=USE_UNIFIED_CONTEXT
             )
 
@@ -1367,7 +1778,7 @@ async def websocket_chat(websocket: WebSocket):
             # SERVER-SIDE TTS/VIDEO ROUTING SETUP
             # ============================================
             state = connection_manager.get_state(websocket)
-            use_server_tts = (config.SERVER_SIDE_TTS_ROUTING and
+            use_server_tts = (config.SERVER_SIDE_TTS_ROUTING and is_node2_service_enabled('TTS_ENABLED') and
                              state and
                              state.output_mode != OutputMode.TEXT)
 
@@ -1386,6 +1797,7 @@ async def websocket_chat(websocket: WebSocket):
             full_response = ""
             tool_response = None
             streaming_kv_metrics = None
+            websocket._hallucination_retried = False  # Reset per-turn hallucination retry flag
 
             # Thinking state: llama.cpp sends reasoning_content in separate delta field
             thinking_active = False
@@ -1533,13 +1945,20 @@ async def websocket_chat(websocket: WebSocket):
                     tool_results.append(result)
 
                     # Notify result
-                    await websocket.send_json({
+                    tool_result_msg = {
                         "type": "tool_result",
                         "tool_name": tool_name,
                         "success": result["success"],
                         "error": result.get("error"),
                         "in_bubble": True
-                    })
+                    }
+                    # Pass meeting_id to UI so browser recorder can start/stop
+                    if tool_name in ("meeting", "meeting_start") and result.get("success"):
+                        tool_data = result.get("result", {})
+                        if tool_data.get("meeting_id"):
+                            tool_result_msg["meeting_id"] = tool_data["meeting_id"]
+                        tool_result_msg["action"] = arguments.get("action", "start") if tool_name == "meeting" else "start"
+                    await websocket.send_json(tool_result_msg)
 
                     if result["success"]:
                         print(f"[routes_chat.py][websocket_chat] │  ✓ Tool succeeded")
@@ -1548,9 +1967,25 @@ async def websocket_chat(websocket: WebSocket):
                         # Spoil the snapshot so failed tool patterns don't get cached
                         active_conversation.invalidate_snapshot(reason=f"Tool '{tool_name}' failed: {result.get('error', 'unknown')[:80]}")
 
+                    # Smart tool selection: detect tool_miss (model called a tool not in current selection)
+                    if getattr(config, 'SMART_TOOL_SELECTION', False) and active_conversation.snapshot_tools is not None:
+                        if tool_name not in active_conversation.snapshot_tools:
+                            from mcp_servers.tool_manager import ToolManager
+                            group = ToolManager.get_group_for_tool(tool_name)
+                            if group:
+                                active_conversation.snapshot_force_groups.add(group)
+                                active_conversation.invalidate_snapshot(f"tool_miss: {tool_name} (adding {group} group)")
+                                print(f"[routes_chat.py][websocket_chat] │  ⚠ Tool miss: {tool_name} not in snapshot, forcing {group} group")
+
                 # Send tool marker end
                 await websocket.send_json({
                     "type": "tool_marker_end"
+                })
+
+                # ── OBSERVABILITY: capture tool usage ──
+                _turn_metrics["tool_calls_count"] = len(tool_response.tool_calls)
+                _turn_metrics["tools_used"] = list({
+                    tc.get("function", {}).get("name", "unknown") for tc in tool_response.tool_calls
                 })
 
                 # Save assistant message with tool calls (include any streamed content)
@@ -1562,7 +1997,8 @@ async def websocket_chat(websocket: WebSocket):
                     snapshot_assistant_msg["tool_calls"] = tool_response.tool_calls
                 active_conversation.append_to_snapshot(snapshot_assistant_msg)
 
-                # Add tool results to conversation
+                # Add tool results to conversation (with cumulative budget tracking)
+                cumulative_tool_tokens = 0
                 for tool_call, result in zip(tool_response.tool_calls, tool_results):
                     function_info = tool_call.get("function", {})
                     tool_name = function_info.get("name")
@@ -1598,21 +2034,9 @@ async def websocket_chat(websocket: WebSocket):
                     )
                     tool_content = result_instructions + json.dumps(tool_result_data)
 
-                    # ── Enforce tool result token budget ──
-                    from core.token_counter import TokenCounter
-                    tool_result_budget = getattr(config, 'TOOL_RESULTS_BUDGET', 15000)
-                    tool_content_tokens = TokenCounter.count_tokens(tool_content)
-                    if tool_content_tokens > tool_result_budget:
-                        encoder = TokenCounter.get_encoder()
-                        encoded = encoder.encode(tool_content)
-                        truncated_encoded = encoded[:tool_result_budget - 50]
-                        tool_content = encoder.decode(truncated_encoded)
-                        tool_content += (
-                            "\n\n[TRUNCATED — Result exceeded token budget "
-                            f"({tool_content_tokens:,} > {tool_result_budget:,} tokens). "
-                            "Data above is incomplete. Do not fabricate the missing portion.]"
-                        )
-                        print(f"[routes_chat.py] ⚠ Tool result truncated: {tool_content_tokens:,} → {tool_result_budget:,} tokens")
+                    # ── Enforce per-result AND cumulative tool token budget ──
+                    tool_content, tok_count = truncate_tool_content(tool_content, cumulative_tool_tokens)
+                    cumulative_tool_tokens += tok_count
 
                     active_conversation.add_tool_message(
                         content=tool_content,
@@ -1638,16 +2062,20 @@ async def websocket_chat(websocket: WebSocket):
                             action = args.get("action", "")
                             if tool_name == "trait" and action == "modify":
                                 active_conversation.invalidate_snapshot("trait_modify")
-                            elif tool_name == "memory" and action == "insert":
-                                active_conversation.invalidate_snapshot("memory_insert")
+                            elif tool_name == "memory" and action in ("insert", "archive"):
+                                active_conversation.invalidate_snapshot(f"memory_{action}")
+                            elif tool_name == "seed" and action in ("plant", "tend", "reflect", "accept", "dismiss", "clear_suggestions"):
+                                active_conversation.invalidate_snapshot(f"seed_{action}")
+                            elif tool_name == "calendar" and action in ("add", "update", "delete"):
+                                active_conversation.invalidate_snapshot(f"calendar_{action}")
                         except Exception:
                             pass
 
                 # Reassemble context with tool results for follow-up call
-                from core.system_prompt import assemble_context_with_snapshot
-                all_messages, budget = assemble_context_with_snapshot(
+                all_messages, budget = assemble_prompt(
                     active_conversation, tool_definitions,
                     context_level=context_level,
+                    user_message=user_message,
                     use_unified=USE_UNIFIED_CONTEXT
                 )
 
@@ -1655,6 +2083,7 @@ async def websocket_chat(websocket: WebSocket):
 
                 # Iterative tool loop: follow-up calls can trigger more tools
                 MAX_TOOL_ITERATIONS = 5
+                _prev_tool_sig = None  # Track previous call to detect stuck loops
                 for tool_iteration in range(MAX_TOOL_ITERATIONS):
                     is_final_iteration = (tool_iteration == MAX_TOOL_ITERATIONS - 1)
                     iteration_label = f"iteration {tool_iteration + 1}/{MAX_TOOL_ITERATIONS}"
@@ -1682,6 +2111,18 @@ async def websocket_chat(websocket: WebSocket):
 
                     # Reset sentence processor for follow-up if using server-side TTS
                     if use_server_tts and state:
+                        # Finalize and await the previous TTS task before starting a new one
+                        # to prevent interleaved audio chunks from concurrent tasks
+                        if state.sentence_processor:
+                            prev_batches = state.sentence_processor.finalize(is_video_mode)
+                            for batch in prev_batches:
+                                state.tts_queue.append(batch)
+                        state.tts_queue_complete = True
+                        if state.tts_task:
+                            try:
+                                await asyncio.wait_for(state.tts_task, timeout=60.0)
+                            except (asyncio.TimeoutError, Exception):
+                                state.tts_task.cancel()
                         state.sentence_processor = SentenceProcessor()
                         state.tts_queue = []
                         state.tts_queue_complete = False
@@ -1786,6 +2227,51 @@ async def websocket_chat(websocket: WebSocket):
 
                     # Check if the follow-up triggered more tool calls
                     if followup_tool_response and followup_tool_response.has_tool_calls() and not interrupt_manager.is_interrupted():
+                        # Circuit breaker: detect repeated identical tool calls (stuck loop)
+                        _cur_tool_sig = json.dumps(
+                            [(tc.get("function", {}).get("name"), tc.get("function", {}).get("arguments"))
+                             for tc in followup_tool_response.tool_calls],
+                            sort_keys=True
+                        )
+                        if _cur_tool_sig == _prev_tool_sig:
+                            print(f"[routes_chat.py][websocket_chat] ⚠ STUCK LOOP DETECTED — same tool call repeated")
+                            print(f"[routes_chat.py][websocket_chat] ⚠ Making final text-only call so Iris can respond")
+                            # Instead of silently breaking, give the model one last
+                            # chance to respond in plain text (no tools) so the user
+                            # isn't left staring at an empty screen.
+                            stuck_tool_names = [tc.get("function", {}).get("name", "?") for tc in followup_tool_response.tool_calls]
+                            stuck_note = {
+                                "role": "system",
+                                "content": (
+                                    f"[TOOL LOOP DETECTED] You just tried to call {', '.join(stuck_tool_names)} "
+                                    f"with the same arguments twice. The tool is not working right now. "
+                                    f"Do NOT call any tools. Respond to the user in plain text — "
+                                    f"acknowledge the issue briefly and continue the conversation."
+                                )
+                            }
+                            recovery_messages = list(all_messages) + [stuck_note]
+                            recovery_llm = apply_no_think(recovery_messages) if not thinking_enabled else recovery_messages
+
+                            full_response = ""
+                            try:
+                                async for chunk in chat_completion_stream(recovery_llm):
+                                    if chunk:
+                                        if isinstance(chunk, tuple):
+                                            text, is_thinking = chunk
+                                            if not is_thinking:
+                                                full_response += text
+                                                await websocket.send_json({"type": "chunk", "content": text})
+                                                if use_server_tts and state and state.sentence_processor:
+                                                    batches = state.sentence_processor.add_chunk(text, is_video_mode)
+                                                    for batch in batches:
+                                                        state.tts_queue.append(batch)
+                                    if interrupt_manager.is_interrupted():
+                                        break
+                            except Exception as recovery_err:
+                                print(f"[routes_chat.py][websocket_chat] ⚠ Stuck loop recovery call failed: {recovery_err}")
+                            break
+                        _prev_tool_sig = _cur_tool_sig
+
                         print(f"[routes_chat.py][websocket_chat] ├─ ITERATIVE TOOL CALL ({iteration_label}) ─┤")
                         print(f"[routes_chat.py][websocket_chat] ├─ EXECUTING {len(followup_tool_response.tool_calls)} TOOL(S) ─┤")
 
@@ -1820,13 +2306,20 @@ async def websocket_chat(websocket: WebSocket):
                             result = await tool_manager.execute_tool(tn, args, require_confirmation=False)
                             iter_tool_results.append(result)
 
-                            await websocket.send_json({
+                            iter_tool_result_msg = {
                                 "type": "tool_result",
                                 "tool_name": tn,
                                 "success": result["success"],
                                 "error": result.get("error"),
                                 "in_bubble": True
-                            })
+                            }
+                            # Pass meeting_id to UI so browser recorder can start/stop
+                            if tn in ("meeting", "meeting_start") and result.get("success"):
+                                iter_tool_data = result.get("result", {})
+                                if iter_tool_data.get("meeting_id"):
+                                    iter_tool_result_msg["meeting_id"] = iter_tool_data["meeting_id"]
+                                iter_tool_result_msg["action"] = args.get("action", "start") if tn == "meeting" else "start"
+                            await websocket.send_json(iter_tool_result_msg)
 
                             if result["success"]:
                                 print(f"[routes_chat.py][websocket_chat] │  ✓ Tool succeeded")
@@ -1834,12 +2327,22 @@ async def websocket_chat(websocket: WebSocket):
                                 print(f"[routes_chat.py][websocket_chat] │  ✗ Tool failed: {result.get('error')}")
                                 active_conversation.invalidate_snapshot(reason=f"Tool '{tn}' failed: {result.get('error', 'unknown')[:80]}")
 
+                            # Smart tool selection: detect tool_miss in iterative loop
+                            if getattr(config, 'SMART_TOOL_SELECTION', False) and active_conversation.snapshot_tools is not None:
+                                if tn not in active_conversation.snapshot_tools:
+                                    from mcp_servers.tool_manager import ToolManager
+                                    group = ToolManager.get_group_for_tool(tn)
+                                    if group:
+                                        active_conversation.snapshot_force_groups.add(group)
+                                        active_conversation.invalidate_snapshot(f"tool_miss: {tn} (adding {group} group)")
+
                         await websocket.send_json({"type": "tool_marker_end"})
 
                         # Save assistant + tool results to conversation
                         active_conversation.add_assistant_message(content=full_response, tool_calls=followup_tool_response.tool_calls)
                         active_conversation.append_to_snapshot({"role": "assistant", "content": full_response, "tool_calls": followup_tool_response.tool_calls})
 
+                        iter_cumulative_tool_tokens = 0
                         for tc, result in zip(followup_tool_response.tool_calls, iter_tool_results):
                             fi = tc.get("function", {})
                             tn = fi.get("name")
@@ -1870,6 +2373,11 @@ async def websocket_chat(websocket: WebSocket):
                                 "Tool result data: "
                             )
                             tool_content = result_instructions + json.dumps(trd)
+
+                            # ── Enforce per-result AND cumulative tool token budget ──
+                            tool_content, tok_count = truncate_tool_content(tool_content, iter_cumulative_tool_tokens)
+                            iter_cumulative_tool_tokens += tok_count
+
                             active_conversation.add_tool_message(
                                 content=tool_content, tool_name=tn,
                                 tool_call_id=tcid,
@@ -1889,22 +2397,224 @@ async def websocket_chat(websocket: WebSocket):
                                     action = a.get("action", "")
                                     if tn == "trait" and action == "modify":
                                         active_conversation.invalidate_snapshot("trait_modify")
-                                    elif tn == "memory" and action == "insert":
-                                        active_conversation.invalidate_snapshot("memory_insert")
+                                    elif tn == "memory" and action in ("insert", "archive"):
+                                        active_conversation.invalidate_snapshot(f"memory_{action}")
+                                    elif tn == "seed" and action in ("plant", "tend", "reflect", "accept", "dismiss", "clear_suggestions"):
+                                        active_conversation.invalidate_snapshot(f"seed_{action}")
+                                    elif tn == "calendar" and action in ("add", "update", "delete"):
+                                        active_conversation.invalidate_snapshot(f"calendar_{action}")
                                 except Exception:
                                     pass
 
                         # Reassemble context for next iteration
-                        all_messages, budget = assemble_context_with_snapshot(
+                        all_messages, budget = assemble_prompt(
                             active_conversation, tool_definitions,
                             context_level=context_level,
+                            user_message=user_message,
                             use_unified=USE_UNIFIED_CONTEXT
                         )
                         print(f"[routes_chat.py][websocket_chat] ├─ CONTEXT UPDATED (iteration {tool_iteration + 2}) ─┤")
                         continue  # Loop back for another follow-up
                     else:
                         # No more tool calls - we're done
+                        # ── OBSERVABILITY: capture tool iterations ──
+                        _turn_metrics["tool_iterations"] = tool_iteration + 1
                         break
+
+            # ============================================
+            # TOOL HALLUCINATION INTERVENTION
+            # ============================================
+            # If the model narrated tool usage in prose instead of making actual
+            # tool calls, discard the response and retry once with a corrective
+            # system message.  This prevents hallucinated tool narration from
+            # being saved to chat_history where it contaminates future context.
+            _hallucination_retried = getattr(websocket, '_hallucination_retried', False)
+            if (
+                full_response
+                and (not tool_response or not tool_response.has_tool_calls())
+                and not _hallucination_retried
+            ):
+                _tool_names_for_check = [
+                    td["function"]["name"]
+                    for td in tool_definitions
+                    if "function" in td and "name" in td["function"]
+                ]
+                if _detect_tool_hallucination(full_response, _tool_names_for_check):
+                    print(f"[routes_chat.py][websocket_chat] ╔═══════════════════════════════════════╗")
+                    print(f"[routes_chat.py][websocket_chat] ║  TOOL HALLUCINATION INTERVENTION      ║")
+                    print(f"[routes_chat.py][websocket_chat] ║  Discarding response, retrying...     ║")
+                    print(f"[routes_chat.py][websocket_chat] ╚═══════════════════════════════════════╝")
+                    print(f"[routes_chat.py][websocket_chat] │  Hallucinated response ({len(full_response)} chars): {full_response[:200]}...")
+                    websocket._hallucination_retried = True
+
+                    # Tell the UI to discard the hallucinated response
+                    await websocket.send_json({
+                        "type": "hallucination_retry",
+                        "reason": "Model narrated tool usage instead of calling tools. Retrying."
+                    })
+
+                    # Cancel any TTS that was processing the hallucinated response
+                    if use_server_tts and state:
+                        if state.tts_task:
+                            state.tts_task.cancel()
+                            try:
+                                await state.tts_task
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                        state.sentence_processor = SentenceProcessor()
+                        state.tts_queue = []
+                        state.tts_queue_complete = False
+
+                    # Rebuild context (don't save the hallucinated response — it never happened)
+                    retry_messages, budget = assemble_prompt(
+                        active_conversation, tool_definitions,
+                        context_level=context_level,
+                        user_message=user_message,
+                        use_unified=USE_UNIFIED_CONTEXT
+                    )
+                    retry_llm_messages = apply_no_think(list(retry_messages)) if not thinking_enabled else list(retry_messages)
+
+                    # ── PHASE 1: Forced tool call (non-streaming, tool_choice=required) ──
+                    # llama-server applies internal grammar constraints when tool_choice=required,
+                    # making it impossible for the model to produce free text narration.
+                    forced_result = await chat_completion_forced_tool_call(
+                        retry_llm_messages, tool_definitions
+                    )
+
+                    if forced_result and forced_result.get("tool_calls"):
+                        forced_tool_calls = forced_result["tool_calls"]
+                        forced_content = forced_result.get("content", "") or ""
+                        print(f"[routes_chat.py][websocket_chat] ├─ FORCED RETRY: {len(forced_tool_calls)} TOOL CALL(S) ─┤")
+
+                        # Show tool execution in UI
+                        await websocket.send_json({
+                            "type": "tool_marker_start",
+                            "tool_count": len(forced_tool_calls)
+                        })
+
+                        # Execute each forced tool call
+                        retry_tool_results = []
+                        for tc in forced_tool_calls:
+                            if interrupt_manager.is_interrupted():
+                                break
+                            fi = tc.get("function", {})
+                            tn = fi.get("name")
+                            args = fi.get("arguments", {})
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except json.JSONDecodeError:
+                                    args = {}
+                            print(f"[routes_chat.py][websocket_chat] │  Executing: {tn}")
+                            await websocket.send_json({
+                                "type": "tool_executing",
+                                "tool_name": tn,
+                                "tool_icon": get_tool_icon(tn),
+                                "arguments": args,
+                                "in_bubble": True
+                            })
+                            result = await tool_manager.execute_tool(tn, args, require_confirmation=False)
+                            retry_tool_results.append(result)
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool_name": tn,
+                                "success": result["success"],
+                                "error": result.get("error"),
+                                "in_bubble": True
+                            })
+                        await websocket.send_json({"type": "tool_marker_end"})
+
+                        # Save assistant message with tool calls
+                        active_conversation.add_assistant_message(content=forced_content, tool_calls=forced_tool_calls)
+                        active_conversation.append_to_snapshot({"role": "assistant", "content": forced_content, "tool_calls": forced_tool_calls})
+
+                        # Save tool results to conversation
+                        retry_cumul_tokens = 0
+                        for tc, result in zip(forced_tool_calls, retry_tool_results):
+                            fi = tc.get("function", {})
+                            tn = fi.get("name")
+                            tcid = tc.get("id")
+                            trd = result.get("result", {})
+                            tool_images = []
+                            ib64 = trd.get("image_base64")
+                            if ib64:
+                                tool_images.append(ib64)
+                                await websocket.send_json({
+                                    "type": "tool_image", "tool_name": tn,
+                                    "image_base64": ib64,
+                                    "filename": trd.get("filename", "generated.png"),
+                                    "width": trd.get("width"), "height": trd.get("height")
+                                })
+                                trd = {k: v for k, v in trd.items() if k != "image_base64"}
+                            result_instructions = (
+                                "[TOOL RESULT]\n"
+                                "Present this information to the user in a natural, conversational way. "
+                                "Do not add false data or attempt to fill in gaps. "
+                                "Present only the data supplied below.\n\n"
+                                "Tool result data: "
+                            )
+                            tool_content = result_instructions + json.dumps(trd)
+                            tool_content, tok_count = truncate_tool_content(tool_content, retry_cumul_tokens)
+                            retry_cumul_tokens += tok_count
+                            active_conversation.add_tool_message(
+                                content=tool_content, tool_name=tn,
+                                tool_call_id=tcid,
+                                images=tool_images if tool_images else None
+                            )
+                            active_conversation.append_to_snapshot({
+                                "role": "tool", "content": tool_content,
+                                "tool_name": tn, "tool_call_id": tcid
+                            })
+
+                        # ── PHASE 2: Stream the follow-up presentation of tool results ──
+                        followup_msgs, budget = assemble_prompt(
+                            active_conversation, tool_definitions,
+                            context_level=context_level,
+                            user_message=user_message,
+                            use_unified=USE_UNIFIED_CONTEXT
+                        )
+                        followup_llm = apply_no_think(list(followup_msgs)) if not thinking_enabled else list(followup_msgs)
+
+                        if voice_mode_active:
+                            followup_llm.append({
+                                "role": "system",
+                                "content": (
+                                    "CRITICAL: Your response will be spoken aloud as audio or video. "
+                                    "Write entirely in flowing, conversational prose. No bullet points, "
+                                    "no numbered lists, no markdown formatting, no headers, no bold text, "
+                                    "no code blocks. Just natural sentences and paragraphs."
+                                )
+                            })
+
+                        full_response = ""
+                        thinking_active = False
+
+                        # Start TTS for the follow-up presentation
+                        if use_server_tts and state:
+                            state.tts_task = asyncio.create_task(tts_video_processor(websocket, state))
+
+                        try:
+                            async for chunk in chat_completion_stream(followup_llm):
+                                if chunk:
+                                    if isinstance(chunk, tuple):
+                                        text, is_think = chunk
+                                        if not is_think:
+                                            full_response += text
+                                            await websocket.send_json({"type": "chunk", "content": text})
+                                            if use_server_tts and state and state.sentence_processor:
+                                                batches = state.sentence_processor.add_chunk(text, is_video_mode)
+                                                for batch in batches:
+                                                    state.tts_queue.append(batch)
+                                if interrupt_manager.is_interrupted():
+                                    break
+                        except Exception as followup_err:
+                            print(f"[routes_chat.py][websocket_chat] ⚠ Retry follow-up failed: {followup_err}")
+                    else:
+                        # Forced tool call failed or returned nothing — let the original
+                        # hallucinated response fall through to be saved (better than nothing)
+                        print(f"[routes_chat.py][websocket_chat] ⚠ Forced tool call returned no results, keeping original response")
+
+                    print(f"[routes_chat.py][websocket_chat] ├─ HALLUCINATION INTERVENTION COMPLETE ─┤")
 
             # Send KV cache and performance metrics to UI
             if streaming_kv_metrics:
@@ -1925,6 +2635,12 @@ async def websocket_chat(websocket: WebSocket):
                     "predicted_n": streaming_kv_metrics.get("predicted_n", 0),
                     "total_ms": streaming_kv_metrics.get("predicted_ms", 0) + streaming_kv_metrics.get("prompt_ms", 0)
                 })
+
+                # ── OBSERVABILITY: capture KV cache / LLM performance ──
+                _turn_metrics["kv_cache_tokens"] = streaming_kv_metrics["cache_n"]
+                _turn_metrics["kv_prompt_tokens"] = streaming_kv_metrics["prompt_n"]
+                _turn_metrics["kv_cache_efficiency"] = round(streaming_kv_metrics["efficiency"], 2)
+                _turn_metrics["gen_tokens_per_sec"] = round(gen_tps, 1)
 
             # ============================================
             # FINALIZE SERVER-SIDE TTS ROUTING
@@ -1971,6 +2687,17 @@ async def websocket_chat(websocket: WebSocket):
                 active_conversation.add_assistant_message(final_content)
                 print(f"[routes_chat.py][websocket_chat] ✓ Final response saved")
 
+                # Repetition gate — post-generation scoring (observability only)
+                try:
+                    from core.repetition_gate import score_repetition
+                    rep_score, rep_phrases = score_repetition(final_content, active_conversation.get_messages())
+                    if rep_score > 0:
+                        print(f"[routes_chat.py][websocket_chat] Repetition score: {rep_score} ({len(rep_phrases)} shared phrases)")
+                    if rep_score >= 0.3:
+                        print(f"[routes_chat.py][websocket_chat] ⚠ HIGH REPETITION: {rep_phrases[:5]}")
+                except Exception as e:
+                    print(f"[routes_chat.py][websocket_chat] Repetition scoring error: {e}")
+
                 # Append final assistant message to snapshot
                 active_conversation.append_to_snapshot({"role": "assistant", "content": final_content})
 
@@ -1992,7 +2719,6 @@ async def websocket_chat(websocket: WebSocket):
                     print(f"[routes_chat.py][websocket_chat] Skipping want detection - user asked about garden/motivations")
 
             # Send completion
-            from core.token_counter import TokenCounter
             response_tokens = TokenCounter.count_tokens(full_response)
             final_total_tokens = budget.get('total_tokens', 0) + response_tokens
 
@@ -2006,6 +2732,56 @@ async def websocket_chat(websocket: WebSocket):
                     "percentage": round((final_total_tokens / budget.get('max_tokens', 32768) * 100), 1) if budget.get('max_tokens', 32768) > 0 else 0
                 }
             })
+
+            # ── OBSERVABILITY: finalize and persist turn metrics ──
+            try:
+                _turn_elapsed = int((_time.time() - _turn_start) * 1000)
+                _turn_metrics["response_time_ms"] = _turn_elapsed
+                _turn_metrics["response_tokens"] = response_tokens
+
+                # Context budget stats
+                _turn_metrics["total_context_tokens"] = budget.get("total_tokens", 0)
+
+                # Embed response and compute memory influence (async, ~50ms)
+                if full_response and len(full_response) > 20:
+                    try:
+                        from core.embeddings import generate_embedding
+                        resp_emb = await asyncio.get_event_loop().run_in_executor(
+                            None, lambda: generate_embedding(full_response[:2000])
+                        )
+                        if resp_emb:
+                            import numpy as np
+                            _turn_metrics["response_embedding"] = resp_emb
+                            resp_arr = np.array(resp_emb, dtype=np.float32)
+                            resp_norm = np.linalg.norm(resp_arr)
+                            if resp_norm > 0:
+                                resp_arr = resp_arr / resp_norm
+
+                            # Compute memory influence scores
+                            if _retrieval_scored:
+                                influence_scores = []
+                                for mem in _retrieval_scored:
+                                    mem_emb = mem.get("emb_minilm") or mem.get("emb_takeaway") or mem.get("emb_key_details")
+                                    if mem_emb:
+                                        mem_arr = np.array(mem_emb, dtype=np.float32)
+                                        mem_norm = np.linalg.norm(mem_arr)
+                                        if mem_norm > 0:
+                                            mem_arr = mem_arr / mem_norm
+                                        sim = float(np.dot(resp_arr, mem_arr))
+                                        influence_scores.append(round(sim, 4))
+                                    else:
+                                        influence_scores.append(0.0)
+                                _turn_metrics["memory_influence_scores"] = influence_scores
+                                _turn_metrics["max_memory_influence"] = max(influence_scores) if influence_scores else None
+                                _turn_metrics["unexplained_ratio"] = round(1.0 - max(influence_scores), 4) if influence_scores else None
+                    except Exception as emb_err:
+                        print(f"[routes_chat.py][observability] Response embedding failed (non-fatal): {emb_err}")
+
+                # Persist metrics (fire-and-forget)
+                from database.metrics import save_turn_metrics
+                asyncio.get_event_loop().run_in_executor(None, lambda: save_turn_metrics(_turn_metrics))
+            except Exception as metrics_err:
+                print(f"[routes_chat.py][observability] Metrics capture failed (non-fatal): {metrics_err}")
 
             print(f"[routes_chat.py][websocket_chat] └─ TURN COMPLETE ─┘")
             print(f"[routes_chat.py][websocket_chat] Conversation History now has {active_conversation.get_message_count()} messages")

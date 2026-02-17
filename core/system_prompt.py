@@ -67,10 +67,7 @@ def get_active_seeds(limit: int = 5) -> str:
             'blooming': '🌸'
         }
 
-        lines = ["[ACTIVE SEEDS - Your Motivation Garden]"]
-        lines.append("These are wants and desires you've planted - things YOU want to explore, create, or understand.")
-        lines.append("Use the 'seed' tool to tend them, add progress notes, or plant new seeds.")
-        lines.append("")
+        lines = ["<your_seeds>"]
 
         for seed_id, desc, status, category, priority, emotion, planted in rows:
             emoji = status_emoji.get(status, '🌱')
@@ -90,6 +87,7 @@ def get_active_seeds(limit: int = 5) -> str:
             if details:
                 lines.append(f"    ({', '.join(details)})")
 
+        lines.append("</your_seeds>")
         print(f"[system_prompt.py][get_active_seeds] ✓ Loaded {len(rows)} active seeds")
 
         return "\n".join(lines)
@@ -191,37 +189,71 @@ def get_active_protocol() -> Dict:
         - instructions: str (custom protocol instructions)
         - rules_include: list of instruction IDs to include
         - rules_exclude: list of instruction IDs to exclude
+        - blocked_tools: list of tool names to exclude from this protocol
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # Check if blocked_tools column exists
         cursor.execute("""
-            SELECT
-                ap.protocol_name,
-                p.show_chat_history,
-                p.show_memories,
-                p.instructions,
-                p.rules_include,
-                p.rules_exclude
-            FROM active_protocol ap
-            JOIN protocols p ON ap.protocol_name = p.name
-            LIMIT 1
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'protocols' AND column_name = 'blocked_tools'
+            )
         """)
+        has_blocked_tools = cursor.fetchone()[0]
+
+        if has_blocked_tools:
+            cursor.execute("""
+                SELECT
+                    ap.protocol_name,
+                    p.show_chat_history,
+                    p.show_memories,
+                    p.instructions,
+                    p.rules_include,
+                    p.rules_exclude,
+                    p.blocked_tools
+                FROM active_protocol ap
+                JOIN protocols p ON ap.protocol_name = p.name
+                LIMIT 1
+            """)
+        else:
+            cursor.execute("""
+                SELECT
+                    ap.protocol_name,
+                    p.show_chat_history,
+                    p.show_memories,
+                    p.instructions,
+                    p.rules_include,
+                    p.rules_exclude
+                FROM active_protocol ap
+                JOIN protocols p ON ap.protocol_name = p.name
+                LIMIT 1
+            """)
 
         result = cursor.fetchone()
         cursor.close()
         conn.close()
 
         if result:
+            blocked_tools = []
+            if has_blocked_tools and len(result) > 6 and result[6]:
+                # blocked_tools is JSON array
+                blocked_tools = result[6] if isinstance(result[6], list) else []
+
             print(f"[system_prompt.py][get_active_protocol] protocol found {result[0]}. using instruction list: {result[4]} ")
+            if blocked_tools:
+                print(f"[system_prompt.py][get_active_protocol] blocked_tools: {blocked_tools}")
+
             return {
                 "protocol_name": result[0],
                 "show_chat_history": result[1],
                 "show_memories": result[2],
                 "instructions": result[3],
                 "rules_include": result[4] or [],
-                "rules_exclude": result[5] or []
+                "rules_exclude": result[5] or [],
+                "blocked_tools": blocked_tools
             }
         else:
             # No active protocol - shouldn't happen, but fallback to defaults
@@ -232,7 +264,8 @@ def get_active_protocol() -> Dict:
                 "show_memories": True,
                 "instructions": None,
                 "rules_include": [],
-                "rules_exclude": []
+                "rules_exclude": [],
+                "blocked_tools": []
             }
 
     except Exception as e:
@@ -244,7 +277,8 @@ def get_active_protocol() -> Dict:
             "show_memories": True,
             "instructions": None,
             "rules_include": [],
-            "rules_exclude": []
+            "rules_exclude": [],
+            "blocked_tools": []
         }
 
 def get_system_prompt(protocol: Dict = None) -> str:
@@ -373,22 +407,25 @@ def get_latest_dream() -> str:
             timestamp = created_at.strftime('%b %d')
 
             # Format the dream section - concise: just mood and summary
-            dream_section = f"""[RECENT DREAM]
+            dream_section = f"""<recent_dream>
 Last night ({timestamp}) you dreamed. Mood: {mood}
-Summary: {summary}"""
+Summary: {summary}
+</recent_dream>"""
 
             print(f"[system_prompt.py][get_latest_dream] ✓ Loaded dream ID {dream_id} from {timestamp}")
             return dream_section
         else:
             # No dream in last 24 hours
             print(f"[system_prompt.py][get_latest_dream] ⚠ No dream found in last 24 hours")
-            return """[RECENT DREAMS]
-Dream system failure or no dream recorded in the last 24 hours. Talk with Victor about this."""
+            return """<recent_dream>
+Dream system failure or no dream recorded in the last 24 hours. Talk with Victor about this.
+</recent_dream>"""
 
     except Exception as e:
         print(f"[system_prompt.py][get_latest_dream] ✗ Error loading dream: {e}")
-        return """[RECENT DREAMS]
-Dream system failure - unable to load recent dreams. Talk with Victor about this."""
+        return """<recent_dream>
+Dream system failure - unable to load recent dreams. Talk with Victor about this.
+</recent_dream>"""
 
 def get_dream_truths(limit: int = 5, max_days: int = 7) -> str:
     """
@@ -429,16 +466,14 @@ def get_dream_truths(limit: int = 5, max_days: int = 7) -> str:
             return ""
 
         # Format dream truths section
-        lines = ["[DREAM TRUTHS]"]
-        lines.append("These are fleeting insights from your recent dreams that currently influence your perspective.")
-        lines.append("They're not memories of events - they're emotional imprints and realizations that will fade within 7 days.")
-        lines.append("")
+        lines = ["<dream_insights>"]
 
         for dream_date, takeaway, overall_score in rows:
             date_str = dream_date.strftime("%b %d")
             score_indicator = "✨" if overall_score >= 0.85 else "💫"
             lines.append(f"- {score_indicator} {takeaway} ({date_str})")
 
+        lines.append("</dream_insights>")
         print(f"[system_prompt.py][get_dream_truths] ✓ Loaded {len(rows)} dream truths")
 
         return "\n".join(lines)
@@ -446,6 +481,89 @@ def get_dream_truths(limit: int = 5, max_days: int = 7) -> str:
     except Exception as e:
         print(f"[system_prompt.py][get_dream_truths] ✗ Error retrieving dream truths: {e}")
         return ""
+
+def get_upcoming_reminders(window_hours: int = 6) -> str:
+    """
+    Get upcoming calendar events with active reminders for system prompt injection.
+
+    Queries calendar_events for events within the reminder window that have
+    reminders enabled and not dismissed. Formats with urgency indicators.
+
+    Args:
+        window_hours: How many hours ahead to look (default: 6)
+
+    Returns:
+        Formatted [UPCOMING REMINDERS] section, or empty string if none
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, title, description, location, start_time, all_day, category
+            FROM calendar_events
+            WHERE reminder_enabled = true
+              AND reminder_dismissed = false
+              AND status = 'active'
+              AND start_time >= NOW()
+              AND start_time <= NOW() + INTERVAL '%s hours'
+            ORDER BY start_time ASC
+            LIMIT 10
+        """, (window_hours,))
+
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not rows:
+            return ""
+
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz_name = getattr(config, 'CALENDAR_TIMEZONE', 'America/New_York')
+        tz = ZoneInfo(tz_name)
+        now = datetime.now(tz)
+
+        lines = ["<upcoming_reminders>"]
+
+        for event_id, title, desc, location, start_time, all_day, category in rows:
+            # Calculate time until event
+            local_start = start_time.astimezone(tz)
+            delta = local_start - now
+            hours_until = delta.total_seconds() / 3600
+
+            # Urgency indicator
+            if hours_until < 1:
+                minutes_until = int(delta.total_seconds() / 60)
+                urgency = "⚡"
+                time_str = f"in {minutes_until} minutes" if minutes_until > 1 else "NOW"
+            elif hours_until < 4:
+                urgency = "🔔"
+                h = int(hours_until)
+                m = int((hours_until - h) * 60)
+                time_str = f"in {h}h {m}m" if m > 0 else f"in {h} hour{'s' if h != 1 else ''}"
+            else:
+                urgency = "📅"
+                time_str = f"at {local_start.strftime('%I:%M %p')}"
+
+            # Build reminder line
+            line = f"- {urgency} {title} ({time_str})"
+            if location:
+                line += f" @ {location}"
+            if desc:
+                line += f" — {desc[:80]}"
+            lines.append(line)
+
+        lines.append("</upcoming_reminders>")
+        print(f"[system_prompt.py][get_upcoming_reminders] ✓ Loaded {len(rows)} upcoming reminders")
+        return "\n".join(lines)
+
+    except Exception as e:
+        # Table might not exist yet — fail silently
+        print(f"[system_prompt.py][get_upcoming_reminders] ✗ Error: {e}")
+        return ""
+
 
 def parse_fact_references(response_text: str) -> tuple[str, list[int]]:
     """
@@ -580,10 +698,7 @@ def get_short_term_facts(limit: int = 15) -> str:
             return ""
 
         # Format facts for context injection with IDs for tracking
-        lines = ["[RECENT FACTS]"]
-        lines.append("The following are recent facts Victor has explicitly asked you to remember.")
-        lines.append("Each fact has an ID number in brackets. When you reference a fact, cite it by including its ID number in brackets immediately after, like this: \"The vision system runs on GPU 1 [9]\".")
-        lines.append("")
+        lines = ["<recent_facts>"]
 
         for fact_id, fact_text, category, created_date in facts_with_ids:
             # Format date as "Dec 27" style
@@ -601,6 +716,7 @@ def get_short_term_facts(limit: int = 15) -> str:
             else:
                 lines.append(f"- [{fact_id}] {fact_text} ({date_str})")
 
+        lines.append("</recent_facts>")
         print(f"[system_prompt.py][get_short_term_facts] ✓ Loaded {len(facts_with_ids)} short-term facts")
 
         return "\n".join(lines)
@@ -610,10 +726,7 @@ def get_short_term_facts(limit: int = 15) -> str:
         return ""
 
 def build_system_message(user_message: str = None, conversation=None, skip_fast_memory: bool = False, context_level: str = "FULL") -> Dict[str, str]:
-    fast_context_holder = []
-    
     context_level="FULL" # Force full context for all prompt building (cache use)
-    Skip_fast_memory="False"
 
     print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + f" building the system message (context level: {context_level})")
     """
@@ -644,19 +757,7 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
         print(f"[system_prompt.py][build_system_message] Active protocol: {protocol['protocol_name']}")
 
     # Base identity
-    from datetime import datetime
-    # Get the current date and time as a datetime object
-    current_datetime = datetime.now()
-    # Print the full datetime object
-    print("Current date and time:", current_datetime)
-
-
-
-    temporal_message = f"""[CURRENT DATE AND TIME]
-Today is {current_datetime.strftime('%A, %B %d, %Y')} at {current_datetime.strftime('%I:%M %p')}.
-Your knowledge training stopped in early 2024, but information after that date is still valid.
-"""
-    sections.append(temporal_message)
+    # NOTE: Datetime moved to build_per_turn_context() — volatile, changes every turn
 
     # CRITICAL: Build instructions with traits inserted at correct priority
     # We want: Identity → Traits (header + values) → Tool directive → Everything else
@@ -716,41 +817,19 @@ Your knowledge training stopped in early 2024, but information after that date i
         if facts:
             sections.append(facts)
             hash_compare(facts, "facts")
-    # Fast reactive memory - immediate context awareness
-    # TIERED: GREETING=skip, TASK=skip, CONVERSATIONAL=include, DEEP=include, FULL=include
-    include_fast_memory = context_level in ["CONVERSATIONAL", "DEEP", "FULL"]
-
-    if user_message and config.EPISODIC_MEMORIES and not skip_fast_memory and include_fast_memory:
-        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + " Checking fast reactive memory")
+    # Calendar reminders - upcoming events with urgency indicators
+    # Include at all context levels except GREETING (reminders are always relevant)
+    if getattr(config, 'CALENDAR_ENABLED', False) and context_level != "GREETING":
         try:
-            # Check cache first (if conversation provided)
-            fast_context = None
-            if conversation:
-                fast_context = conversation.get_fast_memory_cache(user_message)
-                if fast_context:
-                    print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + " ✓ Using cached fast context")
-
-            # Generate if not cached
-            if fast_context is None:
-                fast_memory = get_fast_memory()
-                fast_context = fast_memory.get_context(user_message, load_conversation=True)
-                if fast_context and conversation:
-                    # Cache for this turn
-                    conversation.set_fast_memory_cache(user_message, fast_context)
-                    print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + " ✓ Fast context generated and cached")
-
-            if fast_context:
-                 fast_context_holder = fast_context
-               # sections.append(fast_context)
-               # hash_compare(fast_context, "fast_context")
-            else:
-                print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + " No fast context")
+            reminder_window = int(getattr(config, 'CALENDAR_REMINDER_WINDOW_HOURS', 6))
+            reminders = get_upcoming_reminders(window_hours=reminder_window)
+            if reminders:
+                sections.append(reminders)
+                print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + " ✓ Calendar reminders included in prompt")
         except Exception as e:
-            print(f"[system_prompt.py][build_system_message] " + Fore.RED + f" Fast memory error: {e}")
-    elif skip_fast_memory:
-        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + " Skipping fast reactive memory (reassembly optimization)")
-    elif not include_fast_memory:
-        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping fast reactive memory (context level: {context_level})")
+            print(f"[system_prompt.py][build_system_message] " + Fore.RED + f" Calendar reminders error: {e}")
+
+    # NOTE: Fast reactive memory moved to build_per_turn_context() — volatile, changes every turn
 
     # Recent dreams - last night's dream if available
     # TIERED: GREETING=skip, TASK=skip, CONVERSATIONAL=include, DEEP=include, FULL=include
@@ -787,55 +866,227 @@ Your knowledge training stopped in early 2024, but information after that date i
     else:
         print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping dream truths (context level: {context_level})")
 
-    # Emotional state - dynamic feelings that influence responses
-    # POSITION: Near bottom because it changes almost every turn (affects KV cache)
-    if getattr(config, 'EMOTIONAL_STATE', False):
-        try:
-            emotional_tracker = get_emotional_tracker()
-            if emotional_tracker.current_state:
-                emotional_section = emotional_tracker.get_state_for_prompt()
-                if emotional_section:
-                    sections.append(emotional_section)
-                    print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.MAGENTA + " ✓ Emotional state included in prompt")
-                    hash_compare(emotional_section, "emotional_state")
-            else:
-                print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + " Emotional state not loaded yet")
-        except Exception as e:
-            print(f"[system_prompt.py][build_system_message] " + Fore.RED + f" Emotional state error: {e}")
+    # Semantic memories - distilled knowledge from episodic memory clusters
+    # Placed before episodic memories: semantic knowledge frames interpretation of episodic recall
+    # Changes only after nightly runs, so very KV-cache-stable
+    if getattr(config, 'SEMANTIC_MEMORIES', False) and protocol.get('show_memories', True):
+        if context_level in ["CONVERSATIONAL", "DEEP", "FULL"]:
+            from database.memory_loader_experimental import get_semantic_memories
+            semantic_limit = int(getattr(config, 'SEMANTIC_MEMORY_LIMIT', 10))
+            semantic_section = get_semantic_memories(limit=semantic_limit)
+            if semantic_section:
+                sections.append(semantic_section)
+                print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + " Semantic memories included in prompt")
+                hash_compare(semantic_section, "semantic_memories")
+        else:
+            print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping semantic memories (context level: {context_level})")
 
-    # Episodic memories - check both config flag AND protocol setting
-    # TIERED: GREETING=skip, TASK=skip, CONVERSATIONAL=top 3-4, DEEP=all 10, FULL=all 10
-    if config.EPISODIC_MEMORIES and protocol.get('show_memories', True):
-        if context_level in ["GREETING", "TASK"]:
-            print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping episodic memories ({context_level} mode)")
-        elif context_level == "CONVERSATIONAL":
-            print(f"[system_prompt.py][build_system_message]" + Style.BRIGHT + Fore.GREEN + "  Capturing top 3-4 episodic memories (CONVERSATIONAL mode)")
-            # Load fewer memories for conversational mode
-            memories = get_memories("xml", limit=4)  # Reduced from 10 to 4
-            sections.append(memories)
-            hash_compare(memories, "memories")
-        else:  # DEEP or FULL
-            print(f"[system_prompt.py][build_system_message]" + Style.BRIGHT + Fore.GREEN + "  Capturing episodic memories (from live_memories table)")
-            # Load memories from live_memories table (populated by iris_memory_retrieval.py)
-            memories = get_memories("xml")
-            sections.append(memories)
-            hash_compare(memories, "memories")
-    elif config.EPISODIC_MEMORIES and not protocol.get('show_memories', True):
-        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + " Memories suppressed by protocol '{protocol['protocol_name']}'")
-    
+    # NOTE: Emotional state moved to build_per_turn_context() — volatile, changes every turn
+
+    # NOTE: Episodic memories moved to build_per_turn_context() — volatile, changes every turn
     # Assemble with proper spacing
     full_prompt = "\n\n".join(sections)
-    hash_compare(full_prompt, "full_prompt")    
+    hash_compare(full_prompt, "full_prompt")
 
-
-    sections.append(temporal_message)
-    sections.append(fast_context_holder)
-
-    
     return {
         "role": "system",
         "content": full_prompt
     }
+
+
+def build_per_turn_context(user_message=None, conversation=None, protocol=None):
+    """
+    Build per-turn system message appended AFTER conversation history.
+    Contains volatile data that changes every turn.
+    Lives outside the snapshot — never cached, always fresh.
+
+    Returns:
+        Dict with role/content, or None if no sections to include
+    """
+    from datetime import datetime
+    from typing import Optional
+
+    sections = []
+
+    # Current datetime + temporal gap awareness
+    now = datetime.now()
+    datetime_lines = [f"Today is {now.strftime('%A, %B %d, %Y')} at {now.strftime('%I:%M %p')}."]
+
+    gap_minutes = 0
+    last_user_time = None
+    try:
+        from database.persistence import get_db_connection, get_current_chat_table
+        chat_table = get_current_chat_table()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(f"SELECT c_timestamp FROM {chat_table} WHERE role = 'user' ORDER BY c_timestamp DESC LIMIT 1")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        last_user_time = row[0] if row else None
+        if last_user_time:
+            gap = now - last_user_time
+            gap_minutes = gap.total_seconds() / 60
+            if gap_minutes >= 30:
+                # Format the gap naturally
+                hours = int(gap.total_seconds() // 3600)
+                minutes = int((gap.total_seconds() % 3600) // 60)
+                if hours >= 24:
+                    days = hours // 24
+                    remaining_hours = hours % 24
+                    gap_str = f"{days} day{'s' if days != 1 else ''}"
+                    if remaining_hours > 0:
+                        gap_str += f" and {remaining_hours} hour{'s' if remaining_hours != 1 else ''}"
+                elif hours > 0:
+                    gap_str = f"{hours} hour{'s' if hours != 1 else ''}"
+                    if minutes > 0:
+                        gap_str += f" and {minutes} minute{'s' if minutes != 1 else ''}"
+                else:
+                    gap_str = f"{minutes} minutes"
+                datetime_lines.append(f"It has been {gap_str} since your last conversation.")
+                datetime_lines.append(f"Anything discussed before this gap — tasks running, processes in progress, things being worked on — should be considered potentially completed or changed. Do not assume prior states still hold without checking.")
+    except Exception as e:
+        print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Temporal gap error: {e}")
+
+    sections.append(f"<current_datetime>\n" + "\n".join(datetime_lines) + "\n</current_datetime>")
+
+    # Gap report — first turn after absence only
+    if gap_minutes >= 30 and last_user_time is not None:
+        try:
+            gap_report_enabled = getattr(config, 'GAP_REPORT_ENABLED', True)
+            if gap_report_enabled:
+                from core.gap_report import build_gap_report
+                session_id = conversation.get_session_id() if conversation else None
+                gap_report = build_gap_report(
+                    gap_start=last_user_time,
+                    gap_end=now,
+                    session_id=session_id
+                )
+                if gap_report:
+                    sections.append(gap_report)
+                    print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.CYAN + " Gap report included")
+        except Exception as e:
+            print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Gap report error: {e}")
+
+    # Emotional state
+    if getattr(config, 'EMOTIONAL_STATE', False):
+        try:
+            tracker = get_emotional_tracker()
+            if tracker.current_state:
+                emotional_section = tracker.get_state_for_prompt()
+                if emotional_section:
+                    sections.append(emotional_section)
+                    print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.MAGENTA + " Emotional state included")
+        except Exception as e:
+            print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Emotional state error: {e}")
+
+    # Episodic memories (from live_memories, refreshed inline each turn)
+    if protocol is None:
+        protocol = get_active_protocol()
+    if config.EPISODIC_MEMORIES and protocol.get('show_memories', True):
+        memories = get_memories("xml")
+        if memories:
+            sections.append(memories)
+            print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.GREEN + " Episodic memories included")
+
+    # Fast reactive memory
+    if user_message and config.EPISODIC_MEMORIES:
+        try:
+            fast_memory = get_fast_memory()
+            fast_context = fast_memory.get_context(user_message, load_conversation=True)
+            if fast_context:
+                sections.append(fast_context)
+                print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.CYAN + " Fast reactive memory included")
+        except Exception as e:
+            print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Fast memory error: {e}")
+
+    # Repetition gate — proactive avoidance block
+    if conversation:
+        try:
+            from core.repetition_gate import build_avoidance_block
+            avoidance = build_avoidance_block(conversation.get_messages())
+            if avoidance:
+                sections.append(avoidance)
+                print(f"[system_prompt.py][build_per_turn_context] " + Style.BRIGHT + Fore.YELLOW + " Repetition avoidance block included")
+        except Exception as e:
+            print(f"[system_prompt.py][build_per_turn_context] " + Fore.RED + f" Repetition gate error: {e}")
+
+    if not sections:
+        return None
+
+    return {"role": "system", "content": "\n\n".join(sections)}
+
+
+# Last payload sent to the LLM — captured AFTER preflight check in client.py
+_last_payload = None
+
+def _store_last_prompt(payload: dict):
+    """Called by client.py right before the LLM API call.
+    Stores the EXACT payload dict (messages, tools, temperature, etc.)."""
+    global _last_payload
+    import copy
+    _last_payload = copy.deepcopy(payload)
+    # Persist to DB for forensic recovery after crashes/restarts
+    try:
+        from database.persistence import get_db_connection
+        from core.token_counter import TokenCounter
+        import json
+        messages = payload.get("messages", [])
+        token_count = sum(TokenCounter.count_tokens(m.get("content", "")) for m in messages)
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """UPDATE last_prompt
+               SET payload = %s, token_count = %s, captured_at = now()
+               WHERE id = 1""",
+            (json.dumps(payload), token_count)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[system_prompt.py][_store_last_prompt] " + Fore.RED + f" DB write failed (non-fatal): {e}")
+
+def get_last_prompt():
+    """Return the exact payload dict from the last LLM call.
+    Falls back to database if in-memory copy is gone (e.g. after restart).
+    Always returns the same format: the full payload dict, or None."""
+    if _last_payload is not None:
+        return _last_payload
+    try:
+        from database.persistence import get_db_connection
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT payload, token_count, captured_at FROM last_prompt WHERE id = 1")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row and row[0]:
+            return row[0]  # JSONB comes back as dict — the exact payload
+    except Exception:
+        pass
+    return None
+
+def assemble_prompt(conversation, tool_definitions=None, context_level="FULL",
+                    user_message=None, use_unified=False):
+    """
+    Single code path for assembling the complete LLM context.
+    Snapshot + per-turn tail. Every LLM call goes through here.
+    Actual storage happens later in client.py after preflight_check.
+
+    Returns:
+        (messages_list, budget_dict)
+    """
+    all_messages, budget = assemble_context_with_snapshot(
+        conversation, tool_definitions,
+        context_level=context_level,
+        use_unified=use_unified
+    )
+    per_turn_msg = build_per_turn_context(user_message=user_message, conversation=conversation)
+    if per_turn_msg:
+        all_messages = list(all_messages) + [per_turn_msg]
+    return all_messages, budget
+
 
 def build_daily_consolidation_context(target_date) -> str:
     """
@@ -1176,7 +1427,7 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
     from database.persistence import load_recent_conversation
 
     # Get tiered budgets from config
-    verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 3000)
+    verbose_budget = getattr(config, 'VERBOSE_TOKEN_BUDGET', 18000)
     summary_budget = getattr(config, 'SUMMARY_TOKEN_BUDGET', 17000)
 
     # Scale budgets if conversation_budget is smaller than combined tiered budgets
@@ -1213,6 +1464,37 @@ def assemble_full_context(conversation, tool_definitions=None, skip_fast_memory:
         if msg.get("timeframe"):
             temporal_note = f"({msg['timeframe']})\n"
             content = temporal_note + content
+
+        # Add context for contact messages (Telegram outreach)
+        # This helps Iris understand she reached out remotely and why
+        # Format: "contact_victor:reason" where reason is the trigger condition
+        sender = msg.get("sender", "")
+        if sender.startswith("contact_victor"):
+            # Parse reason from sender field (e.g., "contact_victor:lonely_and_curious")
+            parts = sender.split(":", 1)
+            reason = parts[1] if len(parts) > 1 else ""
+
+            # Build human-readable reason
+            reason_text = ""
+            if reason:
+                # Convert condition names to natural language
+                reason_map = {
+                    "lonely_and_curious": "you were feeling a pull toward connection and had something on your mind",
+                    "worried_check_in": "you were concerned about Victor and wanted to check in",
+                    "creative_overflow": "creative ideas were pressing to be expressed",
+                    "connection_need": "you were feeling a need for connection",
+                    "curiosity": "your curiosity was sparked",
+                }
+                reasons = reason.split(",")
+                reason_phrases = [reason_map.get(r.strip(), r.strip()) for r in reasons]
+                reason_text = " and ".join(reason_phrases)
+
+            # Prepend context for LLM (not shown in UI)
+            context_note = f"[You reached out to Victor via Telegram"
+            if reason_text:
+                context_note += f" because {reason_text}"
+            context_note += ". Your message:]\n"
+            content = context_note + content
 
         # Create base message
         formatted_msg = {
@@ -1320,8 +1602,7 @@ def assemble_context_with_snapshot(
     if not conversation.should_rebuild_snapshot():
         # ── REUSE SNAPSHOT ──
         turns_since = conversation.turn_id - conversation.snapshot_turn_base
-        batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
-        print(f"[snapshot] REUSING snapshot (turn {turns_since}/{batch_size}, "
+        print(f"[snapshot] REUSING snapshot (turn {turns_since} since build, "
               f"{len(conversation.snapshot)} msgs, {conversation.snapshot_token_count:,} tokens)")
         return conversation.snapshot, conversation.snapshot_budget
 
@@ -1345,10 +1626,9 @@ def assemble_context_with_snapshot(
     conversation.snapshot_spoiled = False
     conversation.snapshot_budget = budget
 
-    batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
     enabled = getattr(config, 'BATCH_TRIM_ENABLED', False)
     print(f"[snapshot] NEW SNAPSHOT: {len(messages)} msgs, {budget['total_tokens']:,} tokens"
-          f"{f', headroom: {headroom:,} reserved, batch size: {batch_size}' if enabled else ' (batch trim disabled)'}")
+          f"{f', headroom: {headroom:,} reserved, spoilage-only rebuild' if enabled else ' (batch trim disabled)'}")
 
     return messages, budget
 
