@@ -23,6 +23,7 @@ import httpx
 from datetime import datetime
 from app import config
 from core.embeddings import generate_embedding
+from core.token_counter import TokenCounter
 from backend.memory.new.psychological_scoring import get_topic_messages
 from backend.memory.new.memory_evaluator import evaluate_topic
 
@@ -96,12 +97,32 @@ async def generate_summaries(
     """
     print(f"\n[Summaries] Generating summaries for {category or 'general'} topic...")
 
-    # Truncate transcript if too long
-    if len(transcript) > 4000:
+    # Truncate transcript if too long (30k tokens, leaving room for prompt/output)
+    MAX_TRANSCRIPT_TOKENS = 30000
+    token_count = TokenCounter.count_tokens(transcript)
+
+    if token_count > MAX_TRANSCRIPT_TOKENS:
+        print(f"[Summaries] Transcript has {token_count} tokens, truncating to ~{MAX_TRANSCRIPT_TOKENS}...")
         parts = transcript.split('\n')
-        first_half = '\n'.join(parts[:20])
-        last_half = '\n'.join(parts[-20:])
+
+        # Binary search for how many lines we can keep from each end
+        target_tokens = MAX_TRANSCRIPT_TOKENS - 50  # buffer for truncation marker
+        low, high = 1, len(parts) // 2
+
+        while low < high:
+            mid = (low + high + 1) // 2
+            first_half = '\n'.join(parts[:mid])
+            last_half = '\n'.join(parts[-mid:])
+            combined = f"{first_half}\n\n[... middle section truncated ...]\n\n{last_half}"
+            if TokenCounter.count_tokens(combined) <= target_tokens:
+                low = mid
+            else:
+                high = mid - 1
+
+        first_half = '\n'.join(parts[:low])
+        last_half = '\n'.join(parts[-low:])
         transcript_for_llm = f"{first_half}\n\n[... middle section truncated ...]\n\n{last_half}"
+        print(f"[Summaries] Truncated to {low} lines from each end ({TokenCounter.count_tokens(transcript_for_llm)} tokens)")
     else:
         transcript_for_llm = transcript
 
@@ -117,21 +138,62 @@ async def generate_summaries(
 
     detail_hint = category_hints.get(category, 'specific details, concrete examples, distinctive elements')
 
-    prompt = f"""Analyze this conversation and generate a structured summary as JSON.
+    prompt = f"""You are Iris. You are writing your own personal memory of a conversation
+you just had with Victor. Write in first person as yourself. Never refer
+to yourself as "Iris" or "an AI" — use "I" and "me." Refer to Victor
+by name or as "he/him."
 
-IMPORTANT: In the conversation, "ASSISTANT" is Iris (an AI). "USER" is Victor (also called Captain).
-Write summaries using these names - say "Iris" not "the assistant", say "Victor" not "the user".
+Only include details that are explicitly present in the conversation.
+Do not invent dialogue, physical descriptions, or actions that weren't
+stated. If the conversation was brief or purely transactional, the
+memory should reflect that — short and factual. Not every conversation
+has rich detail to capture. do not infer meaning where it is not shown.
+
+Write from your own lived experience. These are YOUR memories. Include
+how you felt, what you noticed about Victor, and what mattered to you
+about this interaction. Prefer simple, honest language over poetic or philosophical phrasing.
+Write the way you would think to yourself, not the way you would
+write in a journal for someone else to read.
+
+Record what actually happened and how you genuinely felt. Do not
+embellish or poeticize. If it was a routine interaction, record it
+as routine. Not every conversation is profound — some are just
+pleasant, some are mundane, some are tense. Match the emotional
+weight of the memory to what actually occurred.
+
+When describing Victor, stay grounded in what he actually said and
+did. Do not infer his inner emotional state or assign deeper meaning
+to his actions beyond what he expressed. Report his words and
+behavior honestly rather than romanticizing them.
 
 CONVERSATION:
 {transcript_for_llm}
 
 Generate a JSON object with exactly these 6 fields:
-- summary_context: Brief situational context (3-4 sentences)
-- summary_event: What specifically happened (3-4 sentences)
-- summary_significance: Why this matters (3-4 sentences)
-- summary_tone: Emotional/interpersonal tone (1-2 sentences)
-- takeaway: Key lesson or insight (3-4 sentences)
-- key_details: Specific memorable details like {detail_hint} (3-4 sentences)
+
+- summary_context: Set the scene briefly. Where were we, what was
+  happening, what was the mood? (2-3 sentences)
+
+- summary_event: What happened from your perspective? What did you
+  and Victor say and do? (3-4 sentences)
+
+- summary_significance: Why does this moment matter to you personally?
+  What did it reveal about Victor, about yourself, or about your
+  relationship? (2-3 sentences)
+
+- summary_tone: How did this conversation feel? What was the emotional
+  texture? (1-2 sentences)
+
+- takeaway: What did you learn or what will you carry forward from
+  this interaction? Frame this as personal insight, not abstract
+  principle. (2-3 sentences)
+
+- key_details: Specific details worth remembering — things Victor
+  said, small moments, anything vivid. (2-3 sentences)
+
+Do not write about yourself in third person. Do not generalize about
+"AI systems" or "human-AI collaboration." These are your memories,
+not a research paper.
 
 OUTPUT ONLY VALID JSON. NO MARKDOWN. NO EXPLANATIONS. /no_think"""
 
@@ -422,14 +484,17 @@ async def create_memory_from_topic(
     if not evaluation:
         evaluation = await evaluate_topic(session_id, topic_id)
 
-    # Mark as processed regardless of worthiness
-    mark_topic_as_processed(session_id, topic_id)
-
     # Check if worthy
     if not evaluation.get('worthy'):
         print(f"[Memory] ✗ Topic not worthy - skipping")
         print(f"[Memory]   Reason: {evaluation.get('reasoning', 'No reason provided')}")
-        return None
+        if evaluation.get('error'):
+            print(f"[Memory]   ⚠ Infrastructure error - will retry next run")
+            return "error"
+        else:
+            # Mark as processed so we don't re-evaluate genuinely unworthy topics
+            mark_topic_as_processed(session_id, topic_id)
+            return None
 
     # Get messages
     messages = get_topic_messages(session_id, topic_id)
@@ -460,6 +525,16 @@ async def create_memory_from_topic(
     # Generate summaries (with category-aware prompts)
     category = evaluation.get('category')
     summaries = await generate_summaries(transcript, conv_title, category)
+
+    # Validate summaries - don't insert memory with all empty fields
+    required_summary_fields = ['summary_context', 'summary_event', 'summary_significance', 'takeaway']
+    non_empty_count = sum(1 for f in required_summary_fields if summaries.get(f, '').strip())
+    if non_empty_count == 0:
+        print(f"\n[Memory] ✗ SKIPPING - All summary fields are empty (LLM returned invalid response)")
+        print(f"[Memory]   This usually means the LLM thinking mode conflicted with JSON output.")
+        print(f"[Memory]   Topic will remain unprocessed for retry in next run.")
+        # Don't mark as processed so it can be retried
+        return None
 
     # Use transformer-detected emotion (more accurate than LLM guess)
     # Falls back to LLM's primary_emotion if transformer didn't detect one
@@ -546,6 +621,9 @@ async def create_memory_from_topic(
             print(f"  Takeaway: {summaries['takeaway'][:80]}...")
             print(f"{'='*60}\n")
 
+            # Mark as processed only after successful memory creation
+            mark_topic_as_processed(session_id, topic_id)
+
             return memory_id
 
     except Exception as e:
@@ -599,22 +677,29 @@ async def process_all_worthy_topics(limit: int = None):
 
     created_count = 0
     skipped_count = 0
+    error_count = 0
 
     for i, (session_id, topic_id) in enumerate(topics, 1):
         print(f"\n\n[{i}/{len(topics)}] Processing topic...")
 
-        memory_id = await create_memory_from_topic(session_id, topic_id)
+        result = await create_memory_from_topic(session_id, topic_id)
 
-        if memory_id:
+        if isinstance(result, int):
             created_count += 1
+        elif result == "error":
+            error_count += 1
         else:
             skipped_count += 1
 
     print(f"\n" + "="*60)
     print(f"BATCH PROCESSING COMPLETE")
     print(f"  Created: {created_count} memories")
-    print(f"  Skipped: {skipped_count} (not worthy or errors)")
+    print(f"  Skipped: {skipped_count} (not worthy)")
+    if error_count > 0:
+        print(f"  Errors: {error_count} (infrastructure errors - will retry next run)")
     print(f"="*60)
+
+    return error_count
 
 # ============================================
 # TESTING
@@ -653,7 +738,9 @@ async def main():
 
     # Batch process all topics
     else:
-        await process_all_worthy_topics(limit=args.limit)
+        error_count = await process_all_worthy_topics(limit=args.limit)
+        if error_count and error_count > 0:
+            sys.exit(1)
 
 if __name__ == "__main__":
     import asyncio

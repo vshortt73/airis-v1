@@ -1,21 +1,22 @@
 #!/bin/bash
 # Nightly Memory Creation Pipeline
 # Uses llama.cpp server on port 11434 (OpenAI-compatible API)
+#
+# Cron: 0 3 * * * /iris-v3/scripts/nightly_memory_creation.sh
+# (runs at 3:00 AM, before semantic consolidation at 3:30 AM)
 
-# Load DB password from environment or set here
-#export IRIS_DB_PASSWORD="${IRIS_DB_PASSWORD:-}"
-
-
+export IRIS_DB_PASSWORD='yourpassword'
+export PGPASSWORD='yourpassword'
 
 set -o pipefail
-
 
 # ============================================
 # CONFIGURATION
 # ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/paths.env"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENV_PYTHON="/venv/iris-v3/bin/python"
+VENV_PYTHON="$IRIS_VENV/bin/python"
 
 # Paths
 TOPIC_SEGMENTATION_SCRIPT="$PROJECT_ROOT/backend/memory/new/topic_segmentation.py"
@@ -67,6 +68,17 @@ insert_system_message() {
     else
         log_error "Failed to insert system message (non-critical, continuing)"
     fi
+}
+
+# Service event logger for gap report system
+log_service_event() {
+    local event_type="$1"
+    local service_name="$2"
+    local source="$3"
+    local detail="$4"
+    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+        "INSERT INTO service_events (event_type, service_name, source, detail) VALUES ('$event_type', '$service_name', '$source', '$detail');" \
+        >> "$LOG_FILE" 2>&1 || true
 }
 
 cleanup() {
@@ -269,6 +281,7 @@ main() {
 
     # Notify that memory creation is starting
     insert_system_message "Background memory processing started. Iris remains available during processing."
+    log_service_event "memory_start" "nightly_memory" "nightly_memory" "Memory creation started"
 
     # Run topic segmentation
     SEGMENTATION_EXIT_CODE=0
@@ -280,14 +293,15 @@ main() {
     fi
 
     # Run memory creation (capture output for statistics)
-    MEMORY_EXIT_CODE=0
     MEMORY_OUTPUT=$(mktemp)
-    run_memory_creation > "$MEMORY_OUTPUT" 2>&1 || MEMORY_EXIT_CODE=$?
+    "$VENV_PYTHON" "$MEMORY_SCRIPT" > "$MEMORY_OUTPUT" 2>&1
+    MEMORY_EXIT_CODE=$?
     cat "$MEMORY_OUTPUT" >> "$LOG_FILE"
 
-    # Extract statistics
+    # Extract statistics from Python output
     memories_created=$(grep -oP "Created: \K\d+" "$MEMORY_OUTPUT" 2>/dev/null || echo "0")
     topics_segmented=$(grep -oP "Topics identified: \K\d+" "$LOG_FILE" 2>/dev/null | tail -1 || echo "0")
+    error_topics=$(grep -oP "Errors: \K\d+" "$MEMORY_OUTPUT" 2>/dev/null || echo "0")
     rm -f "$MEMORY_OUTPUT"
 
     # Calculate duration
@@ -295,28 +309,29 @@ main() {
     local duration_seconds=$((end_time - start_time))
     local duration_minutes=$((duration_seconds / 60))
 
-    # Notify completion with statistics
-    if [ $MEMORY_EXIT_CODE -eq 0 ]; then
-        if [ "$memories_created" -gt 0 ]; then
-            insert_system_message "Memory processing completed: $memories_created new memories created from $topics_segmented topics. Duration: ${duration_minutes} minutes."
-        else
-            insert_system_message "Memory processing completed: no new memories needed (all topics already processed). Duration: ${duration_minutes} minutes."
-        fi
+    # Notify completion with accurate error detection
+    if [ "$error_topics" -gt 0 ]; then
+        insert_system_message "Memory processing encountered errors: $error_topics topics could not be evaluated (LLM unavailable). They will be retried next run. Created $memories_created memories. Duration: ${duration_minutes} minutes."
+        log_service_event "memory_end" "nightly_memory" "nightly_memory" "$memories_created created, $error_topics errors (LLM unavailable), ${duration_minutes}m"
+    elif [ "$memories_created" -gt 0 ]; then
+        insert_system_message "Memory processing completed: $memories_created new memories created from $topics_segmented topics. Duration: ${duration_minutes} minutes."
+        log_service_event "memory_end" "nightly_memory" "nightly_memory" "$memories_created created from $topics_segmented topics in ${duration_minutes}m"
     else
-        insert_system_message "Memory processing encountered errors. Duration: ${duration_minutes} minutes."
+        insert_system_message "Memory processing completed: no new memories needed. Duration: ${duration_minutes} minutes."
+        log_service_event "memory_end" "nightly_memory" "nightly_memory" "No new memories, ${duration_minutes}m"
     fi
 
     # Final status
     log "=========================================="
-    if [ $MEMORY_EXIT_CODE -eq 0 ]; then
+    if [ $MEMORY_EXIT_CODE -eq 0 ] && [ "$error_topics" -eq 0 ]; then
         log "✓ NIGHTLY MEMORY CREATION COMPLETED SUCCESSFULLY"
-        log "  Topics segmented: $topics_segmented"
-        log "  Memories created: $memories_created"
-        log "  Duration: ${duration_minutes} minutes (${duration_seconds} seconds)"
     else
-        log "✗ NIGHTLY MEMORY CREATION FAILED"
-        log "  Duration: ${duration_minutes} minutes (${duration_seconds} seconds)"
+        log "⚠ NIGHTLY MEMORY CREATION COMPLETED WITH ISSUES"
     fi
+    log "  Topics segmented: $topics_segmented"
+    log "  Memories created: $memories_created"
+    log "  Errors (will retry): $error_topics"
+    log "  Duration: ${duration_minutes} minutes (${duration_seconds} seconds)"
     log "End time: $(date)"
     log "=========================================="
 

@@ -203,6 +203,7 @@ Now evaluate the topic above: /no_think"""
                 print(f"[Evaluator] ✗ Error: HTTP {response.status_code}")
                 return {
                     'worthy': False,
+                    'error': True,
                     'reasoning': f'LLM error: HTTP {response.status_code}',
                     'confidence': 0.0
                 }
@@ -211,6 +212,7 @@ Now evaluate the topic above: /no_think"""
         print(f"[Evaluator] ✗ Exception: {e}")
         return {
             'worthy': False,
+            'error': True,
             'reasoning': f'Exception: {str(e)}',
             'confidence': 0.0
         }
