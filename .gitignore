@@ -41,9 +41,7 @@ env/
 .DS_Store
 
 # Project-specific: User uploads and generated content
-attachments/user/
-attachments/generated/
-attachments/face_training/
+attachments/
 
 # Generated audio (TTS output)
 assets/audio/*.wav
