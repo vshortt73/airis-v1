@@ -1,7 +1,11 @@
 #!/bin/bash
 # Setup nightly memory creation cron job
 
-export IRIS_DB_PASSWORD='yourpassword'
+# Database password — must be set in environment
+if [ -z "$IRIS_DB_PASSWORD" ]; then
+    echo "ERROR: IRIS_DB_PASSWORD not set. Export it before running this script."
+    exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NIGHTLY_SCRIPT="$SCRIPT_DIR/nightly_memory_creation.sh"
 
@@ -25,7 +29,7 @@ fi
 # Proposed cron schedule
 echo "Proposed cron job (runs at 3:00 AM daily):"
 echo ""
-echo "0 3 * * * IRIS_DB_PASSWORD='yourpassword' /iris-v3/scripts/nightly_memory_creation.sh >> /iris-v3/logs/memory_creation/cron.log 2>&1"
+echo "0 3 * * * IRIS_DB_PASSWORD=\$IRIS_DB_PASSWORD /iris-v3/scripts/nightly_memory_creation.sh >> /iris-v3/logs/memory_creation/cron.log 2>&1"
 echo ""
 echo "=========================================="
 echo "INSTALLATION OPTIONS:"
@@ -67,7 +71,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     fi
 
     # Add new entry
-    echo "0 3 * * * IRIS_DB_PASSWORD='yourpassword' /iris-v3/scripts/nightly_memory_creation.sh >> /iris-v3/logs/memory_creation/cron.log 2>&1" >> "$TEMP_CRON"
+    echo "0 3 * * * IRIS_DB_PASSWORD=\$IRIS_DB_PASSWORD /iris-v3/scripts/nightly_memory_creation.sh >> /iris-v3/logs/memory_creation/cron.log 2>&1" >> "$TEMP_CRON"
 
     # Install crontab
     crontab "$TEMP_CRON"
@@ -103,7 +107,7 @@ echo "TESTING"
 echo "=========================================="
 echo ""
 echo "To test the script manually (without waiting for 3am):"
-echo "  IRIS_DB_PASSWORD='yourpassword' $NIGHTLY_SCRIPT"
+echo "  IRIS_DB_PASSWORD=\$IRIS_DB_PASSWORD $NIGHTLY_SCRIPT"
 echo ""
 echo "To test a dry run (checks only, no memory creation):"
 echo "  You can manually verify each phase by reading the script"

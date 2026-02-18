@@ -30,6 +30,7 @@ class PiPVideoPlayer {
         this._hlsPlaylistLoaded = false;  // Track if HLS playlist has been loaded
         this.pollInterval = null;
         this.isActive = false;
+        this.poppedOut = false;      // True when session is transferred to pop-out window
         this.streamingMode = false;  // True when receiving stream
         this.abortController = null; // For canceling streams
         this.streamQueue = [];       // Queue of blob URLs for streaming
@@ -335,9 +336,42 @@ class PiPVideoPlayer {
 
         // Also listen to BroadcastChannel for external window communication
         ttsQueue.videoChannel.addEventListener('message', (event) => {
+            const { type, data } = event.data;
+
+            // Pop-in recovery: pop-out window closed, re-activate PiP
+            if (type === 'player-closed' && this.poppedOut) {
+                console.log('[PiP] Pop-out closed, re-activating PiP');
+                this.poppedOut = false;
+                if (this.sessionId) {
+                    // Re-attach HLS.js to PiP video element
+                    if (this.hls) {
+                        this.hls.attachMedia(this.videoElementA);
+                        this.hls.startLoad();
+                    }
+                    this.show();
+                    this.startIdleRotation();
+                }
+                return;
+            }
+
+            // Handle VOX pause/resume from pop-out player (runs in separate window)
+            if (type === 'vox-pause') {
+                if (typeof IrisVOX !== 'undefined') {
+                    console.log('[PiP] Pausing VOX - pop-out video playing');
+                    IrisVOX.pauseListening();
+                }
+                return;
+            }
+            if (type === 'vox-resume') {
+                if (typeof IrisVOX !== 'undefined') {
+                    console.log('[PiP] Resuming VOX - pop-out video idle');
+                    IrisVOX.resumeListening();
+                }
+                return;
+            }
+
             if (!this.isActive) return;
 
-            const { type, data } = event.data;
             if (type === 'queue-chunk') {
                 // Route based on status
                 if (data.status === 'completed') {
@@ -517,19 +551,43 @@ class PiPVideoPlayer {
         );
 
         if (videoWindow && this.sessionId) {
-            // Transfer session to pop-out window
-            setTimeout(() => {
-                ttsQueue.videoChannel.postMessage({
-                    type: 'start-session',
-                    data: { sessionId: this.sessionId }
-                });
-            }, 500);
+            // Wait for pop-out to signal it's ready before sending session data
+            // (pop-out needs to load HLS.js from CDN before its listener is active)
+            const onPopOutReady = (event) => {
+                if (event.data.type !== 'player-ready') return;
+                ttsQueue.videoChannel.removeEventListener('message', onPopOutReady);
 
-            // Close PiP (session continues in pop-out)
+                console.log('[PiP] Pop-out ready, transferring session');
+                const playlistUrl = this.hlsPlaylistUrl || `/api/video/hls/${this.sessionId}/playlist.m3u8`;
+                if (this.useHLS) {
+                    ttsQueue.videoChannel.postMessage({
+                        type: 'start-session-hls',
+                        data: {
+                            sessionId: this.sessionId,
+                            playlistUrl: playlistUrl
+                        }
+                    });
+                } else {
+                    ttsQueue.videoChannel.postMessage({
+                        type: 'start-session',
+                        data: { sessionId: this.sessionId }
+                    });
+                }
+            };
+            ttsQueue.videoChannel.addEventListener('message', onPopOutReady);
+
+            // Hide PiP visually but keep generation active
             this.container.classList.remove('active');
-            this.isActive = false;
+            this.poppedOut = true;
+            // Keep isActive = true so streamVideo/streamVideoHLS continues working
             this.stopIdleRotation();
             this.stopPolling();
+
+            // Detach HLS.js from PiP video element (pop-out handles playback)
+            if (this.hls) {
+                this.hls.stopLoad();
+                this.hls.detachMedia();
+            }
             // Don't end session - it transfers to pop-out
         }
     }
@@ -545,6 +603,7 @@ class PiPVideoPlayer {
         this.stopIdleRotation();  // Stop rotation on reset
         this.currentThinkingVideo = null;  // Clear thinking video selection
         this.isActive = false;
+        this.poppedOut = false;
         this.showLoop();
     }
 
@@ -552,6 +611,12 @@ class PiPVideoPlayer {
         console.log('[PiP-Stream] showLoop() called - displaying idle loop');
         console.log('[PiP-Stream] DEBUG: serverSideRoutingEnabled =', ttsQueue.serverSideRoutingEnabled);
         console.log('[PiP-Stream] DEBUG: this.hls =', this.hls ? 'exists' : 'null');
+
+        // Resume microphone when video playback ends
+        if (typeof IrisVOX !== 'undefined') {
+            console.log('[PiP] Resuming VOX - video playback ended');
+            IrisVOX.resumeListening();
+        }
 
         // Handle HLS cleanup based on routing mode
         if (this.hls) {
@@ -640,14 +705,20 @@ class PiPVideoPlayer {
             return;
         }
 
-        if (!this.sessionId || !this.isActive) {
-            console.log('[PiP-Stream] Cannot stream - no active session');
+        if (!this.sessionId) {
+            console.log('[PiP-Stream] Cannot stream - no session');
             return;
         }
 
-        // Route to HLS if enabled
+        // Route to HLS if enabled (works even when popped out - generation only)
         if (this.useHLS) {
             return this.streamVideoHLS(text);
+        }
+
+        // Legacy double-buffer approach requires active PiP
+        if (!this.isActive) {
+            console.log('[PiP-Stream] Cannot use legacy stream - PiP not active');
+            return;
         }
 
         // Legacy double-buffer approach (fallback)
@@ -803,6 +874,12 @@ class PiPVideoPlayer {
                 this.hideThinking();
                 this.videoElementA.style.display = 'block';
                 this.videoElementA.classList.add('active');
+
+                // Mute microphone while video plays to prevent Iris hearing herself
+                if (typeof IrisVOX !== 'undefined') {
+                    console.log('[PiP] Pausing VOX - video playback starting');
+                    IrisVOX.pauseListening();
+                }
             }
             // Log buffer state
             const buffered = this.videoElementA.buffered;
@@ -967,6 +1044,12 @@ class PiPVideoPlayer {
                 this.hideThinking();
                 this.videoElementA.style.display = 'block';
                 this.videoElementA.classList.add('active');
+
+                // Mute microphone while video plays to prevent Iris hearing herself
+                if (typeof IrisVOX !== 'undefined') {
+                    console.log('[PiP] Pausing VOX - video playback starting (server-side)');
+                    IrisVOX.pauseListening();
+                }
             }
         });
 
@@ -1126,7 +1209,8 @@ class PiPVideoPlayer {
                 console.log(`[HLS] Generated ${result.segments_added} segments, total: ${result.total_segments}`);
 
                 // Load playlist after first text generates segments
-                if (!firstSegmentReady && result.segments_added > 0) {
+                // Skip playback setup when popped out (pop-out handles its own HLS.js)
+                if (!this.poppedOut && !firstSegmentReady && result.segments_added > 0) {
                     console.log('[HLS] First segments ready, loading playlist:', this.hlsPlaylistUrl);
                     this.hls.loadSource(this.hlsPlaylistUrl);
                     firstSegmentReady = true;
@@ -1478,6 +1562,13 @@ class PiPVideoPlayer {
         active.classList.add('active');
         active.muted = false;
 
+        // Mute microphone while video plays to prevent Iris hearing herself
+        if (typeof IrisVOX !== 'undefined' && !this._voxPausedForStream) {
+            console.log('[PiP] Pausing VOX - stream video playback starting');
+            IrisVOX.pauseListening();
+            this._voxPausedForStream = true;
+        }
+
         const bufferedAhead = this.streamQueue.length - this.streamIndex - 1;
         const segDuration = segment.duration || (segment.frames ? segment.frames / 25 : '?');
         const textInfo = segment.textGenId !== undefined ? `[text#${segment.textGenId} chunk${segment.serverChunkIdx}/${segment.serverTotal}]` : '';
@@ -1626,6 +1717,7 @@ class PiPVideoPlayer {
             this._prebuffering = false;
             this._activeGenerations = 0;
             this._processingTextQueue = false;
+            this._voxPausedForStream = false;
 
             this.showLoop();
             this.statusElement.textContent = 'Ready';

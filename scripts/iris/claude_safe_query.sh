@@ -5,7 +5,7 @@ threshold=3000      # Max tokens to stay within context window
 
 # Step 1: Calculate average tokens per row
 # We sample 100 rows to get a realistic average
-avg_tokens=$(PGPASSWORD='yourpassword' psql -t -h localhost -U irisuser -d irisdb -c "
+avg_tokens=$(PGPASSWORD="${IRIS_DB_PASSWORD:?IRIS_DB_PASSWORD not set}" psql -t -h localhost -U irisuser -d irisdb -c "
   SELECT AVG(
     LENGTH(COALESCE(transcript,'')) + 
     LENGTH(COALESCE(summary_context,'')) + 

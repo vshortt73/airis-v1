@@ -62,6 +62,16 @@
                 <span class="mobile-label">THINK</span>
             </label>
 
+            <!-- Meeting Record Button -->
+            <button class="pip-launch-btn" id="meetingBtn" title="Start meeting recording" onclick="toggleMeetingRecording()">
+                <span class="pip-btn-icon">🎙️</span><span class="pip-btn-text"> Meet</span>
+                <span class="mobile-label">MEET</span>
+            </button>
+            <div id="meetingStatus" style="display: none; align-items: center; gap: 6px; font-size: 11px; color: #ff4444;">
+                <span id="meetingTimer">0:00</span>
+                <span id="meetingChunkCount"></span>
+            </div>
+
             <!-- PiP Video Launch Button -->
             <button class="pip-launch-btn" id="pipLaunchBtn" title="Launch video player">
                 <span class="pip-btn-icon">🎬</span><span class="pip-btn-text"> Video</span>
@@ -137,6 +147,7 @@
     <script src="/static/audio_in.js?ver=1.4"></script>
     <script src="/static/js/tts-queue.js"></script>
     <script src="/static/js/pip-player.js?ver=1.2"></script>
+    <script src="/static/js/meeting-recorder.js?ver=1.0"></script>
     <script src="/static/js/main.js?v=3"></script>
 </body>
 </html>

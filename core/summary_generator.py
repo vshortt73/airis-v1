@@ -20,12 +20,12 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Mistral endpoint on node2 (same as sentiment analysis)
-MISTRAL_URL = getattr(config, 'MISTRAL_URL', 'http://node2:11437/v1/chat/completions')
+# Mistral endpoint (database source of truth)
+MISTRAL_URL = config.MISTRAL_URL
 
 # Summary generation prompt
 SUMMARY_SYSTEM_PROMPT = """You are a concise summarizer. Summarize the given message in approximately 50 tokens.
-Write in first person natural prose, no bullets or emoji.
+Write in third person (e.g. "Victor asked about..." or "Iris explained..."). No bullets or emoji.
 Preserve: key facts discussed, decisions or recommendations made, questions asked, and emotional tone.
 Be as concise as possible while retaining essential meaning."""
 
@@ -95,9 +95,9 @@ class SummaryGenerator:
 
             # Adjust prompt based on role
             if role == "user":
-                user_prompt = f"Summarize what the user said:\n\n{content}"
+                user_prompt = f"Summarize what Victor (the user) said. Refer to him as 'Victor':\n\n{content}"
             else:
-                user_prompt = f"Summarize what I (the assistant) said:\n\n{content}"
+                user_prompt = f"Summarize what Iris (the assistant) said. Refer to her as 'Iris':\n\n{content}"
 
             request_body = {
                 "messages": [

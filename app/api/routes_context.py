@@ -8,7 +8,7 @@ from typing import Dict, Any
 import sys
 import os; PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..' if '__file__' in dir() else '.')); sys.path.insert(0, PROJECT_ROOT)
 from app import config
-from core.system_prompt import build_system_message
+from core.system_prompt import build_system_message, build_per_turn_context
 from core.token_counter import TokenCounter
 from core import attachments
 
@@ -65,17 +65,25 @@ async def get_conversation_context() -> Dict[str, Any]:
             messages_with_images.append(msg_copy)
         
         all_messages = [system_msg] + messages_with_images
-        
+
+        # Append per-turn tail (episodic memories, emotional state, datetime, fast memory)
+        per_turn_msg = build_per_turn_context(user_message=None, conversation=active_conversation)
+        per_turn_tokens = 0
+        if per_turn_msg:
+            all_messages.append(per_turn_msg)
+            per_turn_tokens = TokenCounter.count_tokens(per_turn_msg["content"])
+
         # Count tokens
         system_tokens = TokenCounter.count_tokens(system_msg["content"])
         conversation_tokens = TokenCounter.count_message_tokens(conversation_msgs)
-        total_tokens = system_tokens + conversation_tokens
-        
+        total_tokens = system_tokens + conversation_tokens + per_turn_tokens
+
         return {
             "session_id": active_conversation.get_session_id(),
             "message_count": len(conversation_msgs),
             "total_messages": len(all_messages),
             "system_prompt_tokens": system_tokens,
+            "per_turn_tokens": per_turn_tokens,
             "conversation_tokens": conversation_tokens,
             "total_tokens": total_tokens,
             "context_window": config.OLLAMA_CONTEXT_WINDOW,
@@ -108,9 +116,16 @@ async def get_context_summary() -> Dict[str, Any]:
         # Assemble context exactly as the chat endpoint does
         all_messages, budget = assemble_full_context(active_conversation, tool_definitions)
 
+        # Append per-turn tail (episodic memories, emotional state, datetime, fast memory)
+        per_turn_msg = build_per_turn_context(user_message=None, conversation=active_conversation)
+        per_turn_tokens = 0
+        if per_turn_msg:
+            all_messages = list(all_messages) + [per_turn_msg]
+            per_turn_tokens = TokenCounter.count_tokens(per_turn_msg["content"])
+
         # Separate system message from conversation
         system_msg = all_messages[0] if all_messages else {"content": ""}
-        conversation_msgs = all_messages[1:] if len(all_messages) > 1 else []
+        conversation_msgs = [m for m in all_messages[1:] if m.get("role") != "system"]
 
         # Count by role
         role_counts = {}
@@ -122,6 +137,7 @@ async def get_context_summary() -> Dict[str, Any]:
 
         system_tokens = TokenCounter.count_tokens(system_msg.get("content", ""))
         conversation_tokens = TokenCounter.count_message_tokens(conversation_msgs)
+        total_tokens = system_tokens + per_turn_tokens + conversation_tokens
 
         return {
             "session_id": active_conversation.get_session_id(),
@@ -129,10 +145,11 @@ async def get_context_summary() -> Dict[str, Any]:
             "message_counts_by_role": role_counts,
             "token_counts_by_role": role_tokens,
             "system_prompt_tokens": system_tokens,
+            "per_turn_tokens": per_turn_tokens,
             "conversation_tokens": conversation_tokens,
-            "total_tokens": system_tokens + conversation_tokens,
+            "total_tokens": total_tokens,
             "context_window": config.OLLAMA_CONTEXT_WINDOW,
-            "utilization_percent": round(((system_tokens + conversation_tokens) / config.OLLAMA_CONTEXT_WINDOW) * 100, 1),
+            "utilization_percent": round((total_tokens / config.OLLAMA_CONTEXT_WINDOW) * 100, 1),
             "note": "This shows what's ACTUALLY sent to Ollama after truncation, not the in-memory bloat"
         }
     except Exception as e:

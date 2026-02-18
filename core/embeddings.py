@@ -19,6 +19,8 @@ import numpy as np
 import threading
 import torch
 
+from app import config
+
 # Global model instance (lazy loaded)
 _embedding_model = None
 _model_lock = threading.Lock()
@@ -60,7 +62,7 @@ def get_embedding_model(force_cpu: bool = False):
                     _embedding_model = SentenceTransformer(
                         "all-mpnet-base-v2",
                         device=device,
-                        cache_folder="/home/captain/.cache/huggingface/hub"
+                        cache_folder=config.HF_CACHE_DIR
                     )
                     # Run a small test encode to verify CUDA actually works
                     _embedding_model.encode("test", convert_to_numpy=True)
@@ -73,7 +75,7 @@ def get_embedding_model(force_cpu: bool = False):
                         _embedding_model = SentenceTransformer(
                             "all-mpnet-base-v2",
                             device=device,
-                            cache_folder="/home/captain/.cache/huggingface/hub"
+                            cache_folder=config.HF_CACHE_DIR
                         )
                         print(f"[embeddings.py][get_embedding_model] ✓ Loaded all-mpnet-base-v2 model on CPU (fallback)", file=sys.stderr)
                     else:

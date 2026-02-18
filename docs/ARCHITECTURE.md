@@ -29,7 +29,8 @@ Iris v3 is an AI assistant with persistent memory, emotional state tracking, and
 │  GPU 0: RTX 4080 Super (16GB) - MUTUALLY EXCLUSIVE SERVICES                 │
 │  ├── iris-vision.service (port 11435) - llava-phi-3 vision model            │
 │  ├── iris-float.service (port 8000) - FLOAT video generation                │
-│  └── iris-freud.service (port 11435) - gemma-3-4b dream processing          │
+│  ├── iris-freud.service (port 11435) - gemma-3-4b dream processing          │
+│  └── iris-transcribe.service (port 8500) - WhisperX meeting transcription   │
 │      ⚠️  Only ONE of these can run at a time! Managed by GPU Manager.       │
 │                                                                             │
 │  GPU 1: RTX 3060 (12GB) - COEXISTING SERVICES                               │
@@ -50,6 +51,7 @@ Iris v3 is an AI assistant with persistent memory, emotional state tracking, and
 | Vision | node2 | 0 (4080S) | 11435 | iris-vision | llava-phi-3 |
 | FLOAT | node2 | 0 (4080S) | 8000 | iris-float | Video generation |
 | Freud | node2 | 0 (4080S) | 11435 | iris-freud | gemma-3-4b dreams |
+| Transcribe | node2 | 0 (4080S) | 8500 | iris-transcribe | WhisperX meeting transcription |
 | XTTS | node2 | 1 (3060) | 8700 | iris-xtts | Text-to-speech |
 | STT | node2 | 1 (3060) | 8600 | iris-stt | Whisper ASR |
 | Sentiment | node2 | 1 (3060) | 11437 | iris-sentiment | Mistral 7B |
@@ -76,6 +78,7 @@ app/
     ├── routes_stt.py      # Speech-to-text
     ├── routes_vision.py   # Vision analysis
     ├── routes_gpu.py      # GPU manager control
+    ├── routes_meeting.py  # Meeting transcription
     ├── routes_faces.py    # Face recognition
     ├── routes_protocols.py # Protocol management
     └── routes_context.py  # Context inspection
@@ -92,11 +95,20 @@ core/
 └── face_recognition.py    # Face detection/recognition
 
 database/
-├── persistence.py         # Message storage, tiered loading
-├── character_traits.py    # Personality trait loading
-├── memory_loader.py       # Episodic memory retrieval
-├── config_loader.py       # DB config hot-reload
-└── sql/                   # Migration scripts
+├── persistence.py                  # Message storage, tiered loading
+├── character_traits.py             # Personality trait loading
+├── memory_loader.py                # Episodic memory retrieval (legacy)
+├── memory_loader_experimental.py   # Memory retrieval from live_memories + semantic
+├── fast_reactive_memory.py         # Embedding-based context matching
+├── config_loader.py                # DB config hot-reload
+└── sql/                            # Migration scripts
+
+backend/memory/
+├── memory_retrieval_v2.py          # Inline episodic retrieval (~200ms)
+└── new/
+    ├── semantic_consolidation.py   # Nightly semantic memory pipeline
+    ├── memory_creation.py          # Nightly episodic memory creation
+    └── topic_segmentation.py       # Topic boundary detection
 
 mcp_servers/
 ├── info/                  # Web search, weather, faces
@@ -106,6 +118,8 @@ mcp_servers/
 ├── knowledge/             # RAG document search
 ├── creative/              # Image generation
 ├── seeds/                 # Motivation engine
+├── calendar/              # Calendar events and reminders
+├── meeting/               # Meeting transcription (WhisperX + diarization)
 ├── directions/            # Navigation
 └── system/                # Shell, database, health
 ```
@@ -118,7 +132,7 @@ mcp_servers/
 ┌─────────────────────────────────────────────────────────────────┐
 │                     WORKING MEMORY                               │
 │  Current conversation context (chat_history table)              │
-│  - Recent messages: Full text (VERBOSE_TOKEN_BUDGET: 3000)      │
+│  - Recent messages: Full text (VERBOSE_TOKEN_BUDGET: 18000)     │
 │  - Older messages: Summaries (SUMMARY_TOKEN_BUDGET: 17000)      │
 │  - Loaded across ALL sessions (no session filtering)            │
 └─────────────────────────────────────────────────────────────────┘
@@ -137,9 +151,20 @@ mcp_servers/
 │                    LONG-TERM MEMORY                              │
 │  Episodic memories (episodic_memories table)                    │
 │  - Created nightly from conversations                           │
-│  - 5-facet embeddings for multi-angle retrieval                 │
+│  - 6-facet embeddings for multi-angle retrieval                 │
 │  - Emotional scoring (valence, arousal, top-3 emotions)         │
-│  - Retrieved by semantic similarity to current context          │
+│  - Retrieved inline every turn by retrieval v2 (~200ms)         │
+│  - Stored in live_memories table for prompt injection            │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   SEMANTIC MEMORY                                │
+│  Distilled knowledge (semantic_memories table)                  │
+│  - Consolidated nightly from episodic memory clusters           │
+│  - "Victor prefers X", "We always discuss Y on Fridays"         │
+│  - Embedding similarity deduplication + reinforcement            │
+│  - Stable across turns (in frozen snapshot prefix)              │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -174,7 +199,7 @@ Node2 GPU 0 services are mutually exclusive. The GPU Manager handles swapping:
 from core.gpu_manager import request_gpu
 
 # Request a GPU 0 service - blocks until ready or fails
-success, error = await request_gpu("vision")  # or "float" or "freud"
+success, error = await request_gpu("vision")  # or "float", "freud", "transcribe"
 if success:
     # Service is ready, make your API call
     result = await vision_service.analyze(image)
@@ -211,25 +236,32 @@ Protocols can be passphrase-protected and time-limited.
 ## Token Management
 
 ```
-Context Window: 32,768 tokens (OLLAMA_CONTEXT_WINDOW)
+Context Window: 40,960 tokens (OLLAMA_CONTEXT_WINDOW)
 
 Budget Allocation:
-├── System Prompt Base:     600 tokens
-├── Character Traits:       200 tokens
-├── Episodic Memories:    2,500 tokens
-├── Emotional State:        200 tokens
-├── Tool Definitions:     1,500 tokens
-├── Tool Results:        15,000 tokens  ← per-result truncation enforced
-├── Conversation History: 7,000 tokens (verbose + summary)
-├── Document Context:     8,000 tokens
-└── Response Reserve:     2,000 tokens
+├── SNAPSHOT (static prefix — frozen, rebuilds on spoilage only)
+│   ├── System Instructions:  ~1,800 tokens
+│   ├── Character Traits:       200 tokens
+│   ├── Seeds:                  200 tokens
+│   ├── Short-Term Facts:       400 tokens
+│   ├── Calendar Reminders:     200 tokens
+│   ├── Dreams + Dream Truths:  500 tokens
+│   └── Semantic Memories:      500 tokens
+├── Conversation History:    35,000 tokens (18K verbose + 17K summary)
+├── PER-TURN TAIL (rebuilt every turn, outside snapshot)
+│   ├── Current Datetime:        50 tokens
+│   ├── Emotional State:        200 tokens
+│   ├── Episodic Memories:    2,500 tokens
+│   └── Fast Reactive Memory:   500 tokens
+├── Tool Definitions:         1,500 tokens
+├── Safety Margin (15%):     ~6,100 tokens
+└── Response Reserve:         2,500 tokens
 
-Overflow Protection (two layers):
-1. Tool results exceeding TOOL_RESULTS_BUDGET are truncated at the
-   token level before entering the prompt (routes_chat.py).
-2. preflight_check() in inference/client.py validates the total prompt
-   fits within CONTEXT_WINDOW - RESPONSE_BUDGET before every LLM call.
-   If over budget, oldest conversation messages are trimmed.
+Overflow Protection (three layers):
+1. Per-result truncation: TOOL_RESULTS_BUDGET (15,000 tokens)
+2. Cumulative tool cap: 50% of context window (~20K tokens)
+3. preflight_check() in inference/client.py validates total fits
+   within CONTEXT_WINDOW - RESPONSE_BUDGET before every LLM call.
 ```
 
 ## Data Flow
@@ -271,11 +303,14 @@ User Input
 1. **Session-Independent Memory** - Conversation loads across ALL sessions
 2. **Database as Source of Truth** - All config in `system_config` table
 3. **Explicit Context Windows** - Always set `num_ctx` in Ollama calls
-4. **Multi-Facet Embeddings** - 5-7 embedding vectors per memory
+4. **Multi-Facet Embeddings** - 6 embedding vectors per memory
 5. **GPU Resource Coordination** - Mutex for Node2 GPU 0 services
 6. **Tiered Context Loading** - Verbose recent + summarized older messages
-7. **Context Overflow Protection** - Tool result truncation + preflight check before every LLM call
+7. **Context Overflow Protection** - Tool result truncation + cumulative cap + preflight check
+8. **Static/Dynamic Prompt Split** - Snapshot prefix (stable) + per-turn tail (volatile) for KV cache efficiency
+9. **Spoilage-Only Snapshot Rebuild** - No timer-based rebuilds; snapshot invalidated by tool actions that change static data
+10. **Inline Memory Retrieval** - Retrieval v2 runs every turn (~200ms), writes to `live_memories`, read by per-turn tail
 
 ---
 
-*Last updated: 2026-01-24*
+*Last updated: 2026-02-07*

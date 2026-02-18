@@ -386,8 +386,17 @@ def knowledge(
         })
 
 
+@server.register_tool
+def knowledge_save(
+    title: str,
+    content: str,
+    category: str = "uploaded_documents",
+) -> dict:
+    """Save a document to the knowledge base for future retrieval."""
+    return _handle_save(title=title, content=content, category=category)
+
+
 if __name__ == "__main__":
-    print("[knowledge_server] Starting Knowledge Server (Unified)...", file=sys.stderr)
-    print("Tool: knowledge(action, query?, top_k?, filter_file_type?, filter_path?)", file=sys.stderr)
-    print("Actions: search, stats", file=sys.stderr)
+    print("[knowledge_server] Starting Knowledge Server...", file=sys.stderr)
+    print("Tools: knowledge(action, ...), knowledge_save(title, content, ...)", file=sys.stderr)
     server.run()

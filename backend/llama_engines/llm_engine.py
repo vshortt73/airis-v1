@@ -34,7 +34,7 @@ app.add_middleware(
 
 DB_NAME = "irisdb"
 DB_USER = "irisuser"
-DB_PASS = "yourpassword"
+DB_PASS = os.environ.get('IRIS_DB_PASSWORD', '')
 DB_HOST = "localhost"
 
 config = {}
@@ -184,7 +184,7 @@ async def lifespan(app: FastAPI):
     print("Loading embedding model...")
     try:
         embedding_model = SentenceTransformer(
-            "/models/llm_models/huggingface/models/all-mpnet-base-v2/"
+            os.environ.get('EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/')
         )
         print("✅ Embedding model loaded successfully (all-mpnet-base-v2)")
     except Exception as e:

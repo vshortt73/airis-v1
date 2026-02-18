@@ -30,7 +30,7 @@ COMMENT ON COLUMN chat_history.summary_generated_at IS 'Timestamp when summary w
 -- ============================================================================
 
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
-('tokens', 'VERBOSE_TOKEN_BUDGET', '3000', 'int', '3000', 'Token budget for recent full messages (verbose)', false),
+('tokens', 'VERBOSE_TOKEN_BUDGET', '18000', 'int', '18000', 'Token budget for recent full messages (verbose)', false),
 ('tokens', 'SUMMARY_TOKEN_BUDGET', '17000', 'int', '17000', 'Token budget for older summarized messages', false),
 ('tokens', 'SUMMARY_MIN_LENGTH', '50', 'int', '50', 'Minimum message length (chars) to generate summary', false)
 ON CONFLICT (key) DO UPDATE SET

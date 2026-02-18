@@ -7,7 +7,8 @@ echo "========================================="
 echo ""
 
 # Database password
-export PGPASSWORD='yourpassword'
+# Database password — must be set in environment
+export PGPASSWORD="${IRIS_DB_PASSWORD:?IRIS_DB_PASSWORD not set}"
 
 # Check insert counter
 echo "1. INSERT COUNTER STATUS:"

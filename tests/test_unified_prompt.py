@@ -24,10 +24,10 @@ from datetime import datetime
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, PROJECT_ROOT)
 
-# Set DB password if not set
+# Require DB password from environment
 if not os.environ.get('IRIS_DB_PASSWORD'):
-    print("WARNING: IRIS_DB_PASSWORD not set, using 'yourpassword'")
-    os.environ['IRIS_DB_PASSWORD'] = 'yourpassword'
+    print("WARNING: IRIS_DB_PASSWORD not set. Set it with: export IRIS_DB_PASSWORD='...'")
+    print("Database connection may fail if authentication is required.")
 
 from core.prompt_builder import UnifiedPromptBuilder, get_active_protocol
 from core.token_counter import TokenCounter

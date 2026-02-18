@@ -27,8 +27,8 @@ sys.path.insert(0, PROJECT_ROOT)
 from app import config
 from core.ui_notify import ui_msg
 
-# Mistral 7B endpoint for classification (same as sentiment analysis)
-MISTRAL_URL = "http://node2:11437/v1/chat/completions"
+# Mistral 7B endpoint for classification (database source of truth)
+MISTRAL_URL = config.MISTRAL_URL
 
 # ============================================
 # CONFIGURATION

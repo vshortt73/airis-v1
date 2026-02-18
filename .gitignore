@@ -86,3 +86,21 @@ mcp_servers/**/__pycache__/
 
 # Static test files
 static/curl.json
+
+# Database dumps
+*.dump
+
+# Scratch/temp files
+post.json
+post.sh
+post_data.json
+imports.txt
+skill.json
+heartbeat.md
+messaging.md
+
+# Session transcripts
+2026-*.txt
+
+# External projects (have their own .git)
+longlive/

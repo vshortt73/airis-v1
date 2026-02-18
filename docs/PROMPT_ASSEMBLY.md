@@ -1,6 +1,6 @@
 # Prompt Assembly Pipeline
 
-**Last Updated:** 2026-01-29
+**Last Updated:** 2026-02-07
 
 How a user message becomes an LLM API call. Follow this doc to trace any prompt-related issue.
 
@@ -32,16 +32,16 @@ User message (WebSocket)
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 2. SNAPSHOT DECISION              system_prompt.py:1294         │
+│ 2. SNAPSHOT DECISION              system_prompt.py:1466         │
 │    Reuse frozen snapshot? Or full rebuild?                      │
-│    (batch trim: reuse for N turns, rebuild on spoiler)          │
+│    (spoilage-only: reuse until spoiler event or token overflow) │
 └───────────────┬─────────────────────┬───────────────────────────┘
           REUSE │                     │ REBUILD
                 ▼                     ▼
         Return frozen         ┌───────────────────────────────┐
         messages list         │ 3. BUILD SYSTEM MESSAGE       │
-                              │    system_prompt.py:612        │
-                              │    (see section assembly below)│
+                              │    system_prompt.py:728        │
+                              │    (static sections only)      │
                               └───────────────┬───────────────┘
                                               │
                               ┌───────────────┴───────────────┐
@@ -52,10 +52,18 @@ User message (WebSocket)
                                               │
                               ┌───────────────┴───────────────┐
                               │ 5. FORMAT + STORE SNAPSHOT    │
-                              │    system_prompt.py:1341       │
+                              │    system_prompt.py:1487       │
                               └───────────────┬───────────────┘
                                               │
                             ┌─────────────────┘
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 5b. APPEND PER-TURN TAIL           routes_chat.py:1663         │
+│     build_per_turn_context(): datetime, emotional state,       │
+│     episodic memories, fast reactive memory                    │
+│     (rebuilt fresh every turn, outside snapshot)                │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ 6. PREFLIGHT CHECK                    client.py:334             │
@@ -99,41 +107,62 @@ User message (WebSocket)
 
 | What | Where |
 |------|-------|
-| Entry point | `system_prompt.py:assemble_context_with_snapshot():1294` |
-| Should rebuild? | `conversation.py:should_rebuild_snapshot():320` |
-| Reuse path | `system_prompt.py:1320-1326` |
-| Rebuild path | `system_prompt.py:1328-1353` |
+| Entry point | `system_prompt.py:assemble_context_with_snapshot():1446` |
+| Should rebuild? | `conversation.py:should_rebuild_snapshot():324` |
+| Reuse path | `system_prompt.py:1466-1472` |
+| Rebuild path | `system_prompt.py:1474-1498` |
 
-**Rebuild triggers:**
-- Batch trim disabled
+**Rebuild triggers (spoilage-only — no batch size timer):**
+- Batch trim disabled (feature flag)
 - No snapshot yet (first turn)
-- Snapshot spoiled (trait modify, memory insert)
-- Batch size exceeded (`turn_id - snapshot_turn_base >= BATCH_TRIM_SIZE`)
+- Snapshot spoiled (see spoiler events below)
+- Token headroom exhausted
 
 **Spoiler events** (force immediate rebuild):
-- `trait modify` tool call → `routes_chat.py:1622-1623`
-- `memory insert` tool call → `routes_chat.py:1624-1625`
+- `trait` tool → `modify` action
+- `memory` tool → `insert` or `archive` action
+- `seed` tool → `plant`, `tend`, `reflect`, `accept`, `dismiss`, `clear_suggestions`
+- `calendar` tool → `add`, `update`, `delete`
+- Tool failure (any tool)
+- Tool miss (model called tool not in snapshot)
+- Topic pivot (user message needs tool groups not in snapshot)
+- Admin forced invalidation (`POST /api/admin/snapshot/invalidate`)
+- Conversation reloaded from database
 
-### 3. System Message Assembly
+### 3. System Message Assembly — Static Snapshot
 
-`build_system_message()` at `system_prompt.py:612` assembles sections **in this order**:
+`build_system_message()` at `system_prompt.py:728` assembles the **static prefix** in this order:
 
-| # | Section | Source | Context Level | Cache |
-|---|---------|--------|---------------|-------|
-| 1 | Temporal message (date/time) | Runtime | All | Per-turn |
-| 2 | System instructions | `system_instructions` table | All | Session |
-| 3 | Character traits | `fulltraits` table | All | Session |
-| 4 | Active seeds | `seeds` table | All | Session |
-| 5 | Short-term facts | `short_term_facts` table | All | Session |
-| 6 | Fast reactive memory | `episodic_memories` + embeddings | CONV+ | Per-turn |
-| 7 | Recent dreams | `episodic_dreams` table | CONV+ | Session |
-| 8 | Dream truths | `dream_truths` table | DEEP+ | Session |
-| 9 | Emotional state | `emotional_state` table | All | Per-turn |
-| 10 | Episodic memories | `live_memories` view | CONV+ | Session |
+| # | Section | Source | Spoiler Trigger |
+|---|---------|--------|-----------------|
+| 1 | System instructions | `system_instructions` table | — |
+| 2 | Character traits | `fulltraits` table | `trait modify` |
+| 3 | Active seeds | `seeds` table | `seed plant/tend/reflect/...` |
+| 4 | Short-term facts | `short_term_facts` table | `memory insert/archive` |
+| 5 | Calendar reminders | `calendar_events` table | `calendar add/update/delete` |
+| 6 | Recent dreams | `episodic_dreams` table | Nightly (offline) |
+| 7 | Dream truths | `dream_truths` table | Nightly (offline) |
+| 8 | Semantic memories | `semantic_memories` table | Nightly (offline) |
 
-"CONV+" means CONVERSATIONAL, DEEP, and FULL levels.
+This is the frozen snapshot prefix — only rebuilt when a spoiler event fires or tokens are exhausted.
 
 **Protocol filtering:** Active protocol's `rules_include`/`rules_exclude` filter which system instructions are loaded. Security rules (ID >= 1000) always included.
+
+### 3b. Per-Turn Tail — Volatile Context
+
+`build_per_turn_context()` at `system_prompt.py:897` builds a **separate system message** appended AFTER conversation history:
+
+| # | Section | Source | Why Volatile |
+|---|---------|--------|-------------|
+| 1 | Current datetime | `datetime.now()` | Changes every turn |
+| 1b | Gap report | `core/gap_report.py` | First turn after >=30min gap only (see `docs/GAP_REPORT.md`) |
+| 2 | Emotional state | `get_emotional_tracker()` | Updated by sentiment analysis each turn |
+| 3 | Episodic memories | `live_memories` table | Refreshed by retrieval v2 each turn (~200ms) |
+| 4 | Fast reactive memory | Embedding similarity search | Query-dependent each turn |
+
+This message is rebuilt fresh every turn and never part of the snapshot. It's injected by `routes_chat.py` after every `assemble_context_with_snapshot()` call.
+
+**Gap report** (`<while_you_were_away>`): Only appears on the first turn after a >=30min absence. Reports memory processing, dreams, and service health events from the gap period. ~100-200 tokens, zero impact on subsequent turns. See `docs/GAP_REPORT.md` for full details.
 
 ### 4. Conversation History Loading
 
@@ -216,24 +245,31 @@ Iterative follow-up (up to 5)     routes_chat.py:1657-1659
 ## Token Budget Interaction
 
 ```
-OLLAMA_CONTEXT_WINDOW (32,768)
-├── System message         (variable, ~6,000 tokens)
+OLLAMA_CONTEXT_WINDOW (40,960)
+├── SNAPSHOT PREFIX (static, frozen)
 │   ├── Instructions       from system_instructions table
 │   ├── Traits             from fulltraits table
 │   ├── Seeds              from seeds table
 │   ├── Facts              from short_term_facts table
-│   ├── Memories           from live_memories / episodic_memories
-│   ├── Dreams             from episodic_dreams table
-│   └── Emotional state    from emotional_state table
-├── Tool definitions       (variable, ~2,000 tokens)
+│   ├── Calendar           from calendar_events table
+│   ├── Dreams             from episodic_dreams + dream_truths tables
+│   └── Semantic memories  from semantic_memories table
 ├── Conversation history   (fills remaining, tiered by context_level)
-├── Safety margin (15%)    (~4,900 tokens, for tool results + overhead)
+├── PER-TURN TAIL (volatile, rebuilt every turn)
+│   ├── Datetime           from datetime.now()
+│   ├── Gap report         from service_events + memories + dreams (first turn only)
+│   ├── Emotional state    from emotional state tracker
+│   ├── Episodic memories  from live_memories (retrieval v2)
+│   └── Fast memory        from embedding similarity search
+├── Tool definitions       (variable, ~2,000 tokens)
+├── Safety margin (15%)    (~6,100 tokens, for tool results + overhead)
 ├── Batch trim headroom    (4,000 tokens when snapshot active)
-└── Response reserve       (RESPONSE_GENERATION_BUDGET = 2,000)
+└── Response reserve       (RESPONSE_GENERATION_BUDGET = 2,500)
 
-OVERFLOW PROTECTION (two layers):
-1. Tool results > TOOL_RESULTS_BUDGET → truncated (routes_chat.py)
-2. Total > CONTEXT_WINDOW - RESPONSE_BUDGET → oldest msgs trimmed (client.py)
+OVERFLOW PROTECTION (three layers):
+1. Per-result: TOOL_RESULTS_BUDGET (15K tokens) → truncated
+2. Cumulative: 50% of context window (~20K) across all tool results per turn
+3. Preflight: Total > CONTEXT_WINDOW - RESPONSE_BUDGET → oldest msgs trimmed
 ```
 
 ---
@@ -242,13 +278,14 @@ OVERFLOW PROTECTION (two layers):
 
 | Setting | Default | Source | Purpose |
 |---------|---------|--------|---------|
-| `OLLAMA_CONTEXT_WINDOW` | 32768 | system_config (tokens) | Total context window |
-| `RESPONSE_GENERATION_BUDGET` | 2000 | system_config (tokens) | Reserved for LLM response |
+| `OLLAMA_CONTEXT_WINDOW` | 40960 | system_config (tokens) | Total context window |
+| `RESPONSE_GENERATION_BUDGET` | 2500 | system_config (tokens) | Reserved for LLM response |
 | `TOOL_RESULTS_BUDGET` | 15000 | system_config (tokens) | Max tokens per tool result |
 | `BATCH_TRIM_ENABLED` | true | system_config (features) | Enable snapshot reuse |
-| `BATCH_TRIM_SIZE` | 5 | system_config (features) | Turns per snapshot |
 | `BATCH_TRIM_HEADROOM_TOKENS` | 4000 | system_config (features) | Reserve for snapshot growth |
 | `MAX_TOTAL_MESSAGES` | 50 | system_config (tokens) | Safety brake on message count |
+| `SEMANTIC_MEMORIES` | true | system_config (semantic) | Enable semantic memories in prompt |
+| `SEMANTIC_MEMORY_LIMIT` | 10 | system_config (semantic) | Max semantic memories in prompt |
 
 ---
 

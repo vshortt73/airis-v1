@@ -42,7 +42,7 @@ INFERENCE_SERVERS = {
     },
     "node2_small": {
         "name": "Node2 Small (mistral:7b)",
-        "url": "http://node2:11437",
+        "url": config.MISTRAL_URL.rsplit('/v1/', 1)[0],
         "endpoint": "/v1/chat/completions"
     }
 }

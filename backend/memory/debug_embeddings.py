@@ -24,7 +24,7 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 # Load same model as retrieval script
 model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/", local_files_only=True)
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def normalize(vec):
     """L2 normalization"""

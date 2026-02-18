@@ -1,7 +1,8 @@
 #!/bin/bash
 # Test the trigger by inserting messages into chat_history
 
-export PGPASSWORD='yourpassword'
+# Database password — must be set in environment
+export PGPASSWORD="${IRIS_DB_PASSWORD:?IRIS_DB_PASSWORD not set}"
 
 echo "========================================="
 echo "TESTING TRIGGER SYSTEM"

@@ -16,9 +16,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.gpu_manager import get_gpu_manager, request_gpu, GPU0_SERVICES
+from app import config
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter(tags=["gpu"])
+
+
+def _get_gpu_imports():
+    """Lazy import GPU manager to avoid crashing if Node2 disabled."""
+    from core.gpu_manager import get_gpu_manager, request_gpu, GPU0_SERVICES
+    return get_gpu_manager, request_gpu, GPU0_SERVICES
 
 
 @router.get("/api/gpu/status")
@@ -32,6 +39,10 @@ async def gpu_status():
         - active_requests: Number of active API requests
         - services: List of available services
     """
+    if not is_node2_service_enabled("GPU_MANAGER_ENABLED"):
+        return {"status": "disabled", "reason": "GPU manager disabled (Node2 not available)"}
+
+    get_gpu_manager, request_gpu, GPU0_SERVICES = _get_gpu_imports()
     manager = get_gpu_manager()
     status = manager.get_status()
 
@@ -66,6 +77,11 @@ async def gpu_request(service: str):
         - error: Error message if failed
         - current_service: The service that is now loaded
     """
+    if not is_node2_service_enabled("GPU_MANAGER_ENABLED"):
+        return {"success": False, "error": "GPU manager disabled (Node2 not available)"}
+
+    get_gpu_manager, request_gpu, GPU0_SERVICES = _get_gpu_imports()
+
     if service not in GPU0_SERVICES:
         raise HTTPException(
             status_code=400,
@@ -95,6 +111,10 @@ async def gpu_detect():
         - detected_service: The service found running, or null
         - state: Current state after detection
     """
+    if not is_node2_service_enabled("GPU_MANAGER_ENABLED"):
+        return {"detected_service": None, "state": "disabled", "reason": "GPU manager disabled (Node2 not available)"}
+
+    get_gpu_manager, _, _ = _get_gpu_imports()
     manager = get_gpu_manager()
     detected = await manager.detect_current_service()
 
@@ -112,6 +132,10 @@ async def list_services():
     Returns:
         Dictionary of service configurations
     """
+    if not is_node2_service_enabled("GPU_MANAGER_ENABLED"):
+        return {"services": {}, "reason": "GPU manager disabled (Node2 not available)"}
+
+    _, _, GPU0_SERVICES = _get_gpu_imports()
     services = {}
     for name, info in GPU0_SERVICES.items():
         services[name] = {

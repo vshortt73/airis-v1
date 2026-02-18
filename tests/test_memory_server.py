@@ -105,7 +105,7 @@ async def test_server_startup():
             ['python', server_script, '--help'],
             capture_output=True,
             timeout=5,
-            env={**os.environ, 'IRIS_DB_PASSWORD': os.environ.get('IRIS_DB_PASSWORD', 'yourpassword')}
+            env={**os.environ, 'IRIS_DB_PASSWORD': os.environ.get('IRIS_DB_PASSWORD', '')}
         )
 
         # MCP servers via stdio exit immediately without a client

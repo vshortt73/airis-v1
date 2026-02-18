@@ -94,7 +94,7 @@ def get_memories() -> Optional[Dict]:
                     if event:
                         block = block +(f"           Event: {event}\n")
 
-                return(f"[LONG TERM MEMORIES] when appropriate, reference these memories in the current conversation.\n {block}")
+                return(f"<your_memories>\n{block}</your_memories>")
 
     except Exception as e:
         print(f"[memory_loader.py][get_memories] Error: {e}")

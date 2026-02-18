@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Iris Monitor
+Comment=Iris service status monitor
+Exec=/usr/bin/python3 /iris-v3/tools/iris-monitor.py
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=Utility;System;
+StartupNotify=false

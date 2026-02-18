@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Iris Drive Monitor
+Comment=GTK3 widget showing Iris inner drive state variables
+Exec=python3 /iris-v3/tools/iris-drive-monitor.py
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;Monitor;
+StartupNotify=false

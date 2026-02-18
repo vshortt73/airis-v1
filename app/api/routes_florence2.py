@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from services.florence2_service import get_florence2_service, FLORENCE2_TASKS
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter(prefix="/api/florence2", tags=["florence2"])
 
@@ -62,6 +63,8 @@ class Florence2Response(BaseModel):
 @router.get("/status")
 async def get_status():
     """Get Florence2 service status."""
+    if not is_node2_service_enabled("FLORENCE2_ENABLED"):
+        return {"status": "disabled", "reason": "Florence2 service disabled (Node2 not available)"}
     service = get_florence2_service()
     return service.get_status()
 
@@ -128,6 +131,8 @@ async def analyze_image(request: Florence2Request):
     - referring_expression_segmentation: Segment objects matching description
     - region_to_category, region_to_description: Describe specific regions
     """
+    if not is_node2_service_enabled("FLORENCE2_ENABLED"):
+        return Florence2Response(success=False, error="Florence2 service disabled (Node2 not available)")
     service = get_florence2_service()
 
     result = service.run_task(
@@ -152,6 +157,8 @@ async def analyze_uploaded_image(
 
     Accepts image uploads directly without base64 encoding.
     """
+    if not is_node2_service_enabled("FLORENCE2_ENABLED"):
+        raise HTTPException(status_code=503, detail="Florence2 service disabled (Node2 not available)")
     service = get_florence2_service()
 
     # Read and encode image

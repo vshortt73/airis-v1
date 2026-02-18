@@ -55,6 +55,10 @@ class ConversationHistory:
         self.snapshot_token_count = 0     # Running token count of snapshot
         self.snapshot_spoiled = False     # Set True by spoiler events (e.g., trait modify)
         self.snapshot_budget = None       # Budget report dict from snapshot creation
+
+        # Smart Tool Selection — tool subset aligned to snapshot lifecycle
+        self.snapshot_tools = None              # List[str] tool names included in current snapshot
+        self.snapshot_force_groups = set()      # Group names to force-include on next rebuild
         
         if enable_persistence:
             # Get/create session (for analytics, not for loading!)
@@ -325,7 +329,6 @@ class ConversationHistory:
         - Feature disabled (legacy behavior)
         - No snapshot exists yet
         - Spoiler event fired (e.g., trait modification)
-        - N user turns have elapsed since snapshot creation
         - Token headroom exhausted
         """
         from app import config
@@ -340,11 +343,8 @@ class ConversationHistory:
             print(f"[conversation.py][snapshot] Snapshot spoiled — forcing rebuild")
             return True
 
-        batch_size = getattr(config, 'BATCH_TRIM_SIZE', 5)
-        turns_since = self.turn_id - self.snapshot_turn_base
-        if turns_since >= batch_size:
-            print(f"[conversation.py][snapshot] Batch size reached ({turns_since}/{batch_size}) — rebuilding")
-            return True
+        # REMOVED: batch_size turn counter — volatile data now in per-turn tail
+        # Snapshot only rebuilds on spoilage or token overflow
 
         max_context = getattr(config, 'OLLAMA_CONTEXT_WINDOW', 32768)
         response_budget = getattr(config, 'RESPONSE_GENERATION_BUDGET', 2500)

@@ -29,16 +29,12 @@ import httpx
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Configuration - try to load from app config, fall back to defaults
-try:
-    from app import config as app_config
-    FLORENCE2_REMOTE_URL = getattr(app_config, 'FLORENCE2_SERVER_URL', "http://node2:5100")
-    FLORENCE2_MODE = getattr(app_config, 'FLORENCE2_MODE', "remote")
-except ImportError:
-    FLORENCE2_REMOTE_URL = os.environ.get("FLORENCE2_REMOTE_URL", "http://node2:5100")
-    FLORENCE2_MODE = os.environ.get("FLORENCE2_MODE", "remote")
+# Configuration (database source of truth)
+from app import config as app_config
+FLORENCE2_REMOTE_URL = app_config.FLORENCE2_SERVER_URL
+FLORENCE2_MODE = app_config.FLORENCE2_MODE
 
-FLORENCE2_MODEL_PATH = "/models/vision/florence2"
+FLORENCE2_MODEL_PATH = app_config.FLORENCE2_MODEL_PATH
 
 # Available tasks
 FLORENCE2_TASKS = {

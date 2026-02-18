@@ -1,15 +1,24 @@
 #!/bin/bash
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 # ============================================
 # PREFLIGHT: Check inference backend
 # ============================================
 echo "=== Iris Preflight Checks ==="
 echo ""
-
 export IRIS_DB_PASSWORD='yourpassword'
 export PGPASSWORD='yourpassword'
+# Database password — must be set in environment before running
+if [ -z "$IRIS_DB_PASSWORD" ]; then
+    echo "ERROR: IRIS_DB_PASSWORD not set. Export it before running this script."
+    echo "  export IRIS_DB_PASSWORD='yourpassword'"
+    exit 1
+fi
+export PGPASSWORD="$IRIS_DB_PASSWORD"
+
+
 
 # Detect backend from database (default: llamacpp)
 BACKEND=$(psql -h localhost -U irisuser -d irisdb -t -A -c \
@@ -72,5 +81,6 @@ echo ""
 # START APPLICATION
 # ============================================
 export PYTHONPATH="$(pwd):$PYTHONPATH"
-source /venv/iris-v3/bin/activate
+source "$SCRIPT_DIR/paths.env"
+source "$IRIS_VENV/bin/activate"
 python app/main.py

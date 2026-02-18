@@ -16,6 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.vision_manager import get_vision_manager
 from app import config
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter()
 
@@ -83,8 +84,8 @@ async def analyze_single_image(request: AnalyzeImageRequest):
     }
     ```
     """
-    if not config.VISION_ENABLED:
-        raise HTTPException(status_code=503, detail="Vision system disabled")
+    if not is_node2_service_enabled("VISION_ENABLED"):
+        raise HTTPException(status_code=503, detail="Vision system disabled (Node2 not available)")
 
     try:
         manager = get_vision_manager()
@@ -138,8 +139,8 @@ async def analyze_batch_images(request: AnalyzeBatchRequest):
     }
     ```
     """
-    if not config.VISION_ENABLED:
-        raise HTTPException(status_code=503, detail="Vision system disabled")
+    if not is_node2_service_enabled("VISION_ENABLED"):
+        raise HTTPException(status_code=503, detail="Vision system disabled (Node2 not available)")
 
     if not request.images:
         raise HTTPException(status_code=400, detail="No images provided")
@@ -231,8 +232,8 @@ async def force_unload_model():
     }
     ```
     """
-    if not config.VISION_ENABLED:
-        raise HTTPException(status_code=503, detail="Vision system disabled")
+    if not is_node2_service_enabled("VISION_ENABLED"):
+        raise HTTPException(status_code=503, detail="Vision system disabled (Node2 not available)")
 
     try:
         manager = get_vision_manager()

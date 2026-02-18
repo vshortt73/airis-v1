@@ -1,9 +1,10 @@
 #!/bin/bash
 
-source /venv/iris-v3/bin/activate
+source "$(dirname "$0")/paths.env"
+source "$IRIS_VENV/bin/activate"
 export CUDA_VISIBLE_DEVICES=0
 python -m sglang.launch_server \
-  --model-path /localmodels/qwen/Qwen3-32B-Q4_K_M.gguf \
+  --model-path "$IRIS_MAIN_MODEL" \
   --port 11434 \
   --host 0.0.0.0 \
   --context-length 40960 \

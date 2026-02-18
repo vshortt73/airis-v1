@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Iris Video</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * {
             margin: 0;
@@ -50,14 +51,14 @@
             z-index: 1;
         }
 
-        #video-player {
+        #thinking-video {
             z-index: 2;
-            opacity: 0;
-            transition: opacity 0.15s ease;
+            display: none;
         }
 
-        #video-player.active {
-            opacity: 1;
+        #video-player {
+            z-index: 3;
+            display: none;
         }
 
         .status {
@@ -124,59 +125,225 @@
         <div id="player-container" style="display: none;">
             <div class="video-wrapper">
                 <video id="loop-video" autoplay loop muted src="/static/loop.mp4"></video>
-                <video id="video-player" autoplay></video>
+                <video id="thinking-video" loop muted></video>
+                <video id="video-player"></video>
             </div>
             <div class="status" id="status">Ready</div>
             <div class="queue-info" id="queue-info"></div>
             <div class="controls">
-                <button id="prev-btn">← Previous</button>
                 <button id="stop-btn">Stop</button>
-                <button id="next-btn">Next →</button>
             </div>
         </div>
     </div>
 
     <script>
+        const HLS_AVAILABLE = typeof Hls !== 'undefined' && Hls.isSupported();
+        console.log('[PopOut] HLS available:', HLS_AVAILABLE);
+
         class VideoPlayer {
             constructor() {
                 this.videoElement = document.getElementById('video-player');
                 this.loopElement = document.getElementById('loop-video');
+                this.thinkingElement = document.getElementById('thinking-video');
                 this.statusElement = document.getElementById('status');
                 this.queueInfoElement = document.getElementById('queue-info');
                 this.playerContainer = document.getElementById('player-container');
                 this.initializingElement = document.getElementById('initializing');
 
                 this.sessionId = null;
+                this.isActive = false;
+
+                // HLS state
+                this.hls = null;
+                this.hlsInitialized = false;
+                this.hlsPlaylistUrl = null;
+                this._hlsPlaylistLoaded = false;
+
+                // Video library (idle + thinking rotation)
+                this.idleVideos = [];
+                this.thinkingVideos = [];
+                this.currentThinkingVideo = null;
+                this.idleRotationTimer = null;
+                this.idleRotationActive = false;
+                this.hasThinkingVideo = false;
+
+                // Legacy fallback state
                 this.videoQueue = [];
                 this.currentChunkIndex = 0;
                 this.isPlaying = false;
-                this.isIdle = true;
                 this.pollInterval = null;
 
                 // BroadcastChannel for cross-window communication
                 this.channel = new BroadcastChannel('iris-video');
 
                 this.initializeListeners();
+                this.loadVideoLibrary();
                 this.notifyReady();
             }
 
-            showLoop() {
-                this.videoElement.classList.remove('active');
-                this.loopElement.play().catch(() => {});
-                this.isIdle = true;
+            // ============================================================
+            // VIDEO LIBRARY - Idle and thinking video rotation
+            // ============================================================
+
+            async loadVideoLibrary() {
+                try {
+                    const response = await fetch('/api/ui-videos');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.idleVideos = data.idle || [];
+                        this.thinkingVideos = data.thinking || [];
+                        console.log(`[PopOut] Video library: ${this.idleVideos.length} idle, ${this.thinkingVideos.length} thinking`);
+                        if (this.thinkingVideos.length > 0) {
+                            this.hasThinkingVideo = true;
+                        }
+                    }
+                } catch (e) {
+                    console.log('[PopOut] Failed to load video library:', e);
+                }
             }
 
-            showChunkVideo() {
-                this.videoElement.classList.add('active');
-                this.isIdle = false;
+            startIdleRotation() {
+                if (this.idleVideos.length === 0) {
+                    this.loopElement.src = '/static/loop.mp4';
+                    this.loopElement.loop = true;
+                    this.loopElement.play().catch(() => {});
+                    return;
+                }
+
+                if (this.idleRotationActive) return;
+                this.idleRotationActive = true;
+
+                const playRandomIdle = () => {
+                    if (!this.idleRotationActive || !this.isActive) return;
+
+                    const randomIndex = Math.floor(Math.random() * this.idleVideos.length);
+                    const videoUrl = this.idleVideos[randomIndex];
+
+                    this.loopElement.src = videoUrl;
+                    this.loopElement.loop = true;
+                    this.loopElement.style.display = '';
+                    this.loopElement.play().catch(() => {});
+
+                    console.log(`[PopOut] Idle: ${videoUrl.split('/').pop()}`);
+
+                    const duration = 5000 + Math.random() * 25000;
+                    this.idleRotationTimer = setTimeout(playRandomIdle, duration);
+                };
+
+                playRandomIdle();
             }
+
+            stopIdleRotation() {
+                this.idleRotationActive = false;
+                if (this.idleRotationTimer) {
+                    clearTimeout(this.idleRotationTimer);
+                    this.idleRotationTimer = null;
+                }
+            }
+
+            pickRandomThinkingVideo() {
+                if (this.thinkingVideos.length === 0) {
+                    this.currentThinkingVideo = null;
+                    return null;
+                }
+                const randomIndex = Math.floor(Math.random() * this.thinkingVideos.length);
+                this.currentThinkingVideo = this.thinkingVideos[randomIndex];
+                return this.currentThinkingVideo;
+            }
+
+            showThinking() {
+                if (!this.isActive) return;
+
+                this.stopIdleRotation();
+
+                if (this.hasThinkingVideo && this.thinkingVideos.length > 0) {
+                    if (!this.currentThinkingVideo) {
+                        this.pickRandomThinkingVideo();
+                    }
+
+                    if (this.currentThinkingVideo) {
+                        this.loopElement.style.display = 'none';
+                        this.thinkingElement.src = this.currentThinkingVideo;
+                        this.thinkingElement.style.display = '';
+                        this.thinkingElement.play().catch(() => {});
+                        console.log(`[PopOut] Thinking: ${this.currentThinkingVideo.split('/').pop()}`);
+                    }
+                }
+
+                this.statusElement.textContent = 'Thinking...';
+            }
+
+            hideThinking() {
+                this.thinkingElement.pause();
+                this.thinkingElement.style.display = 'none';
+                this.currentThinkingVideo = null;
+            }
+
+            // ============================================================
+            // VIDEO STATE TRANSITIONS
+            // ============================================================
+
+            showLoop() {
+                // Hide HLS video and thinking, show idle loop
+                this.videoElement.style.display = 'none';
+                this.videoElement.classList.remove('active');
+                this.hideThinking();
+                this.loopElement.style.display = '';
+                this.loopElement.play().catch(() => {});
+
+                if (this.isActive) {
+                    this.startIdleRotation();
+                }
+
+                // Tell main window to resume mic now that video is idle
+                this.channel.postMessage({ type: 'vox-resume' });
+
+                this.statusElement.textContent = 'Idle';
+            }
+
+            showHLSVideo() {
+                // Hide loop and thinking, show HLS video
+                this.stopIdleRotation();
+                this.loopElement.style.display = 'none';
+                this.hideThinking();
+                this.videoElement.style.display = 'block';
+                this.videoElement.classList.add('active');
+
+                // Tell main window to mute mic while video plays
+                this.channel.postMessage({ type: 'vox-pause' });
+            }
+
+            // ============================================================
+            // BROADCAST CHANNEL LISTENERS
+            // ============================================================
 
             initializeListeners() {
-                // Listen for messages from main window
                 this.channel.onmessage = (event) => {
                     const { type, data } = event.data;
 
                     switch (type) {
+                        // HLS session start (preferred path)
+                        case 'start-session-hls':
+                            this.startSessionHLS(data.sessionId, data.playlistUrl);
+                            break;
+
+                        // HLS events relayed from main window
+                        case 'hls-segment-ready':
+                            this.onHLSSegmentReady(data);
+                            break;
+                        case 'hls-new-turn':
+                            this.onHLSNewTurn(data);
+                            break;
+                        case 'hls-stream-complete':
+                            this.onHLSStreamComplete(data);
+                            break;
+
+                        // Thinking/idle state from main window
+                        case 'show-thinking':
+                            this.showThinking();
+                            break;
+
+                        // Legacy fallback
                         case 'start-session':
                             this.startSession(data.sessionId);
                             break;
@@ -189,60 +356,224 @@
                     }
                 };
 
-                // Video ended event - move to next chunk
-                this.videoElement.addEventListener('ended', () => {
-                    console.log('[VideoPlayer] Video ended, moving to next chunk...');
-                    this.currentChunkIndex++;
-                    this.isPlaying = false;
-                    this.playNext();
-                });
-
-                // Controls
-                document.getElementById('stop-btn').addEventListener('click', () => this.stop());
-                document.getElementById('prev-btn').addEventListener('click', () => this.playPrevious());
-                document.getElementById('next-btn').addEventListener('click', () => this.playNext());
-
                 // Notify parent when window closes
                 window.addEventListener('beforeunload', () => {
+                    this.cleanupHLS();
                     this.channel.postMessage({ type: 'player-closed' });
                 });
             }
 
             notifyReady() {
-                // Tell main window we're ready
                 this.channel.postMessage({ type: 'player-ready' });
             }
+
+            // ============================================================
+            // HLS SESSION MANAGEMENT
+            // ============================================================
+
+            startSessionHLS(sessionId, playlistUrl) {
+                console.log(`[PopOut] HLS session: ${sessionId}, playlist: ${playlistUrl}`);
+                this.sessionId = sessionId;
+                this.hlsPlaylistUrl = playlistUrl;
+                this.isActive = true;
+
+                this.initializingElement.style.display = 'none';
+                this.playerContainer.style.display = 'block';
+
+                this.showLoop();
+                this.statusElement.textContent = 'Session started - idle';
+
+                // Initialize HLS.js
+                if (HLS_AVAILABLE) {
+                    this.initHLS(playlistUrl);
+                } else {
+                    console.warn('[PopOut] HLS.js not available, using legacy fallback');
+                    this.channel.postMessage({ type: 'player-request-legacy' });
+                    this.startPolling();
+                }
+            }
+
+            initHLS(playlistUrl) {
+                if (this.hls) {
+                    this.hls.destroy();
+                    this.hls = null;
+                }
+
+                this.hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: false,
+
+                    // Buffer settings - tolerant of generation delays
+                    maxBufferLength: 60,
+                    maxMaxBufferLength: 120,
+                    backBufferLength: 30,
+                    maxBufferHole: 5.0,
+                    maxStarvationDelay: 20,
+                    highBufferWatchdogPeriod: 3,
+
+                    // Hole/discontinuity handling
+                    nudgeOffset: 0.5,
+                    nudgeMaxRetry: 10,
+                    maxFragLookUpTolerance: 1.0,
+
+                    // VOD-like behavior (not live streaming)
+                    liveSyncDurationCount: 9999,
+                    liveMaxLatencyDurationCount: 99999,
+                    liveDurationInfinity: false,
+
+                    startPosition: 0,
+                    startLevel: -1,
+
+                    // Loading timeouts
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 6,
+                    levelLoadingTimeOut: 10000,
+                    levelLoadingMaxRetry: 6,
+                    fragLoadingTimeOut: 60000,
+                });
+
+                this.hls.attachMedia(this.videoElement);
+
+                this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('[PopOut-HLS] Manifest parsed, starting playback');
+                    this.videoElement.play().catch(e => console.error('[PopOut-HLS] Play failed:', e));
+                });
+
+                this.hls.on(Hls.Events.BUFFER_APPENDED, () => {
+                    // Content arrived - show HLS video, hide loop/thinking
+                    if (this.videoElement.style.display === 'none') {
+                        this.showHLSVideo();
+                        this.statusElement.textContent = 'Playing...';
+                    }
+                });
+
+                this.hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('[PopOut-HLS] Fatal error:', data.type, data.details);
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('[PopOut-HLS] Network error, attempting recovery...');
+                                this.hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('[PopOut-HLS] Media error, attempting recovery...');
+                                this.hls.recoverMediaError();
+                                break;
+                            default:
+                                console.error('[PopOut-HLS] Unrecoverable error');
+                                break;
+                        }
+                    } else {
+                        console.warn('[PopOut-HLS] Non-fatal error:', data.details);
+                    }
+                });
+
+                // Handle video ended (return to idle)
+                this.videoElement.addEventListener('ended', () => {
+                    console.log('[PopOut-HLS] Video ended, returning to idle');
+                    this.showLoop();
+                    this.currentThinkingVideo = null;
+                });
+
+                this.hlsInitialized = true;
+                this._hlsPlaylistLoaded = false;
+                console.log('[PopOut-HLS] Initialized, waiting for segments');
+            }
+
+            onHLSSegmentReady(data) {
+                if (!this.hlsInitialized || !this.hls) return;
+                if (data.sessionId !== this.sessionId) return;
+
+                console.log(`[PopOut-HLS] Segment ready: ${data.segmentIndex}`);
+
+                const playlistUrl = data.playlistUrl || this.hlsPlaylistUrl;
+
+                // Load playlist on 3rd segment (index 2) for buffering
+                if (data.segmentIndex === 2 && playlistUrl && !this._hlsPlaylistLoaded) {
+                    console.log('[PopOut-HLS] Loading playlist:', playlistUrl);
+                    this._hlsPlaylistLoaded = true;
+                    this.hls.loadSource(playlistUrl);
+                    this.showThinking();
+                    this.statusElement.textContent = 'Loading video...';
+                }
+
+                this.queueInfoElement.textContent = `Segments: ${data.segmentIndex + 1} ready`;
+            }
+
+            onHLSNewTurn(data) {
+                if (!this.hls) return;
+                if (data.sessionId !== this.sessionId) return;
+
+                console.log('[PopOut-HLS] New turn, reinitializing');
+
+                // Full reset for new response
+                this._hlsPlaylistLoaded = false;
+                this.hls.destroy();
+                this.hls = null;
+                this.hlsInitialized = false;
+
+                this.videoElement.pause();
+                this.videoElement.currentTime = 0;
+                this.videoElement.removeAttribute('src');
+                this.videoElement.style.display = 'none';
+
+                // Update playlist URL if provided
+                if (data.playlistUrl) {
+                    this.hlsPlaylistUrl = data.playlistUrl;
+                }
+
+                // Reinitialize
+                this.initHLS(this.hlsPlaylistUrl);
+                this.showThinking();
+            }
+
+            onHLSStreamComplete(data) {
+                if (data.sessionId !== this.sessionId) return;
+                console.log('[PopOut-HLS] Stream complete');
+                this.statusElement.textContent = 'Playback finishing...';
+                this._hlsPlaylistLoaded = false;
+            }
+
+            cleanupHLS() {
+                if (this.hls) {
+                    this.hls.destroy();
+                    this.hls = null;
+                }
+                this.hlsInitialized = false;
+                this._hlsPlaylistLoaded = false;
+            }
+
+            // ============================================================
+            // LEGACY FALLBACK - Chunk-based polling
+            // ============================================================
 
             startSession(sessionId) {
                 this.sessionId = sessionId;
                 this.videoQueue = [];
                 this.currentChunkIndex = 0;
+                this.isActive = true;
 
                 this.initializingElement.style.display = 'none';
                 this.playerContainer.style.display = 'block';
 
-                // Start with idle loop video
                 this.showLoop();
-
                 this.statusElement.textContent = 'Session started - idle';
-                console.log(`[VideoPlayer] Session started: ${sessionId}`);
+                console.log(`[PopOut] Legacy session: ${sessionId}`);
 
-                // Start polling for chunk statuses
                 this.startPolling();
             }
 
             queueChunk(chunkData) {
-                // Add to queue if not already present
                 const exists = this.videoQueue.some(c => c.chunk_index === chunkData.chunk_index);
 
                 if (!exists) {
                     this.videoQueue.push(chunkData);
                     this.videoQueue.sort((a, b) => a.chunk_index - b.chunk_index);
 
-                    console.log(`[VideoPlayer] Chunk queued: ${chunkData.chunk_index}`);
+                    console.log(`[PopOut] Chunk queued: ${chunkData.chunk_index}`);
                     this.updateQueueInfo();
 
-                    // Start playing if not already playing
                     if (!this.isPlaying) {
                         this.playNext();
                     }
@@ -262,7 +593,6 @@
             async checkQueueStatus() {
                 if (!this.sessionId) return;
 
-                // Check status of queued chunks
                 for (const chunk of this.videoQueue) {
                     if (chunk.status === 'completed') continue;
 
@@ -275,16 +605,15 @@
                                 chunk.status = 'completed';
                                 chunk.video_path = status.video_path;
 
-                                console.log(`[VideoPlayer] Chunk ${chunk.chunk_index} ready`);
+                                console.log(`[PopOut] Chunk ${chunk.chunk_index} ready`);
 
-                                // If this is the next chunk to play and we're not playing, start
                                 if (chunk.chunk_index === this.currentChunkIndex && !this.isPlaying) {
                                     this.playNext();
                                 }
                             }
                         }
                     } catch (error) {
-                        console.error(`[VideoPlayer] Error checking chunk status:`, error);
+                        console.error(`[PopOut] Chunk status error:`, error);
                     }
                 }
 
@@ -292,7 +621,6 @@
             }
 
             async playNext() {
-                // Find next chunk to play
                 const nextChunk = this.videoQueue.find(c =>
                     c.chunk_index === this.currentChunkIndex && c.status === 'completed'
                 );
@@ -300,7 +628,6 @@
                 if (!nextChunk) {
                     this.isPlaying = false;
 
-                    // Check if there are any pending/processing chunks
                     const hasPending = this.videoQueue.some(c =>
                         c.chunk_index >= this.currentChunkIndex &&
                         (c.status === 'queued' || c.status === 'processing')
@@ -309,27 +636,27 @@
                     if (hasPending) {
                         this.statusElement.textContent = 'Waiting for next chunk...';
                     } else {
-                        // No more chunks - return to idle loop
                         this.showLoop();
-                        this.statusElement.textContent = 'Idle';
-                        console.log('[VideoPlayer] Queue empty, returning to idle loop');
                     }
                     return;
                 }
 
-                // Switch to chunk video
-                this.showChunkVideo();
+                this.stopIdleRotation();
+                this.loopElement.style.display = 'none';
+                this.hideThinking();
+                this.videoElement.style.display = 'block';
+                this.videoElement.classList.add('active');
+
                 this.isPlaying = true;
                 this.statusElement.textContent = `Playing chunk ${nextChunk.chunk_index + 1}`;
 
-                console.log(`[VideoPlayer] Playing chunk ${nextChunk.chunk_index}`);
+                // Tell main window to mute mic while video plays
+                this.channel.postMessage({ type: 'vox-pause' });
 
                 try {
-                    // Load and play video
                     const chunk_id = `${this.sessionId}_chunk_${nextChunk.chunk_index}`;
                     const videoUrl = `/api/video/stream/${chunk_id}?t=${Date.now()}`;
 
-                    // Wait for video to load before playing
                     await new Promise((resolve, reject) => {
                         this.videoElement.onloadeddata = resolve;
                         this.videoElement.onerror = reject;
@@ -338,36 +665,43 @@
 
                     await this.videoElement.play();
 
-                    // Notify parent that chunk is playing
                     this.channel.postMessage({
                         type: 'chunk-playing',
                         data: { chunk_index: nextChunk.chunk_index }
                     });
 
                 } catch (error) {
-                    console.error('[VideoPlayer] Play error:', error);
+                    console.error('[PopOut] Play error:', error);
                     this.statusElement.textContent = 'Playback error - retrying...';
                     this.isPlaying = false;
-
-                    // Retry after a short delay
                     setTimeout(() => this.playNext(), 500);
                 }
             }
 
-            playPrevious() {
-                if (this.currentChunkIndex > 0) {
-                    this.currentChunkIndex--;
-                    this.videoElement.pause();
+            // Legacy video ended handler
+            initLegacyEndedHandler() {
+                this.videoElement.addEventListener('ended', () => {
+                    // Only handle if in legacy mode (no HLS)
+                    if (this.hlsInitialized) return;
+                    console.log('[PopOut] Video ended, next chunk...');
+                    this.currentChunkIndex++;
                     this.isPlaying = false;
                     this.playNext();
-                }
+                });
             }
+
+            // ============================================================
+            // CONTROLS
+            // ============================================================
 
             stop() {
                 this.videoElement.pause();
                 this.isPlaying = false;
+                if (this.hls) {
+                    this.hls.stopLoad();
+                }
                 this.showLoop();
-                this.statusElement.textContent = 'Stopped - idle';
+                this.statusElement.textContent = 'Stopped';
             }
 
             updateQueueInfo() {
@@ -382,6 +716,7 @@
 
         // Initialize player
         const player = new VideoPlayer();
+        player.initLegacyEndedHandler();
     </script>
 </body>
 </html>

@@ -38,6 +38,7 @@ def _fetch_memory_data():
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""SELECT lm.*,
                                em.takeaway,
+                               em.key_details,
                                em.summary_context,
                                em.summary_significance,
                                em.summary_tone,
@@ -55,18 +56,40 @@ def _fetch_memory_data():
         print(f"[memory_loader_experimental.py] >>>>>  Error fetching memories: {e}")
         return []
 
+FORMULAIC_PREFIXES = [
+    "I learned that ",
+    "I realized that ",
+    "I know that ",
+    "I have learned that ",
+    "I understand that ",
+    "I noticed that ",
+    "I saw that ",
+    "I recognized that ",
+    "I carry forward the insight that ",
+    "I carry forward the sense that ",
+]
+
 def _clean_field(text, prefixes_to_remove=None):
-    """Clean and normalize field text"""
+    """Clean and normalize field text, stripping formulaic LLM prefixes"""
     if not text:
         return ""
-    
+
     text = text.strip()
-    
+
     if prefixes_to_remove:
         for prefix in prefixes_to_remove:
             if text.lower().startswith(prefix.lower()):
                 text = text[len(prefix):].strip()
-    
+
+    # Strip formulaic "I learned that..." prefixes from LLM output
+    for prefix in FORMULAIC_PREFIXES:
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            # Capitalize first letter after stripping
+            if text and text[0].islower():
+                text = text[0].upper() + text[1:]
+            break
+
     return text
 
 # ============================================================================
@@ -122,9 +145,7 @@ def get_memories_structured() -> Optional[str]:
         if event:
             block += f"           Event: {event}\n"
     
-    header = "[LONG TERM MEMORIES]\nThese are structured memories from past conversations. Each memory block contains labeled fields describing what happened, when, and what you learned. Reference these memories naturally when they're relevant to the current conversation.\n\n"
-    
-    return header + block
+    return "<your_memories>\n" + block + "</your_memories>"
 
 # ============================================================================
 # FORMAT B: CONVERSATIONAL NARRATIVE
@@ -179,9 +200,7 @@ def get_memories_conversational() -> Optional[str]:
             memory_text = ". ".join(narrative_parts) + "."
             memories.append(memory_text)
     
-    header = "[LONG TERM MEMORIES]\nYou have memories from past conversations with Victor. These memories help you maintain continuity and understanding. Reference them naturally when relevant:\n\n"
-    
-    return header + "\n\n".join(memories)
+    return "<your_memories>\n" + "\n\n".join(memories) + "\n</your_memories>"
 
 # ============================================================================
 # FORMAT C: XML HYBRID (Anthropic recommended)
@@ -189,10 +208,11 @@ def get_memories_conversational() -> Optional[str]:
 
 def get_memories_xml(limit: int = 10) -> Optional[str]:
     """
-    FORMAT C: XML structure with natural language content
+    FORMAT C: XML structure with concise, actionable content
 
-    Pros: Structured (XML tags), natural content, metadata in attributes
-    Cons: Slightly more verbose than pure conversational
+    Leads with takeaway (the actionable insight), adds significance
+    only when it adds new information. Drops tier 4 (peripheral)
+    memories entirely — they're too weakly related to be useful.
 
     Args:
         limit: Maximum number of memories to return (default 10)
@@ -204,72 +224,44 @@ def get_memories_xml(limit: int = 10) -> Optional[str]:
     # Sort memories by tier (Tier 1 first, most relevant)
     mems_sorted = sorted(mems, key=lambda x: x.get("tier", 3))
 
-    # Apply limit after sorting
-    mems_sorted = mems_sorted[:limit]
-
     memories = []
 
     for row in mems_sorted:
-        # Extract and clean fields
+        tier = row.get("tier", 3)
+
+        # Drop tier 4 (peripheral) — too weakly related to be useful
+        if tier >= 4:
+            continue
+
+        key_details = _clean_field(row.get("key_details", ""))
         takeaway = _clean_field(row.get("takeaway", ""), ["[relational]", "adaptive"])
-        event = _clean_field(row.get("summary_event", ""))
-        temporal = _clean_field(row.get("temporal_description", ""))
-        emotion = _clean_field(row.get("emotion_label", ""))
+        if not key_details and not takeaway:
+            continue
+
         category = _clean_field(row.get("category", ""))
-        significance = _clean_field(row.get("summary_significance", ""))
-        tier = row.get("tier", 3)  # Default to tier 3 if not set
 
         # Map tier to relevance level
-        tier_label = {1: "primary", 2: "supporting", 3: "associative", 4: "peripheral"}.get(tier, "associative")
+        tier_label = {1: "primary", 2: "supporting", 3: "associative"}.get(tier, "associative")
 
-        # Build XML with natural language content
-        attributes = []
-        attributes.append(f'relevance="{tier_label}"')  # Add tier as relevance attribute
-        if temporal:
-            attributes.append(f'when="{temporal}"')
-        if emotion:
-            attributes.append(f'emotion="{emotion}"')
+        # Build attributes
+        attributes = [f'relevance="{tier_label}"']
         if category:
             attributes.append(f'category="{category}"')
-
         attr_string = " ".join(attributes)
 
-        # Build narrative content
-        content_parts = []
-        if event:
-            content_parts.append(event)
-        if takeaway:
-            content_parts.append(f"Key insight: {takeaway}")
+        # key_details has specific facts (names, quotes, details)
+        # takeaway is generic reflection — use only as fallback
+        content = key_details if key_details else takeaway
 
-        content = " ".join(content_parts)
+        memories.append(f"<memory {attr_string}>{content}</memory>")
 
-        if content:
-            memories.append(f"<memory {attr_string}>\n{content}\n</memory>")
+        if len(memories) >= limit:
+            break
 
-    header = """[LONG TERM MEMORIES]
-You have episodic memories from past conversations. Each memory is tagged with:
-- relevance: How directly it relates to current topics (primary > supporting > associative > peripheral)
-- when: Temporal context (when this happened)
-- emotion: Emotional context at the time
-- category: Type of interaction
+    if not memories:
+        return None
 
-Memory priority:
-- PRIMARY memories are directly relevant to current conversation topics
-- SUPPORTING memories provide strong contextual relevance
-- ASSOCIATIVE memories are thematically connected
-- PERIPHERAL memories are weakly connected background context
-
-When a memory is relevant to the current conversation:
-- Prioritize PRIMARY and SUPPORTING memories in your responses
-- Reference memories naturally ("I remember when we...")
-- Use the insights to inform your response
-- Connect past experiences to present context
-
-Your memories (sorted by relevance):
-
-"""
-
-    return header + "\n\n".join(memories)
+    return "<your_memories>\n" + "\n".join(memories) + "\n</your_memories>"
 
 # ============================================================================
 # MAIN FUNCTION - Switch between formats
@@ -295,6 +287,59 @@ def get_memories(format_type: str = "structured", limit: int = 10) -> Optional[s
     else:
         print(f"[memory_loader_experimental.py] Unknown format type: {format_type}, defaulting to structured")
         return get_memories_structured()
+
+# ============================================================================
+# SEMANTIC MEMORIES - Distilled knowledge from episodic memory clusters
+# ============================================================================
+
+def get_semantic_memories(limit: int = 10) -> Optional[str]:
+    """
+    Load active semantic memories ordered by reinforcement count.
+
+    Returns XML block for system prompt injection:
+    <your_knowledge>
+    <insight category="Relational" confirmed="7">Memory text here.</insight>
+    </your_knowledge>
+
+    Args:
+        limit: Maximum number of semantic memories to return
+
+    Returns:
+        Formatted XML string, or None if no semantic memories exist
+    """
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT memory_text, category, reinforcement_count
+                FROM semantic_memories
+                WHERE active = TRUE
+                ORDER BY reinforcement_count DESC, last_reinforced_at DESC
+                LIMIT %s
+            """, (limit,))
+            rows = cur.fetchall()
+        conn.close()
+
+        if not rows:
+            return None
+
+        insights = []
+        for row in rows:
+            attrs = []
+            if row.get('category'):
+                attrs.append(f'category="{row["category"]}"')
+            if row['reinforcement_count'] > 1:
+                attrs.append(f'confirmed="{row["reinforcement_count"]}"')
+            attr_str = " " + " ".join(attrs) if attrs else ""
+            insights.append(f"<insight{attr_str}>{row['memory_text']}</insight>")
+
+        print(f"[memory_loader_experimental.py] Loaded {len(rows)} semantic memories")
+        return "<your_knowledge>\n" + "\n".join(insights) + "\n</your_knowledge>"
+
+    except Exception as e:
+        print(f"[memory_loader_experimental.py] Error loading semantic memories: {e}")
+        return None
+
 
 if __name__ == "__main__":
     print(get_memories())

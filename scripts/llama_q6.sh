@@ -1,20 +1,21 @@
 #!/bin/bash
 
-source /venv/iris-v3/bin/activate
+source "$(dirname "$0")/paths.env"
+source "$IRIS_VENV/bin/activate"
 
-/programs/llama.cpp/build/bin/llama-server \
-  -m /models/llm_models/qwen/Qwen_Qwen3-32B-Q6_K.gguf\
+"$IRIS_LLAMA_SERVER" \
+  -m "$IRIS_ALT_MODEL" \
   --port 11434 \
   --host 0.0.0.0 \
-  --ctx-size 26000 \
+  -c 32768 \
   --jinja \
   -fa on\
   -ngl 99 \
   -sm none \
   -mg 0 \
-  -b 8192 \
+  -b 4096 \
   -ub 2048 \
-  -t 8 \
+  -t 4\
   -v \
   --cache-reuse 0 \
   --slots \

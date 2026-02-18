@@ -442,7 +442,7 @@ def _trigger_greeting_response(greeting_instruction: str):
 
         # Call system trigger endpoint with GREETING context mode
         # This will use minimal context to avoid overwhelming the greeting instruction
-        protocol = "https" if os.path.exists("/iris-v3/ssl/cert.pem") else "http"
+        protocol = "https" if os.path.exists(config.SSL_CERT_PATH) else "http"
         api_url = f"{protocol}://localhost:{config.PORT}/api/system/trigger"
         payload = {
             "content": greeting_instruction,

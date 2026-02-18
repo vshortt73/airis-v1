@@ -88,7 +88,7 @@ def determine_category(file_path: str, scan_directories: List[str]) -> str:
     for scan_dir in scan_directories:
         if file_path.startswith(scan_dir):
             # Use directory name as category
-            if scan_dir == "/iris-v3":
+            if scan_dir == config.PROJECT_ROOT:
                 return "project_code"
             else:
                 return os.path.basename(scan_dir.rstrip('/'))

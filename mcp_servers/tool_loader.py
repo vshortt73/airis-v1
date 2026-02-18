@@ -28,20 +28,36 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Keys that Ollama/Qwen doesn't support in JSON schema
+# Keys that Ollama/Qwen doesn't support in JSON schema metadata
+# NOTE: "title" here means the JSON Schema *metadata* field (e.g. {"title": "MyModel", "type": "object"}),
+# NOT a tool parameter named "title". We must preserve parameter names inside "properties" dicts.
 UNSUPPORTED_KEYS = {"title", "default", "anyOf"}
 
 
-def prune_schema(obj):
+def prune_schema(obj, _inside_properties=False):
     """
-    Remove fields that Ollama/Qwen chokes on
-    
-    Recursively removes 'title', 'default', 'anyOf' from schema objects
+    Remove JSON Schema metadata fields that Ollama/Qwen chokes on.
+
+    Recursively removes 'title', 'default', 'anyOf' from schema objects,
+    but preserves keys inside 'properties' dicts (those are tool parameter names,
+    not JSON Schema metadata).
     """
     if isinstance(obj, dict):
-        return {k: prune_schema(v) for k, v in obj.items() if k not in UNSUPPORTED_KEYS}
+        result = {}
+        for k, v in obj.items():
+            # Inside a "properties" dict, keys are parameter names — keep them all
+            if _inside_properties:
+                result[k] = prune_schema(v, _inside_properties=False)
+            elif k in UNSUPPORTED_KEYS:
+                continue  # Strip JSON Schema metadata keys
+            elif k == "properties":
+                # Entering a properties dict — children are parameter names, not metadata
+                result[k] = prune_schema(v, _inside_properties=True)
+            else:
+                result[k] = prune_schema(v, _inside_properties=False)
+        return result
     if isinstance(obj, list):
-        return [prune_schema(v) for v in obj]
+        return [prune_schema(v, _inside_properties=False) for v in obj]
     return obj
 
 
@@ -177,17 +193,147 @@ def get_tool_by_name(tool_name: str) -> Dict:
 def get_tool_count() -> int:
     """
     Get count of enabled tools
-    
+
     Returns:
         Number of enabled tools
     """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     try:
         cursor.execute("SELECT COUNT(*) FROM mcp_tools WHERE enabled = true")
         return cursor.fetchone()[0]
-        
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def upsert_discovered_tool(
+    tool_name: str,
+    server_name: str,
+    description: str = "",
+    input_schema: Dict = None
+) -> bool:
+    """
+    Insert or update a tool discovered via MCP protocol.
+
+    This function is called during MCP tool discovery to auto-register
+    new tools in the database. It uses INSERT ... ON CONFLICT to either:
+    - Insert a new tool (if tool_name doesn't exist)
+    - Update server_name, description, input_schema (if tool exists)
+
+    Existing tools retain their:
+    - enabled status
+    - priority
+    - custom_instructions
+    - icon
+    - tool_group, trigger_keywords, is_core (smart selection metadata)
+    - is_autonomous
+
+    Args:
+        tool_name: Unique tool identifier
+        server_name: MCP server that provides this tool
+        description: Tool description from MCP
+        input_schema: JSON Schema for tool parameters
+
+    Returns:
+        True if tool was inserted/updated, False on error
+    """
+    import json
+
+    if input_schema is None:
+        input_schema = {"type": "object", "properties": {}}
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Use ON CONFLICT to upsert
+        # Only update fields that come from MCP discovery
+        # Preserve user-configured fields (enabled, priority, custom_instructions, etc.)
+        cursor.execute("""
+            INSERT INTO mcp_tools (
+                tool_name,
+                server_name,
+                description,
+                input_schema,
+                enabled,
+                priority
+            ) VALUES (
+                %s, %s, %s, %s, true, 50
+            )
+            ON CONFLICT (tool_name) DO UPDATE SET
+                server_name = EXCLUDED.server_name,
+                description = COALESCE(NULLIF(EXCLUDED.description, ''), mcp_tools.description),
+                input_schema = CASE
+                    WHEN EXCLUDED.input_schema IS NOT NULL
+                         AND EXCLUDED.input_schema::text != '{}'
+                         AND EXCLUDED.input_schema::text != '{"type": "object", "properties": {}}'
+                    THEN EXCLUDED.input_schema
+                    ELSE mcp_tools.input_schema
+                END,
+                updated_at = NOW()
+        """, (
+            tool_name,
+            server_name,
+            description,
+            json.dumps(input_schema)
+        ))
+
+        conn.commit()
+
+        # Check if this was an insert (new tool) or update
+        if cursor.rowcount > 0:
+            # Check if tool already existed
+            cursor.execute(
+                "SELECT created_at, updated_at FROM mcp_tools WHERE tool_name = %s",
+                (tool_name,)
+            )
+            row = cursor.fetchone()
+            if row:
+                created, updated = row
+                # If created == updated (within 1 second), this was a new insert
+                if abs((updated - created).total_seconds()) < 1:
+                    print(f"[ToolLoader] Registered NEW tool: {tool_name} -> {server_name}")
+                else:
+                    print(f"[ToolLoader] Updated tool: {tool_name} -> {server_name}")
+
+        return True
+
+    except Exception as e:
+        print(f"[ToolLoader] Error upserting tool {tool_name}: {e}")
+        conn.rollback()
+        return False
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_tools_by_server(server_name: str) -> List[str]:
+    """
+    Get list of tool names registered to a specific server.
+
+    Args:
+        server_name: The MCP server name
+
+    Returns:
+        List of tool names
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT tool_name
+            FROM mcp_tools
+            WHERE server_name = %s AND enabled = true
+            ORDER BY priority ASC
+        """, (server_name,))
+
+        return [row[0] for row in cursor.fetchall()]
+
     finally:
         cursor.close()
         conn.close()

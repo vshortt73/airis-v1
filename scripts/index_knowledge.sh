@@ -5,14 +5,22 @@
 # Pattern: Follows nightly_memory_creation.sh
 
 export IRIS_DB_PASSWORD='yourpassword'
+export PGPASSWORD='yourpassword'
+
+# Database password — must be set in environment before running
+if [ -z "$IRIS_DB_PASSWORD" ]; then
+    echo "ERROR: IRIS_DB_PASSWORD not set. Export it before running this script."
+    exit 1
+fi
 set -o pipefail
 
 # ============================================
 # CONFIGURATION
 # ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/paths.env"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENV_PYTHON="/venv/iris-v3/bin/python"
+VENV_PYTHON="$IRIS_VENV/bin/python"
 
 # Paths
 INDEX_SCRIPT="$PROJECT_ROOT/backend/knowledge/indexer.py"

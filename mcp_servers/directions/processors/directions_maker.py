@@ -36,7 +36,11 @@ import numpy as np
 import pytesseract
 
 # Configuration
-PADDLEOCR_URL = os.environ.get("PADDLEOCR_URL", "http://node2:5200")
+try:
+    from app import config as _cfg
+    PADDLEOCR_URL = getattr(_cfg, 'PADDLEOCR_SERVER_URL', None) or os.environ.get("PADDLEOCR_URL", "http://localhost:5200")
+except ImportError:
+    PADDLEOCR_URL = os.environ.get("PADDLEOCR_URL", "http://localhost:5200")
 PADDLEOCR_TIMEOUT = 120.0  # seconds - deck plans can be large
 
 # Set up logging

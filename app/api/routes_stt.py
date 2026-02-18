@@ -15,19 +15,13 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app import config
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter()
 
-# Remote STT server on Node2
-STT_SERVER_URL = getattr(config, 'STT_SERVER_URL', 'http://node2:8600')
-
-
 def get_stt_url() -> str:
-    """Get the STT server URL from config or environment"""
-    env_url = os.environ.get('STT_SERVER_URL')
-    if env_url:
-        return env_url
-    return getattr(config, 'STT_SERVER_URL', 'http://node2:8600')
+    """Get the STT server URL from config (database source of truth)"""
+    return config.STT_SERVER_URL
 
 
 @router.post("/stt-upload")
@@ -35,6 +29,11 @@ async def stt_upload(file: UploadFile = File(...)):
     """
     Accept audio file, transcribe via remote Whisper server, return transcript
     """
+    if not is_node2_service_enabled("STT_ENABLED"):
+        return JSONResponse(
+            {"transcript": "[DISABLED]", "error": "STT service disabled (Node2 not available)"},
+            status_code=503
+        )
     try:
         stt_url = get_stt_url()
 
@@ -80,6 +79,8 @@ async def stt_upload(file: UploadFile = File(...)):
 @router.get("/stt-health")
 async def stt_health():
     """Check STT server health"""
+    if not is_node2_service_enabled("STT_ENABLED"):
+        return {"status": "disabled", "reason": "STT service disabled (Node2 not available)"}
     try:
         stt_url = get_stt_url()
 

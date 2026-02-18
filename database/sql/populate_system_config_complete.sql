@@ -53,7 +53,11 @@ INSERT INTO system_config (category, key, value, value_type, default_value, desc
 ('remote_services', 'PADDLEOCR_SERVER_URL', 'http://node2:5200', 'string', 'http://node2:5200', 'PaddleOCR server for deck plans/maps', true),
 ('remote_services', 'FREUD_URL', 'http://node2:11435', 'string', 'http://node2:11435', 'Freud dream guide endpoint (Node2 GPU 0)', true),
 ('remote_services', 'FREUD_MODEL', 'gemma3:4b', 'string', 'gemma3:4b', 'Dream processing model', true),
-('remote_services', 'MISTRAL_URL', 'http://node2:11437/v1/chat/completions', 'string', 'http://node2:11437/v1/chat/completions', 'Mistral sentiment analysis endpoint (Node2 GPU 1)', true)
+('remote_services', 'MISTRAL_URL', 'http://node2:11437/v1/chat/completions', 'string', 'http://node2:11437/v1/chat/completions', 'Mistral sentiment analysis endpoint (Node2 GPU 1)', true),
+('remote_services', 'COMFYUI_SERVER_URL', 'http://node2:8189', 'string', 'http://node2:8189', 'ComfyUI API endpoint (Node2)', true),
+('remote_services', 'COMFYUI_OUTPUT_PATH', '/home/captain/node2-mount/programs/ComfyUI/output', 'string', '/home/captain/node2-mount/programs/ComfyUI/output', 'ComfyUI output directory (NFS mount from Node2)', true),
+('remote_services', 'NODE2_HOST', 'node2', 'string', 'node2', 'Node2 hostname or IP for SSH and health checks', true),
+('remote_services', 'NODE2_SSH_USER', 'captain', 'string', 'captain', 'SSH username for Node2 operations', true)
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     description = EXCLUDED.description,
@@ -126,6 +130,24 @@ INSERT INTO system_config (category, key, value, value_type, default_value, desc
 ('features', 'TOOLS_ENABLE', 'true', 'bool', 'true', 'Enable tool calling', false),
 ('features', 'TOOL_RESULTS', 'true', 'bool', 'true', 'Include tool results in context', false),
 ('features', 'CONTEXT_DEBUG', 'false', 'bool', 'false', 'Log detailed token counting info', false)
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    description = EXCLUDED.description,
+    last_modified = NOW();
+
+-- ============================================================================
+-- NODE2 OPTIONAL FLAGS
+-- ============================================================================
+
+INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
+('features', 'NODE2_ENABLED', 'true', 'bool', 'true', 'Master toggle for Node2 GPU server. When false, all Node2-dependent services are disabled.', true),
+('features', 'STT_ENABLED', 'true', 'bool', 'true', 'Enable speech-to-text (Whisper on Node2). Requires NODE2_ENABLED.', false),
+('features', 'TTS_ENABLED', 'true', 'bool', 'true', 'Enable text-to-speech (XTTS on Node2). Requires NODE2_ENABLED.', false),
+('features', 'VIDEO_ENABLED', 'true', 'bool', 'true', 'Enable FLOAT video generation (Node2 GPU 0). Requires NODE2_ENABLED.', false),
+('features', 'GPU_MANAGER_ENABLED', 'true', 'bool', 'true', 'Enable Node2 GPU manager for service coordination. Requires NODE2_ENABLED.', false),
+('features', 'FLORENCE2_ENABLED', 'true', 'bool', 'true', 'Enable Florence2 vision model (Node2). Requires NODE2_ENABLED.', false),
+('features', 'PADDLEOCR_ENABLED', 'true', 'bool', 'true', 'Enable PaddleOCR service (Node2). Requires NODE2_ENABLED.', false),
+('features', 'DREAMS_ENABLED', 'true', 'bool', 'true', 'Enable dream processing (Freud on Node2). Requires NODE2_ENABLED.', false)
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     description = EXCLUDED.description,
@@ -239,6 +261,42 @@ ON CONFLICT (key) DO UPDATE SET
 
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
 ('context', 'CONTEXT_ROLES', '["user", "assistant", "tool"]', 'json', '["user", "assistant", "tool"]', 'Which roles to load into context', false)
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    description = EXCLUDED.description,
+    last_modified = NOW();
+
+-- ============================================================================
+-- FILE PATHS (localhost)
+-- ============================================================================
+
+INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
+('paths', 'PROJECT_ROOT', '/iris-v3', 'string', '/iris-v3', 'Project installation directory', true),
+('paths', 'VENV_PATH', '/venv/iris-v3', 'string', '/venv/iris-v3', 'Python virtual environment path', true),
+('paths', 'LLAMA_SERVER_PATH', '/programs/llama.cpp/build/bin/llama-server', 'string', '/programs/llama.cpp/build/bin/llama-server', 'llama.cpp server binary (localhost)', true),
+('paths', 'EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/', 'string', '/models/llm_models/huggingface/models/all-mpnet-base-v2/', 'Sentence transformer embedding model', true),
+('paths', 'HF_CACHE_DIR', '/home/captain/.cache/huggingface/hub', 'string', '/home/captain/.cache/huggingface/hub', 'HuggingFace model cache directory', true),
+('paths', 'EMOTION_MODEL_PATH', '/models/Memory-models/emotion_model_balanced', 'string', '/models/Memory-models/emotion_model_balanced', 'Emotion classification model directory', true),
+('paths', 'VALENCE_MODEL_PATH', '/models/Memory-models/valence_model', 'string', '/models/Memory-models/valence_model', 'Valence regression model directory', true),
+('paths', 'AROUSAL_MODEL_PATH', '/models/Memory-models/arousal_model', 'string', '/models/Memory-models/arousal_model', 'Arousal regression model directory', true),
+('paths', 'RHUBARB_PATH', '/home/captain/bin/rhubarb', 'string', '/home/captain/bin/rhubarb', 'Rhubarb lip-sync binary', true),
+('paths', 'SSL_CERT_PATH', '/iris-v3/ssl/cert.pem', 'string', '/iris-v3/ssl/cert.pem', 'SSL certificate for HTTPS', true),
+('paths', 'FLORENCE2_MODEL_PATH', '/models/vision/florence2', 'string', '/models/vision/florence2', 'Florence2 vision model directory', true),
+('paths', 'MAIN_MODEL_GGUF', '/localmodels/qwen/Qwen3-32B-Q4_K_M.gguf', 'string', '/localmodels/qwen/Qwen3-32B-Q4_K_M.gguf', 'Primary LLM model file (localhost GPU 0)', true),
+('paths', 'ALT_MODEL_GGUF', '/models/llm_models/qwen/Qwen3-30B-A3B-abliterated-erotic.Q5_K_M.gguf', 'string', '/models/llm_models/qwen/Qwen3-30B-A3B-abliterated-erotic.Q5_K_M.gguf', 'Alternative LLM model file (localhost GPU 0)', true)
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    description = EXCLUDED.description,
+    last_modified = NOW();
+
+-- ============================================================================
+-- NODE2 FILE PATHS (reference only — not consumed by Node2 services)
+-- ============================================================================
+
+INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
+('node2_paths', 'FREUD_MODEL_GGUF', '/models/llm_models/gemma/gemma-3-4b-it-Q5_K_M.gguf', 'string', '/models/llm_models/gemma/gemma-3-4b-it-Q5_K_M.gguf', 'Freud dream model (Node2 GPU 0)', false),
+('node2_paths', 'VISION_MODEL_GGUF', '/models/vision/pixtral/pixtral-12b-Q4_K_M.gguf', 'string', '/models/vision/pixtral/pixtral-12b-Q4_K_M.gguf', 'Vision model (Node2 GPU 0)', false),
+('node2_paths', 'SENTIMENT_MODEL_GGUF', '/models/llm_models/mistral/mistral-7b-instruct-v0.3-q4_k_m.gguf', 'string', '/models/llm_models/mistral/mistral-7b-instruct-v0.3-q4_k_m.gguf', 'Sentiment model (Node2 GPU 1)', false)
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     description = EXCLUDED.description,

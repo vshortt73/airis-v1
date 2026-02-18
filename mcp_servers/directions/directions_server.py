@@ -99,53 +99,58 @@ def _handle_locations(deck: Optional[int] = None) -> dict:
 
 
 @server.register_tool
-def ship(
-    action: str,
-    start: str = None,
-    end: str = None,
+def ship_directions(
+    start: str,
+    end: str
+) -> dict:
+    """
+    Get walking directions between two locations on the ship.
+
+    Args:
+        start: Starting location name (e.g. "Schooner Bar")
+        end: Destination location name (e.g. "Windjammer Marketplace")
+
+    Returns:
+        dict with route directions, deck info, and step count
+    """
+    print(f"[ship] directions: {start} -> {end}", file=sys.stderr)
+    if not start or not end:
+        missing = []
+        if not start:
+            missing.append("start")
+        if not end:
+            missing.append("end")
+        return {"success": False, "error": f"Missing: {', '.join(missing)}"}
+    return _handle_directions(start, end)
+
+
+@server.register_tool
+def ship_locations(
     deck: int = None
 ) -> dict:
     """
-    Unified ship navigation tool.
-
-    Actions:
-        - "directions": Get walking directions between two locations
-        - "locations": List available locations (optionally by deck)
+    List locations on the ship, optionally filtered by deck number.
 
     Args:
-        action: "directions" or "locations"
-        start: Starting location (required for directions)
-        end: Destination location (required for directions)
-        deck: Filter locations by deck number (optional, for locations)
+        deck: Deck number to filter by (optional, omit for all decks)
 
     Returns:
-        dict with action-specific navigation data
-
-    Examples:
-        ship(action="directions", start="carousel", end="zip line")
-        ship(action="locations")
-        ship(action="locations", deck=6)
+        dict with ship name and list of locations
     """
+    print(f"[ship] locations: deck={deck}", file=sys.stderr)
+    return _handle_locations(deck)
+
+
+# Keep unified entry point for backwards compatibility (not exposed to model)
+def ship(action: str, start: str = None, end: str = None, deck: int = None) -> dict:
+    """Legacy unified entry point — kept for any direct Python callers."""
     action = action.lower().strip()
-    print(f"[ship] Action: {action}", file=sys.stderr)
-
     if action == "directions":
-        if not start or not end:
-            return {
-                "success": False,
-                "error": "start and end parameters required for directions"
-            }
-        return _handle_directions(start, end)
-
+        return ship_directions(start=start, end=end)
     elif action in ("locations", "list"):
-        return _handle_locations(deck)
-
+        return ship_locations(deck=deck)
     else:
-        return {
-            "success": False,
-            "error": f"Unknown action: {action}",
-            "valid_actions": ["directions", "locations"]
-        }
+        return {"success": False, "error": f"Unknown action: {action}"}
 
 
 if __name__ == "__main__":
@@ -160,8 +165,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"WARNING: Could not load ship map: {e}", file=sys.stderr)
 
-    print("\nTool: ship(action, start?, end?, deck?)", file=sys.stderr)
-    print("Actions: directions, locations", file=sys.stderr)
+    print("\nTools: ship_directions(start, end), ship_locations(deck?)", file=sys.stderr)
     print("Starting server...", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     server.run()

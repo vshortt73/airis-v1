@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from database.config_loader import get_config, create_or_update_config
 from app import config
 from core.websocket_broadcast import broadcast
+from core.node2_check import is_node2_service_enabled
 
 # Config keys for video settings
 CONFIG_VIDEO_REFERENCE_IMAGE = "VIDEO_REFERENCE_IMAGE_PATH"
@@ -34,12 +35,13 @@ router = APIRouter(tags=["video"])
 video_sessions: Dict[str, dict] = {}
 video_queues: Dict[str, List[dict]] = {}
 
-# Paths
-TEMP_DIR = Path("/iris-v3/assets/temp")
-REP_DIR = Path("/iris-v3/static")
+# Paths (derived from config.PROJECT_ROOT)
+_PROJECT = Path(config.PROJECT_ROOT)
+TEMP_DIR = _PROJECT / "assets" / "temp"
+REP_DIR = _PROJECT / "static"
 VIDEO_DIR = TEMP_DIR / "videos"
 UPLOAD_DIR = TEMP_DIR / "uploads"
-REFERENCE_DIR = Path("/iris-v3/assets/video_references")
+REFERENCE_DIR = _PROJECT / "assets" / "video_references"
 HLS_DIR = TEMP_DIR / "hls"  # HLS segments and playlists
 
 # Ensure directories exist
@@ -185,19 +187,9 @@ class HLSSession:
 # Active HLS sessions
 hls_sessions: Dict[str, HLSSession] = {}
 
-# Remote FLOAT server configuration
-# Default to Node2's Tailscale address
-FLOAT_SERVER_URL = getattr(config, 'FLOAT_SERVER_URL', 'http://node2:8800')
-
-
 def get_float_url() -> str:
-    """Get the FLOAT server URL from config or environment"""
-    # Check environment first
-    env_url = os.environ.get('FLOAT_SERVER_URL')
-    if env_url:
-        return env_url
-    # Then config
-    return getattr(config, 'FLOAT_SERVER_URL', 'http://node2:8800')
+    """Get the FLOAT server URL from config (database source of truth)"""
+    return config.FLOAT_SERVER_URL
 
 
 # Pydantic models
@@ -379,6 +371,8 @@ async def end_remote_float_session(remote_session_id: str):
 @router.post("/api/video/start-session-saved")
 async def start_session_with_saved_image(params: StartSessionRequest):
     """Start a new video session using the saved reference image"""
+    if not is_node2_service_enabled("VIDEO_ENABLED"):
+        raise HTTPException(status_code=503, detail="Video service disabled (Node2 not available)")
     try:
         # Request GPU for FLOAT service
         from core.gpu_manager import request_gpu
@@ -444,6 +438,8 @@ async def start_session_with_saved_image(params: StartSessionRequest):
 @router.post("/api/video/start-session")
 async def start_session(image_id: str, params: StartSessionRequest):
     """Start a new video streaming session"""
+    if not is_node2_service_enabled("VIDEO_ENABLED"):
+        raise HTTPException(status_code=503, detail="Video service disabled (Node2 not available)")
     try:
         # Request GPU for FLOAT service
         from core.gpu_manager import request_gpu
@@ -751,6 +747,8 @@ async def end_session(session_id: str):
 @router.get("/api/video/health")
 async def health_check():
     """Check if video system is ready"""
+    if not is_node2_service_enabled("VIDEO_ENABLED"):
+        return {"status": "disabled", "reason": "Video service disabled (Node2 not available)"}
     float_url = get_float_url()
 
     try:

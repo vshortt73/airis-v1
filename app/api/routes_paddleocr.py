@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from services.paddleocr_service import get_paddleocr_service
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
@@ -55,6 +56,8 @@ class TextDetection(BaseModel):
 @router.get("/status")
 async def get_status():
     """Get PaddleOCR service status."""
+    if not is_node2_service_enabled("PADDLEOCR_ENABLED"):
+        return {"status": "disabled", "reason": "PaddleOCR service disabled (Node2 not available)"}
     service = get_paddleocr_service()
     return service.get_status()
 
@@ -95,6 +98,8 @@ async def analyze_image(request: OCRRequest):
     - center: [x, y] center point
     - confidence: Recognition confidence (0-1)
     """
+    if not is_node2_service_enabled("PADDLEOCR_ENABLED"):
+        raise HTTPException(status_code=503, detail="PaddleOCR service disabled (Node2 not available)")
     service = get_paddleocr_service()
 
     result = service.run_ocr(
@@ -219,6 +224,8 @@ async def get_spatial_map(request: OCRRequest):
 @router.get("/health")
 async def health():
     """Health check endpoint."""
+    if not is_node2_service_enabled("PADDLEOCR_ENABLED"):
+        return {"status": "disabled", "reason": "PaddleOCR service disabled (Node2 not available)"}
     service = get_paddleocr_service()
     status = service.get_status()
     return {

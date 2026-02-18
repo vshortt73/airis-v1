@@ -294,6 +294,7 @@ async def list_ui_videos():
 
 if __name__ == "__main__":
     import uvicorn
+    import threading
     from pathlib import Path
 
     # SSL certificate paths
@@ -301,34 +302,68 @@ if __name__ == "__main__":
     ssl_keyfile = ssl_dir / "key.pem"
     ssl_certfile = ssl_dir / "cert.pem"
 
+    # Port layout: 8000 = HTTP, 8443 = HTTPS (standard convention)
+    HTTP_PORT = config.PORT          # 8000
+    HTTPS_PORT = 8443
+
     # Check if SSL certificates exist
     use_ssl = ssl_keyfile.exists() and ssl_certfile.exists()
-    protocol = "HTTPS" if use_ssl else "HTTP"
 
-    print(f"[main.py] Starting Iris v3 on {config.HOST}:{config.PORT} ({protocol})")
+    print(f"[main.py] Starting Iris v3")
     print(f"[main.py] Model: {config.OLLAMA_MODEL}")
     print(f"[main.py] Context Window: {config.OLLAMA_CONTEXT_WINDOW} tokens")
     print(f"[main.py] Session Timeout: {config.SESSION_TIMEOUT_MINUTES} minutes")
 
     if use_ssl:
+        # Dual-port setup: HTTPS on 8443 (primary), HTTP on 8000 (redirect)
+
+        # --- HTTP redirect server (port 8000) ---
+        from fastapi import FastAPI as _FastAPI, Request
+        from fastapi.responses import PlainTextResponse, RedirectResponse
+
+        redirect_app = _FastAPI()
+
+        @redirect_app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+        async def _redirect_to_https(request: Request, path: str = ""):
+            https_url = f"https://{request.headers.get('host', 'localhost').split(':')[0]}:{HTTPS_PORT}/{path}"
+            if str(request.query_params):
+                https_url += f"?{request.query_params}"
+            return RedirectResponse(url=https_url, status_code=301)
+
+        def _run_http_redirect():
+            """Serve HTTP redirect on port 8000."""
+            uvicorn.run(
+                redirect_app,
+                host=config.HOST,
+                port=HTTP_PORT,
+                log_level="warning",
+            )
+
         print(f"[main.py] SSL Enabled: {ssl_certfile}")
-        print(f"[main.py] Access at: https://{config.HOST}:{config.PORT}/")
+        print(f"[main.py] HTTPS: https://{config.HOST}:{HTTPS_PORT}/")
+        print(f"[main.py] HTTP redirect: http://{config.HOST}:{HTTP_PORT}/ → HTTPS")
+
+        # Start HTTP redirect in background thread
+        redirect_thread = threading.Thread(target=_run_http_redirect, daemon=True)
+        redirect_thread.start()
+
+        # Main HTTPS server on 8443
         uvicorn.run(
             app,
             host=config.HOST,
-            port=config.PORT,
+            port=HTTPS_PORT,
             log_level="info",
             ssl_keyfile=str(ssl_keyfile),
             ssl_certfile=str(ssl_certfile),
-            ws="wsproto"  # Use wsproto instead of deprecated websockets
+            ws="wsproto"
         )
     else:
         print(f"[main.py] SSL Disabled (no certificates found)")
-        print(f"[main.py] Access at: http://{config.HOST}:{config.PORT}/")
+        print(f"[main.py] Access at: http://{config.HOST}:{HTTP_PORT}/")
         uvicorn.run(
             app,
             host=config.HOST,
-            port=config.PORT,
+            port=HTTP_PORT,
             log_level="info",
-            ws="wsproto"  # Use wsproto instead of deprecated websockets
+            ws="wsproto"
         )

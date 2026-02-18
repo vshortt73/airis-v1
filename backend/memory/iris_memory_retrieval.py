@@ -27,6 +27,10 @@ import math
 import time
 import argparse
 
+# Import config early — needed for model paths and LLM endpoints
+from app import config
+import httpx
+
 # ==============================
 # Database config
 # ==============================
@@ -43,15 +47,9 @@ delete_flag = False
 # Models and embedding
 # ==============================
 
-
-
-# emo_tok = AutoTokenizer.from_pretrained(emo_dir, local_files_only=True)
-# emo_model = AutoModelForSequenceClassification.from_pretrained(emo_dir, local_files_only=True)
-
-
-EMO_MODEL_DIR = "/models/Memory-models/emotion_model_balanced"  # <-- your balanced model
-VALENCE_MODEL_PATH = "/models/Memory-models/valence_model"
-AROUSAL_MODEL_PATH = "/models/Memory-models/arousal_model"
+EMO_MODEL_DIR = config.EMOTION_MODEL_PATH
+VALENCE_MODEL_PATH = config.VALENCE_MODEL_PATH
+AROUSAL_MODEL_PATH = config.AROUSAL_MODEL_PATH
 MAX_LEN = 256
 # Always use CPU for memory retrieval - this is a background job that shouldn't
 # compete with main inference (Qwen) or other GPU services for VRAM
@@ -60,10 +58,6 @@ DEVICE = "cpu"
 
 # Use shared embedding singleton (thread-safe, prevents race condition)
 from core.embeddings import get_embedding_model
-
-# Import config for LLM endpoints
-from app import config
-import httpx
 
 # Force offline mode
 os.environ["HF_HUB_OFFLINE"] = "1"

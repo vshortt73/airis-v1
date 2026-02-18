@@ -4,12 +4,13 @@ Compare llama3.1:8b vs qwen2.5:14b for topic label generation
 Tests on 5 random memories to see which produces better labels faster
 """
 
+import os
 import httpx
 import psycopg2
 import json
 import time
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def generate_topic_label(context, event, takeaway, model_name):
     """Generate topic label using specified model"""

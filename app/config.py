@@ -24,8 +24,8 @@ DB_HOST = "localhost"
 DB_PORT = 5432
 DB_NAME = "irisdb"
 DB_USER = "irisuser"
-# IMPORTANT: Use IRIS_DB_PASSWORD environment variable
-DB_PASSWORD = os.environ.get('IRIS_DB_PASSWORD', 'yourpassword')
+# IMPORTANT: Use IRIS_DB_PASSWORD environment variable (required)
+DB_PASSWORD = os.environ.get('IRIS_DB_PASSWORD', '')
 
 # ============================================
 # SERVER (Bootstrap - Required before DB load)
@@ -76,6 +76,10 @@ PORT = 8000
 # Fallback default for document processing
 DOCUMENT_CONTEXT_BUDGET = 8000
 
+# Node2 SSH access (will be overwritten by database)
+NODE2_HOST = "node2"
+NODE2_SSH_USER = "captain"
+
 # Inference backend (llamacpp or sglang) - overwritten by database
 INFERENCE_BACKEND = "llamacpp"
 
@@ -83,6 +87,9 @@ INFERENCE_BACKEND = "llamacpp"
 BATCH_TRIM_ENABLED = True
 BATCH_TRIM_SIZE = 5
 BATCH_TRIM_HEADROOM_TOKENS = 4000
+
+# Smart tool selection - only send relevant tools per snapshot window
+SMART_TOOL_SELECTION = False
 
 # # Session
 # SESSION_TIMEOUT_MINUTES = 30
@@ -102,6 +109,17 @@ BATCH_TRIM_HEADROOM_TOKENS = 4000
 # EPISODIC_MEMORIES = True
 # ACTIVE_SEEDS = True
 # TOOL_RESULTS = True
+
+# Meeting transcription (fallback defaults - overwritten by database)
+TRANSCRIBE_ENABLED = False
+TRANSCRIBE_SERVER_URL = "http://node2:8500"
+
+# Calendar (fallback defaults - overwritten by database)
+CALENDAR_ENABLED = False
+CALENDAR_REMINDER_WINDOW_HOURS = 6
+CALENDAR_REMINDER_DEFAULT_HOURS_BEFORE = 4
+CALENDAR_TIMEZONE = "America/New_York"
+CALENDAR_GOOGLE_SYNC_ENABLED = False
 
 # # Emotional State
 # EMOTIONAL_DECAY_PER_TURN = 0.05
@@ -213,7 +231,7 @@ def load_database_config():
         inject_into_module(config_module)
 
         # Verify critical values were loaded
-        if config_module.SERVER_SIDE_TTS_ROUTING is None:
+        if getattr(config_module, 'SERVER_SIDE_TTS_ROUTING', None) is None:
             print("[config.py] !! CRITICAL: SERVER_SIDE_TTS_ROUTING not loaded from database!")
             print("[config.py] !! Check that system_config table has this key")
             config_module.SERVER_SIDE_TTS_ROUTING = False  # Safe default

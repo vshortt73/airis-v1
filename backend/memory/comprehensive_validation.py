@@ -10,6 +10,7 @@ Performs deep analysis of memory retrieval quality by:
 5. Generating a thorough report
 """
 
+import os
 import sys
 sys.path.insert(0, '/iris-v3/backend/memory')
 
@@ -19,7 +20,7 @@ import psycopg2
 from psycopg2.extras import DictCursor
 import re
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def analyze_conversation_topic(session_id):
     """

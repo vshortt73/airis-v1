@@ -645,6 +645,111 @@ def forecast_get(
 
 
 # ============================================================================
+# NEWS HEADLINES TOOL
+# ============================================================================
+
+RSS_FEEDS = {
+    "general": [
+        ("Reuters Top News", "https://feeds.reuters.com/reuters/topNews"),
+        ("AP News", "https://rsshub.app/apnews/topics/apf-topnews"),
+        ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ],
+    "technology": [
+        ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+        ("TechCrunch", "https://techcrunch.com/feed/"),
+        ("The Verge", "https://www.theverge.com/rss/index.xml"),
+    ],
+    "science": [
+        ("Science Daily", "https://www.sciencedaily.com/rss/all.xml"),
+        ("Phys.org", "https://phys.org/rss-feed/"),
+        ("Nature News", "https://www.nature.com/nature.rss"),
+    ],
+    "world": [
+        ("Reuters World", "https://feeds.reuters.com/Reuters/worldNews"),
+        ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+        ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+    ],
+}
+
+
+@server.register_tool
+def news_headlines(
+    category: str = "general",
+    max_results: int = 10
+) -> Dict[str, Any]:
+    """
+    Get latest news headlines from RSS feeds.
+
+    Args:
+        category: News category - "general", "technology", "science", or "world" (default: "general")
+        max_results: Maximum number of headlines to return (default: 10, max: 25)
+
+    Returns:
+        dict: News headlines including:
+            - success: bool
+            - category: str
+            - headlines: list of {title, source, url, published, summary}
+            - count: int
+            - error: str (only if success=False)
+
+    Example:
+        >>> news_headlines(category="technology", max_results=5)
+    """
+    try:
+        max_results = min(max_results, 25)
+        feeds = RSS_FEEDS.get(category, RSS_FEEDS["general"])
+        if category not in RSS_FEEDS:
+            print(f"[news_headlines] Unknown category '{category}', using 'general'", file=sys.stderr)
+            category = "general"
+
+        print(f"[news_headlines] Fetching {category} news from {len(feeds)} feeds", file=sys.stderr)
+
+        all_entries = []
+        for feed_name, feed_url in feeds:
+            try:
+                feed = feedparser.parse(feed_url)
+                for entry in feed.entries[:max_results]:
+                    summary = entry.get("summary", "")
+                    # Strip HTML from summary
+                    if summary and "<" in summary:
+                        from bs4 import BeautifulSoup as BS
+                        summary = BS(summary, "html.parser").get_text()
+                    # Truncate long summaries
+                    if len(summary) > 300:
+                        summary = summary[:297] + "..."
+
+                    all_entries.append({
+                        "title": entry.get("title", "No title"),
+                        "source": feed_name,
+                        "url": entry.get("link", ""),
+                        "published": entry.get("published", "Unknown"),
+                        "summary": summary,
+                    })
+            except Exception as e:
+                print(f"[news_headlines] Failed to fetch {feed_name}: {e}", file=sys.stderr)
+                continue
+
+        # Sort by published date (newest first) and limit
+        headlines = all_entries[:max_results]
+
+        print(f"[news_headlines] ✓ Got {len(headlines)} headlines", file=sys.stderr)
+        return {
+            "success": True,
+            "category": category,
+            "headlines": headlines,
+            "count": len(headlines),
+        }
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[news_headlines] Error: {error_msg}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": error_msg
+        }
+
+
+# ============================================================================
 # FACE RECOGNITION TOOLS
 # ============================================================================
 
@@ -989,39 +1094,74 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
             print(f"[webcam_recognize] Running vision analysis...", file=sys.stderr)
 
             try:
-                # Read image as base64 for vision service
-                with open(latest_frame_path, 'rb') as f:
-                    image_bytes = f.read()
-                image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                # Request GPU for vision service via GPU Manager
+                # This ensures vision model is loaded and other GPU 0 services are stopped
+                from core.gpu_manager import request_gpu, get_gpu_manager
+                import asyncio
 
-                from inference.vision_service import get_vision_service
-                service = get_vision_service()
+                print(f"[webcam_recognize] Requesting GPU for vision...", file=sys.stderr)
 
-                # Ensure server is available
-                if not service.is_loaded():
-                    service.load_model()
+                # Run async GPU request - handle both sync and async contexts
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Already in async context - can't use asyncio.run
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, request_gpu("vision"))
+                        gpu_success, gpu_error = future.result(timeout=90)
+                except RuntimeError:
+                    # No running loop - safe to use asyncio.run
+                    gpu_success, gpu_error = asyncio.run(request_gpu("vision"))
 
-                if service.is_loaded():
-                    # Build prompt - include who we recognized for context
-                    if vision_prompt:
-                        prompt = vision_prompt
-                    elif recognized_names:
-                        prompt = f"Describe what you see in this image. I already know {', '.join(recognized_names)} is visible. Focus on what they're doing, objects they're holding or interacting with, and anything else notable in the scene."
-                    else:
-                        prompt = "Describe what you see in this image. Focus on people, what they're doing, objects they're holding, and anything notable or interesting."
-
-                    vision_result = service.analyze_image(image_base64, prompt)
-
-                    if vision_result['success']:
-                        scene_description = vision_result['result']
-                        print(f"[webcam_recognize] ✓ Vision analysis complete ({vision_result.get('inference_time', 0):.2f}s)", file=sys.stderr)
-                    else:
-                        print(f"[webcam_recognize] ⚠️ Vision analysis failed: {vision_result.get('error')}", file=sys.stderr)
+                if not gpu_success:
+                    print(f"[webcam_recognize] ⚠️ GPU request failed: {gpu_error}", file=sys.stderr)
+                    scene_description = f"Vision temporarily unavailable: {gpu_error}"
                 else:
-                    print(f"[webcam_recognize] ⚠️ Vision server not available, skipping scene description", file=sys.stderr)
+                    print(f"[webcam_recognize] ✓ GPU acquired for vision", file=sys.stderr)
+
+                    # Mark GPU as busy during processing
+                    gpu = get_gpu_manager()
+                    gpu.mark_busy()
+
+                    try:
+                        # Read image as base64 for vision service
+                        with open(latest_frame_path, 'rb') as f:
+                            image_bytes = f.read()
+                        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+                        from inference.vision_service import get_vision_service
+                        service = get_vision_service()
+
+                        # Ensure server is available (should be after GPU request succeeded)
+                        if not service.is_loaded():
+                            service.load_model()
+
+                        if service.is_loaded():
+                            # Build prompt - include who we recognized for context
+                            if vision_prompt:
+                                prompt = vision_prompt
+                            elif recognized_names:
+                                prompt = f"Describe what you see in this image. I already know {', '.join(recognized_names)} is visible. Focus on what they're doing, objects they're holding or interacting with, and anything else notable in the scene."
+                            else:
+                                prompt = "Describe what you see in this image. Focus on people, what they're doing, objects they're holding, and anything notable or interesting."
+
+                            vision_result = service.analyze_image(image_base64, prompt)
+
+                            if vision_result['success']:
+                                scene_description = vision_result['result']
+                                print(f"[webcam_recognize] ✓ Vision analysis complete ({vision_result.get('inference_time', 0):.2f}s)", file=sys.stderr)
+                            else:
+                                print(f"[webcam_recognize] ⚠️ Vision analysis failed: {vision_result.get('error')}", file=sys.stderr)
+                        else:
+                            print(f"[webcam_recognize] ⚠️ Vision server not available after GPU request", file=sys.stderr)
+                    finally:
+                        # Always mark GPU idle when done
+                        gpu.mark_idle()
 
             except Exception as vision_err:
                 print(f"[webcam_recognize] ⚠️ Vision analysis error: {vision_err}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
 
         # ============================================================
         # Combined Results
@@ -1050,6 +1190,88 @@ def webcam_recognize(camera_id: int = 0, similarity_threshold: float = None,
 
 
 # ============================================================================
+# UNIFIED: WEATHER TOOL
+# ============================================================================
+@server.register_tool
+def weather(
+    location: str,
+    action: str = "current",
+    units: str = "imperial"
+) -> Dict[str, Any]:
+    """
+    Get weather information for a location.
+
+    Args:
+        location: City name, ZIP code, or coordinates (e.g., "Seattle", "90210")
+        action: "current" for right now, "forecast" for the week ahead
+        units: "metric" (Celsius) or "imperial" (Fahrenheit)
+
+    Returns:
+        Current conditions or multi-day forecast from wttr.in
+    """
+    if action == "forecast":
+        return forecast_get(location)
+    else:
+        return weather_get(location, units)
+
+
+# ============================================================================
+# UNIFIED: RESEARCH TOOL
+# ============================================================================
+@server.register_tool
+async def research(
+    query: str,
+    source: str = "arxiv",
+    max_results: int = 5
+) -> Any:
+    """
+    Search academic literature for papers and articles.
+
+    Args:
+        query: Search query (keywords, authors, topics)
+        source: "arxiv" for science/CS/physics/math preprints,
+                "pubmed" for biomedical and life sciences
+        max_results: Maximum results to return (default: 5, max: 20)
+
+    Returns:
+        List of papers with titles, authors, abstracts, and links
+    """
+    if source == "pubmed":
+        return await pubmed_search(query, max_results)
+    else:
+        return await arxiv_search(query, max_results)
+
+
+# ============================================================================
+# UNIFIED: FACE TOOL
+# ============================================================================
+@server.register_tool
+async def face(
+    action: str = "status",
+    name: str = None
+) -> Dict[str, Any]:
+    """
+    Interact with the face recognition system.
+
+    Args:
+        action: "status" for database stats, "info" for a specific person,
+                "present" for who's currently detected by background monitoring
+        name: Person's name (required for "info" action)
+
+    Returns:
+        Face recognition data based on action
+    """
+    if action == "info":
+        if not name:
+            return {"success": False, "error": "name is required for 'info' action"}
+        return await get_person_info(name)
+    elif action == "present":
+        return await list_detected_faces()
+    else:
+        return await face_database_status()
+
+
+# ============================================================================
 # SERVER STARTUP
 # ============================================================================
 
@@ -1058,15 +1280,13 @@ if __name__ == "__main__":
     print("IRIS INFO SERVER", file=sys.stderr)
     print("="*60, file=sys.stderr)
     print(f"Tools available:", file=sys.stderr)
-    print(f"  - weather_get: Get current weather for a location", file=sys.stderr)
+    print(f"  - weather: Unified weather (current + forecast)", file=sys.stderr)
+    print(f"  - research: Unified academic search (arXiv + PubMed)", file=sys.stderr)
+    print(f"  - face: Unified face DB (status + info + present)", file=sys.stderr)
     print(f"  - web_search: Search the web with keywords", file=sys.stderr)
     print(f"  - url_fetch: Fetch content from a specific URL", file=sys.stderr)
-    print(f"  - arxiv_search: Search arXiv for academic papers", file=sys.stderr)
-    print(f"  - pubmed_search: Search PubMed for biomedical literature", file=sys.stderr)
-    print(f"  - face_database_status: Get face recognition statistics", file=sys.stderr)
-    print(f"  - list_detected_faces: List currently detected people", file=sys.stderr)
-    print(f"  - get_person_info: Get detailed info about a person", file=sys.stderr)
-    print(f"  - webcam_recognize: Look at webcam (face recognition + vision AI scene description)", file=sys.stderr)
+    print(f"  - news_headlines: RSS news headlines", file=sys.stderr)
+    print(f"  - webcam_recognize: Active webcam capture + vision AI", file=sys.stderr)
     print(f"Starting server...", file=sys.stderr)
     print("="*60, file=sys.stderr)
     server.run()

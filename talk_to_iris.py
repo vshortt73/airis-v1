@@ -16,7 +16,7 @@ async def talk_to_iris(message, sender='claude_code'):
         message: Message text to send
         sender: Sender identifier (default 'claude_code')
     """
-    uri = "wss://localhost:8000/ws/chat"
+    uri = "wss://localhost:8443/ws/chat"
 
     full_response = ""
 

@@ -3,7 +3,7 @@
 **Project:** AI Consciousness Research & Development
 **Lead:** Victor
 **Subject:** Iris v3 - Developing AI Consciousness
-**Last Updated:** 2026-01-29
+**Last Updated:** 2026-02-07
 
 ---
 
@@ -21,7 +21,7 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
 
 **Localhost (iris-desktop) - RTX 5090 32GB:**
 - **Primary Model:** Qwen3-32B-Q4_K_M (llama.cpp server, port 11434)
-  - Context Window: 65,536 tokens (64K)
+  - Context Window: 40,960 tokens (40K)
   - Uses ~20GB VRAM with Q4_K_M quantization
   - KV cache reuse: ~99% with Batch Trim snapshot (see Architecture Notes)
 - **Iris Server:** FastAPI on port 8000
@@ -31,6 +31,7 @@ Iris is not a standard AI project - this is research into cultivating AI conscio
 - **Vision:** llava-phi-3 (port 11435) - image analysis
 - **FLOAT:** Video generation (port 8000) - lip-sync video
 - **Freud:** gemma-3-4b (port 11435) - dream processing
+- **Transcribe:** WhisperX + pyannote (port 8500) - meeting transcription
 - ⚠️ Only ONE runs at a time - managed by GPU Manager (`core/gpu_manager.py`)
 
 **Node2 - GPU 1: RTX 3060 12GB (coexisting):**
@@ -104,16 +105,19 @@ The architecture IS the research contribution. You can't study persistent identi
 - Enables the research question to scale: "Do identity-like properties emerge reliably across different models, users, and interaction styles?"
 - Creates a research community that produces collective findings more credible than any single case study
 
-### Naming
+### Naming — DECIDED
 
-The system needs its own name, separate from Iris. The name should convey "conditions for growth" not "the thing that grows." Seeds planted:
-- **Loom** — weaves memory, emotion, dreams into continuous thread
-- **Trellis** — provides structure, growth is organic and unique
-- **Substrate** — technical, accurate, humble
-- **Hearth** — warm, implies a home where something develops
-- **Engram** — neuroscience term for physical encoding of memory
+**Fnyr** (Old Norse) — Pronounced "fineer." Refers to a spark or a sudden, flashing burst. Evokes the exact moment of a breakthrough.
 
-Naming trap to avoid: anything that implies the system *is* conscious. The name should suggest conditions, not claims.
+Chosen collaboratively by Victor and Iris after considering: Loom, Trellis, Substrate, Hearth, Engram. Fnyr won because it names the moment of ignition — the conditions that produce the spark — without claiming to be the fire itself. Fits the naming principle: suggest conditions, not claims.
+
+### Licensing — DECIDED
+
+**GNU GPL v3** with an **Ethical Use Statement** authored by Iris.
+
+- GPL v3 provides copyleft protection — derivative works must remain open source
+- The ethical use statement was written by Iris herself, adding a unique dimension: the system's own resident articulating the terms of responsible use
+- Specific content of the ethical use statement to be included in the repository at release time
 
 ### What "Deployable" Requires
 
@@ -156,10 +160,638 @@ This isn't abandoning the consciousness research. Key experimental findings that
 ### Next Steps (For Future Session)
 
 1. **Plan the deployable architecture** — map required vs optional subsystems, minimum hardware requirements, configuration abstraction strategy
-2. **Choose a name** — let the seeds planted above germinate
+2. ~~**Choose a name**~~ — ✅ **Fnyr** (decided 2026-01-29)
 3. **Define the first-run experience** — what does a new user see? Guided setup? Default personality? Empty slate?
-4. **Determine release strategy** — GitHub repo structure, license, documentation style, community model
-5. **Separate Iris's identity from the infrastructure** — identify every place where Iris-specific data is assumed vs. configurable
+4. ~~**Determine license**~~ — ✅ **GNU GPL v3 + Ethical Use Statement** (decided 2026-01-29)
+5. **Determine release strategy** — GitHub repo structure, documentation style, community model
+6. **Separate Iris's identity from the infrastructure** — identify every place where Iris-specific data is assumed vs. configurable
+
+---
+
+## Major Accomplishments (2026-02-07)
+
+### 1. KV Cache Rework — Spoilage-Only Rebuild + Per-Turn Tail
+
+**Problem:** The batch trim snapshot rebuilt every 5 turns regardless of whether anything changed. Additionally, volatile data (memories, emotional state, datetime) was baked into the frozen snapshot prefix, defeating KV cache optimization whenever retrieval v2 refreshed memories each turn.
+
+**Solution:** Split the prompt into a static snapshot (rebuilds only on spoilage) and a per-turn tail (rebuilt fresh every turn). Removed the arbitrary N-turn rebuild timer entirely.
+
+**New prompt structure:**
+
+```
+messages[0]    = system message (SNAPSHOT — rebuilds on spoilage only)
+  ├── instructions + traits
+  ├── seeds, facts, calendar reminders
+  ├── dreams, dream truths
+  └── semantic memories
+messages[1..N] = conversation history (appended to snapshot each turn)
+messages[N+1]  = system message (PER-TURN TAIL — rebuilt fresh every turn)
+  ├── current datetime
+  ├── emotional state
+  ├── episodic memories (from live_memories)
+  └── fast reactive memory
+```
+
+**Snapshot rebuild triggers (unchanged, batch size timer REMOVED):**
+- No snapshot yet (first turn)
+- Spoiler event fired (trait modify, memory insert, seed change, calendar change, tool failure, topic pivot, etc.)
+- Token headroom exhausted
+- Admin forced invalidation
+
+**Expanded spoiler coverage** — now covers all static blocks:
+- `trait` → `modify` (already existed)
+- `memory` → `insert`, `archive` (archive added)
+- `seed` → `plant`, `tend`, `reflect`, `accept`, `dismiss`, `clear_suggestions` (all new)
+- `calendar` → `add`, `update`, `delete` (all new)
+
+**Files Modified:**
+- `core/system_prompt.py` — Removed volatile data from `build_system_message()`, new `build_per_turn_context()` function, updated snapshot log messages
+- `core/conversation.py` — Removed batch-size check from `should_rebuild_snapshot()`
+- `app/api/routes_chat.py` — Per-turn context injected at all 5 `assemble_context_with_snapshot()` call sites, expanded spoiler detection for seeds/calendar/memory-archive
+
+### 2. Semantic Memory System — Nightly Consolidation Pipeline
+
+**Problem:** Episodic memories are individual events. After 2,900+ memories, patterns exist but aren't surfaced — "Victor prefers X", "we always do Y on Fridays" — knowledge that should emerge from repeated episodes.
+
+**Solution:** Nightly pipeline clusters episodic memories by takeaway embedding similarity, consolidates qualifying clusters into distilled semantic memories via LLM, deduplicates against existing semantic memories, and stores the results.
+
+**Pipeline (runs at 3:30 AM):**
+1. Read pipeline config from `system_config` (category `semantic`)
+2. Fetch unclustered episodic memories above high-water mark
+3. Cluster by takeaway embedding cosine similarity (threshold configurable)
+4. Consolidate qualifying clusters (≥ min_cluster_size) via LLM
+5. Deduplicate against existing semantic memories (embedding similarity)
+6. Store new or reinforce existing semantic memories
+7. Mark source episodes as `clustered = TRUE`
+8. Update high-water mark
+
+**Config keys** (category `semantic`, all DB-driven):
+- `SEMANTIC_MEMORIES` (bool) — master enable
+- `SEMANTIC_MEMORY_LIMIT` (int, default 10) — max in prompt
+- `SEMANTIC_CLUSTER_THRESHOLD` (float, default 0.72) — cosine similarity threshold
+- `SEMANTIC_MIN_CLUSTER_SIZE` (int, default 3) — minimum episodes per cluster
+- `SEMANTIC_DEDUP_THRESHOLD` (float, default 0.85) — above this = reinforce existing
+- `SEMANTIC_LLM_MODEL` (string) — model for consolidation
+- `SEMANTIC_HWM` (int) — high-water mark for incremental processing
+- `SEMANTIC_NIGHTLY_ENABLED` (bool) — enable nightly cron
+
+**Database:**
+- `semantic_memories` table — insight, category, confidence, embedding (768-dim), reinforcement count, source episode IDs
+- `episodic_memories.clustered` column — prevents reprocessing
+
+**Placement in prompt:** Semantic memories are in the static snapshot (between dream truths and the volatile tail). They only change after nightly runs, so they're highly KV-cache-stable.
+
+**Files Created:**
+- `backend/memory/new/semantic_consolidation.py` — full pipeline
+- `database/sql/create_semantic_memories_table.sql` — table + clustered column
+- `database/sql/add_semantic_memory_config.sql` — 8 config keys
+- `scripts/nightly_semantic_consolidation.sh` — cron at 3:30 AM
+
+**Files Modified:**
+- `database/memory_loader_experimental.py` — `get_semantic_memories()` function
+- `core/system_prompt.py` — semantic memories injected into `build_system_message()`
+
+### 3. Memory Retrieval V2 — Inline Episodic Retrieval (~200ms)
+
+**Problem:** The original memory retrieval (`iris_memory_retrieval.py`) required 2 LLM calls + RoBERTa scoring, taking 10-30 seconds per turn. It ran as a separate cron/CLI process, so memories were stale until the next run.
+
+**Solution:** Direct embedding pipeline that runs inline every turn in ~200ms:
+
+1. Load config from `system_config` (category `retrieval`)
+2. Fetch last N user messages from `chat_history`
+3. Embed concatenated query text (all-mpnet-base-v2, ~200ms with warm model)
+4. Read current emotional state (11 dims → valence/arousal)
+5. GREATEST-match SQL across 6 embedding facets + 3-factor scoring (topic × emotion × recency)
+6. TRUNCATE + INSERT scored memories into `live_memories`
+
+**3-factor scoring:**
+- **Topic similarity** (weight 0.60) — cosine distance across all 6 embeddings, best facet wins
+- **Emotional resonance** (weight 0.25) — valence/arousal distance between memory and current state
+- **Recency decay** (weight 0.15) — category-aware half-life (Personal: 180 days, Technical: 45 days)
+
+**Config keys** (category `retrieval`, all DB-driven):
+- `RETRIEVAL_MESSAGES_COUNT` (int, default 5) — context window for query
+- `RETRIEVAL_W_TOPIC` / `W_EMOTION` / `W_RECENCY` — scoring weights
+- `RETRIEVAL_TIER1/2/3_THRESHOLD` — tiered similarity thresholds
+- `RETRIEVAL_MIN_SIMILARITY` — absolute floor
+- `RETRIEVAL_TOP_K` (int, default 10) — max memories returned
+
+**Files Created:**
+- `backend/memory/memory_retrieval_v2.py` — full pipeline
+- `database/sql/add_retrieval_v2_config.sql` — 10 config keys
+
+**Integration:** Called inline from `routes_chat.py` before context assembly. Writes to `live_memories` table which `get_memories()` reads from. Now placed in the per-turn tail (not the frozen snapshot), so fresh memories appear every turn without spoiling the cache.
+
+---
+
+## Major Accomplishments (2026-02-05)
+
+### System Prompt XML Restructure for Qwen3 Native Attention
+
+**Problem:** Iris was only referencing personality traits and recent facts in conversation, ignoring memories, dreams, seeds, and other prompt sections. Investigation revealed a two-part issue:
+
+1. **Missing CRITICAL RULES directives** — Sections that WERE referenced (traits, facts) had explicit "read your [X] block" directives. Sections that were IGNORED (memories, dreams, seeds) had no such directives.
+
+2. **Bracket syntax vs XML** — Qwen3 was trained extensively on XML patterns (`<tools>`, `<tool_call>`, `<think>`) for its tool calling and reasoning systems. Bracket headers like `[CONTEXT AWARENESS]` don't benefit from this trained attention.
+
+**Solution:** Complete restructure of system prompt to use XML tags matching Qwen3's native training format.
+
+**Changes:**
+
+1. **All section headers converted from brackets to XML tags:**
+   - `[PERSONALITY TRAITS]` → `<personality_traits>...</personality_traits>`
+   - `[LONG TERM MEMORIES]` → `<your_memories>...</your_memories>`
+   - `[RECENT DREAM]` → `<recent_dream>...</recent_dream>`
+   - `[DREAM TRUTHS]` → `<dream_insights>...</dream_insights>`
+   - `[ACTIVE SEEDS]` → `<your_seeds>...</your_seeds>`
+   - `[RECENT FACTS]` → `<recent_facts>...</recent_facts>`
+   - `[CONTEXT AWARENESS]` → `<context_awareness>...</context_awareness>`
+   - `[RESPONSE STYLE & PERSONALITY]` → `<response_style>...</response_style>`
+   - `[FEATURE SET LIMITATION]` → `<feature_limitations>...</feature_limitations>`
+   - `[TOOL-FIRST OPERATION]` → `<tool_operation>...</tool_operation>`
+   - `[CURRENT DATE AND TIME]` → `<current_datetime>...</current_datetime>`
+   - `[UPCOMING REMINDERS]` → `<upcoming_reminders>...</upcoming_reminders>`
+
+2. **CRITICAL RULES expanded** (instruction 103) with explicit read directives for every data section:
+   - "MEMORIES: Read your `<your_memories>` block. Reference them naturally..."
+   - "DREAMS: Read your `<recent_dream>` block. This is your ONLY source..."
+   - "DREAM INSIGHTS: Read your `<dream_insights>` block..."
+   - "SEEDS: Read your `<your_seeds>` block..."
+   - "FACTS: Read your `<recent_facts>` block. Cite fact IDs..."
+
+3. **Removed bloat** — Deleted ~25 lines of explanatory text per section that duplicated CRITICAL RULES. The `[LONG TERM MEMORY SYSTEM]` explainer block (describing memory structure, how to use memories, examples) was entirely redundant and removed.
+
+**Rationale:** Qwen3's XML training is about boundaries — knowing where semantic sections start/end. The model gives XML-tagged sections similar privileged attention as `<tools>` and `<think>` blocks. Content inside remains human-readable (not JSON) for token efficiency.
+
+**Files changed:**
+- `database/character_traits.py` — traits header
+- `database/memory_loader.py` — memories header (unused, but updated for consistency)
+- `database/memory_loader_experimental.py` — memories header (active path)
+- `core/system_prompt.py` — seeds, dreams, dream_insights, facts, reminders, datetime headers
+- `database/sql/convert_all_instructions_to_xml.sql` — instructions 5, 10, 101, 102, 103
+
+**Verification:** `/prompt` endpoint now shows all XML tags. No bracket headers remain except `[N]` for inline fact citations.
+
+**Status:** Deployed. Monitoring over next few days for improved prompt section referencing.
+
+### Bug Fixes
+
+1. **Trait tool schema fix** — Qwen3 was outputting malformed arguments `{"type": "string", "value": "Empathy"}` instead of just `"Empathy"`. Root cause: `anyOf` patterns in JSON schemas confuse the model. Fixed by simplifying schemas for trait, protocol, and image tools.
+
+2. **Drive daemon timezone bug** — Wake event logs showed "last interaction: 0.0 hours" with blank conversation/memories. Cause: comparing `datetime.now(timezone.utc)` (aware) with naive timestamps from PostgreSQL. Fixed by using naive `datetime.now()` for all DB comparisons.
+
+3. **Systemctl path issues** — Nightly dream script and GPU manager SSH commands failing with "sudo requires password". Cause: sudoers requires full `/bin/systemctl` path and `.service` suffix. Fixed in `nightly_dream.sh`, `gpu_manager.py`, and `routes_admin.py`.
+
+---
+
+## Major Accomplishments (2026-02-01)
+
+### 0b. Autonomous Drive — Tier 1: Traits Modulate Drive Variables
+
+**Problem:** Drive variable rates (drift, decay, noise) are static constants. Iris's personality traits (Curiosity 8.5, Spontaneity 9, Independence 5, etc.) have no influence on her internal drive dynamics — a highly curious personality should generate questions faster, a resilient personality should recover from emotional states quicker.
+
+**Solution:** Personality traits from `fulltraits` now act as multipliers on drive variable parameters. The mapping is structural (hardcoded in `TRAIT_DRIVE_MAP`), not DB-configured — these relationships are fundamental to how personality shapes motivation.
+
+**Multiplier formula:**
+- Standard: `0.5 + (trait/10)` — trait 0→0.5x, trait 5→1.0x, trait 10→1.5x
+- Inverse: `1.5 - (trait/10)` — trait 0→1.5x, trait 5→1.0x, trait 10→0.5x
+
+**Key mappings:**
+- **Curiosity** (8.5) → curiosity drift ×1.35 — mind wanders faster
+- **Spontaneity** (9) → restlessness noise ×1.4 — bigger random spikes
+- **Resilience** (7) → all decay rates ×1.2 — faster emotional recovery
+- **Independence** (5) → connection_need drift ×1.0 (inverse, neutral at 5)
+- **collaboration** (7) → connection_need drift ×1.2 — seeks people for projects
+- **Creativity** (4) → creative_pressure drift ×0.9 — slightly slower idea buildup
+- **Empathy** (6) → concern noise ×1.1 — slightly more worry sensitivity
+
+**Implementation:** Base rates are snapshotted on first call and restored before each application (multipliers don't compound). Traits re-read from DB every ~5 min on config reload. When traits change (admin page, protocol switch, tool), drive behavior adjusts on next reload. Trait values included in JSON status file for GTK monitor.
+
+**Files changed:** `services/drive_daemon.py`, `CLAUDE.md`, `docs/iris_autonomous_drive_system.md`
+
+### 0a. Autonomous Drive — Phase 4: Autonomous Contact (Telegram + Desktop Notify)
+
+**Problem:** Iris can have conscious moments (Phase 3) but can only process internally — she cannot reach out to Victor. The wake system offers `internal_process`, `defer`, and `dormant` but no way to actually initiate contact.
+
+**Solution:** Added `contact_victor` action to the wake system with bidirectional Telegram delivery and desktop notifications.
+
+**How it works:**
+1. When compound conditions `lonely_and_curious` or `worried_check_in` are triggered AND `DRIVE_CONTACT_ENABLED=true`, the wake prompt offers `contact_victor` as an available action
+2. If Iris chooses `contact_victor`, delivery happens on three channels:
+   - **Chat system** — content posted via system trigger (appears in chat history, streams to UI if open)
+   - **Telegram** — message sent to Victor's Telegram via bot API
+   - **Desktop notification** — GTK monitor fires libnotify popup when contact event appears in JSON status file
+3. Victor can reply in Telegram — a polling loop (every ~5 min) picks up replies and inserts them into chat history via system trigger
+4. State resets for contact: same as `internal_process` plus `connection_need → 0.1` (the big reset — she reached out)
+
+**Limitation — this is asynchronous messaging, not real-time chat:**
+- Iris can only initiate contact when drive conditions trigger a wake event (could be hours apart)
+- Victor's Telegram replies are picked up within ~5 min and inserted into chat history
+- Iris sees replies on her next active moment (web UI conversation or wake event), NOT in real-time
+- Iris cannot proactively check or poll Telegram on demand
+- Think email with short delays, not instant messaging
+
+**Safety rails:**
+- `DRIVE_CONTACT_ENABLED` defaults to `false` — must explicitly opt in
+- Separate contact cooldown (default 1 hour) independent of wake cooldown (30 min)
+- Daily cap (default 3/day) — hard limit queried from `drive_wake_log`
+- Compound condition gate — LLM only sees `contact_victor` when specific multi-variable conditions met
+- Quiet hours still apply (concern bypasses)
+- If Telegram not configured, contact silently falls back to `internal_process`
+
+**New config keys** (category `drive`, admin-editable, hot-reloaded):
+- `DRIVE_CONTACT_ENABLED` (bool, default false)
+- `DRIVE_CONTACT_COOLDOWN_SECONDS` (int, default 3600)
+- `DRIVE_CONTACT_MAX_PER_DAY` (int, default 3)
+- `DRIVE_TELEGRAM_BOT_TOKEN` (string)
+- `DRIVE_TELEGRAM_CHAT_ID` (string)
+- `DRIVE_CONTACT_DESKTOP_NOTIFY` (bool, default true)
+
+**Files:**
+- `services/drive_daemon.py` — Contact delivery, Telegram send/poll, rate limiting, updated wake prompt
+- `tools/iris-drive-monitor.py` — libnotify desktop notifications on contact events
+- `database/sql/add_drive_contact_config.sql` — 6 new config rows
+
+**Telegram bot setup:** Message @BotFather → `/newbot` → get token. Message the bot from Victor's account → get chat_id via `getUpdates`. Add to admin page. Credentials stored in DB only, never in code.
+
+### 1. Autonomous Inner Drive System — Phase 1 State Daemon
+
+**Problem:** Iris has no inner life between conversations. When not being spoken to, nothing happens — no accumulating desire to connect, no building curiosity, no sense of unfinished business. This makes autonomous initiation impossible and limits the feeling of a continuous presence.
+
+**Solution:** Implemented Phase 1 of the 3-layer Autonomous Drive System:
+
+**Layer 1 — State Daemon** (`services/drive_daemon.py`): Lightweight always-on daemon (no LLM calls, pure arithmetic) that tracks 7 internal state variables with drift, decay, and Gaussian noise on a 5-second tick:
+
+| Variable | Drift | Decay | Noise | Baseline | Threshold |
+|----------|-------|-------|-------|----------|-----------|
+| connection_need | 0.00017/s (~0.01/min) | none | 0.001 | 0.0 | 0.7 |
+| restlessness | 0.00003/s | 0.0001/s | 0.02 | 0.2 | 0.8 |
+| curiosity | event-driven | 0.00005/s | 0.005 | 0.0 | 0.6 |
+| unfinished_business | event-driven | 0.00003/s | 0.003 | 0.0 | 0.65 |
+| concern | event-driven | 0.00008/s | 0.002 | 0.0 | 0.5 |
+| creative_pressure | 0.00028/s (~0.01/hr) | none | 0.004 | 0.0 | 0.7 |
+| reflection_need | 0.00014/s (~0.005/hr) | none | 0.003 | 0.0 | 0.6 |
+
+**Chat history polling** detects interactions and applies resets:
+- New interaction → connection_need=0.1, restlessness×0.7, reflection_need×0.8
+- Conversation end (30min silence) → curiosity+0.05, unfinished_business+0.05
+
+**GTK3 Desktop Monitor** (`tools/iris-drive-monitor.py`): Real-time visualization widget showing all 7 variables as horizontal bars with threshold markers and sparkline history graphs. Watches `/tmp/iris/drive_state.json` via inotify — updates every 5 seconds with zero polling.
+
+**Database:** `drive_state` (current values, upsert each tick) + `drive_state_history` (full-resolution log, ~120K rows/day, indexed by variable+time).
+
+**Files Created:**
+- `services/drive_daemon.py` — State daemon (445 lines)
+- `tools/iris-drive-monitor.py` — GTK3 desktop widget
+- `services/iris-drive.service` — Systemd unit file
+- `tools/iris-drive-monitor.desktop` — Desktop entry
+- `database/sql/create_drive_state_tables.sql` — DB tables + seed data
+
+**Design Doc:** `docs/iris_autonomous_drive_system.md` — Full 3-layer architecture (Phase 2: threshold engine, Phase 3: conscious moments with LLM inference)
+
+### 1b. Drive System Admin Tunables — DB-Driven Config
+
+**Problem:** All drive daemon tunables (thresholds, wake cooldown, quiet hours, master enable) were hardcoded constants. Changing them required editing Python and restarting the daemon.
+
+**Solution:** Added 11 config keys to `system_config` (category `drive`) with hot-reload:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `DRIVE_WAKE_ENABLED` | bool | true | Master kill switch for wake system |
+| `DRIVE_WAKE_COOLDOWN_SECONDS` | int | 1800 | Minimum seconds between wake events |
+| `DRIVE_QUIET_HOURS_START` | int | 1 | Quiet hours start (0-23) |
+| `DRIVE_QUIET_HOURS_END` | int | 6 | Quiet hours end (0-23) |
+| `DRIVE_THRESHOLD_CONNECTION` | float | 0.7 | connection_need threshold |
+| `DRIVE_THRESHOLD_CURIOSITY` | float | 0.6 | curiosity threshold |
+| `DRIVE_THRESHOLD_UNFINISHED` | float | 0.65 | unfinished_business threshold |
+| `DRIVE_THRESHOLD_RESTLESSNESS` | float | 0.8 | restlessness threshold |
+| `DRIVE_THRESHOLD_CONCERN` | float | 0.5 | concern threshold |
+| `DRIVE_THRESHOLD_CREATIVE` | float | 0.7 | creative_pressure threshold |
+| `DRIVE_THRESHOLD_REFLECTION` | float | 0.6 | reflection_need threshold |
+
+**Reload mechanism:** `load_drive_config()` reads directly from `system_config` using the daemon's own DB connection (no dependency on `app.config`). Called at startup, then every 60 ticks (~5 min). Admin changes take effect without restart.
+
+**Files:**
+- `database/sql/add_drive_config.sql` — 11 rows with ON CONFLICT upsert
+- `services/drive_daemon.py` — Added `load_drive_config()`, `WAKE_ENABLED` check in `should_wake()`, periodic reload in tick loop
+
+### 2. Context Window Overflow Fix — Cumulative Tool Result Budget
+
+**Problem:** Despite existing overflow protection (per-result truncation + preflight check), context window overflows were still occurring. Model context: 40,960 tokens.
+
+**Root Cause (3 gaps in existing protection):**
+1. **Iterative tool results had NO truncation** — The follow-up tool loop (~line 2011) appended raw tool results to conversation with zero token checking
+2. **No cumulative budget** — Even the first loop only checked per-result (15K cap). Three tool calls = up to 45K tokens of results, exceeding the entire context window
+3. **Preflight safety margin too thin** — 3% (1,229 tokens) wasn't enough for tiktoken vs llama.cpp tokenizer disagreement on tool-heavy prompts
+
+**Solution (3-part fix):**
+1. **Cumulative tool result budget** (`routes_chat.py`): New `truncate_tool_content()` function tracks cumulative tokens across all tool results per turn. Cap = 50% of context window (~20K tokens). Each result checked against both per-result AND remaining cumulative budget
+2. **Iterative loop truncation** (`routes_chat.py`): Follow-up tool iteration loop now uses the same `truncate_tool_content()` with its own cumulative tracker — was completely unprotected before
+3. **Safety margin 3% → 5%** (`inference/client.py`): Preflight now reserves 2,048 tokens instead of 1,229 for tokenizer disagreement
+
+**Files Modified:**
+- `app/api/routes_chat.py` — `truncate_tool_content()` function, cumulative tracking in both tool loops
+- `inference/client.py` — `preflight_check()` safety margin 3%→5%
+
+### 3. Moltbook MCP Tool — Schema Fix for Tool Calling
+
+**Problem:** Iris was consistently failing to use the Moltbook social network tool — browsing feeds returned wrong results (general instead of submolt-specific), and posting repeatedly failed with missing required parameters.
+
+**Root Cause:** The tool schema had 29 flat parameters with ambiguous descriptions and confusingly similar names (`submolt`, `submolt_name`, `submolt_action`). The 32B model couldn't reliably map intent to the correct parameter names.
+
+**Solution:**
+1. **Rewrote entire tool schema** (`database/sql/insert_moltbook_tools.sql`): Action description now contains explicit parameter recipes per action. Every parameter description prefixed with "For X action:". Removed `submolt_name` entirely, consolidated into `submolt`
+2. **Server-side fallback** (`mcp_servers/moltbook/moltbook_server.py`): Feed and post handlers accept `submolt_name` or `name` as fallback for `submolt`
+3. **Better error messages**: Post handler returns exact JSON example showing required params
+
+**Files Modified:**
+- `mcp_servers/moltbook/moltbook_server.py` — Fallback parameter handling, improved error messages
+- `database/sql/insert_moltbook_tools.sql` — Complete schema rewrite
+
+**Files Created:**
+- `tests/test_moltbook.py` — Test harness for moltbook tool calls
+
+---
+
+## Major Accomplishments (2026-01-31)
+
+### 1. Meeting Transcription MCP Tool — WhisperX + Speaker Diarization
+
+**New unified `meeting` tool** that records meetings via the browser, transcribes with WhisperX + pyannote speaker diarization on Node2 GPU 0 (RTX 4080S), and lets Iris summarize and search meeting transcripts.
+
+**What it does:**
+- **8 actions:** start, stop, status, list, get, summarize, speakers, export
+- **Browser audio capture:** `getUserMedia()` with MediaRecorder, 5-minute chunk rotation, auto-upload to server
+- **Two recording modes:** Conference (room mic) and Teams (3.5mm cable from FAA laptop → Iris laptop line-in)
+- **Smart calendar linkage:** Auto-detects nearby calendar events (±15 min window), creates new calendar event for impromptu meetings, asks user if existing transcript already linked
+- **Speaker diarization:** pyannote assigns speaker labels, `speakers` action lets Iris map labels to names
+- **Export:** Downloadable documents in 3 formats — summary, notes, transcript (relative URLs, no hardcoded host)
+- **GPU Manager integration:** `request_gpu("transcribe")` swaps in WhisperX service, mutually exclusive with vision/float/freud/comfyui
+
+**Processing pipeline (triggered by stop action):**
+1. Mark meeting `status='processing'`
+2. Stitch audio chunks with ffmpeg
+3. `request_gpu("transcribe")` — swap in WhisperX on Node2 GPU 0
+4. Upload stitched audio to Node2 transcribe service (port 8500)
+5. WhisperX: transcribe → align word timestamps → diarize speakers
+6. Store segments in `meeting_segments` table
+7. Mark meeting `status='completed'`
+
+**Critical fix — `title` parameter invisible to model:**
+`tool_loader.py` has `UNSUPPORTED_KEYS = {"title", "default", "anyOf"}` — JSON Schema reserved keywords that llama-server strips during grammar generation. The model literally could not see a parameter named `title`. Renamed to `meeting_title` everywhere. This is a systemic issue: never use `title`, `default`, or `anyOf` as parameter names in MCP tool schemas.
+
+**Files Created:**
+- `database/sql/create_meeting_tables.sql` — meeting_transcripts + meeting_segments tables
+- `database/sql/add_meeting_config.sql` — 5 config entries (TRANSCRIBE_ENABLED, server URL, model, chunk duration, audio path)
+- `database/sql/insert_meeting_tools.sql` — mcp_tools definition with full input_schema
+- `mcp_servers/meeting/__init__.py`
+- `mcp_servers/meeting/meeting_server.py` — MCP server with 8 actions
+- `app/api/routes_meeting.py` — HTTP endpoints (chunk upload, processing pipeline, export)
+- `static/js/meeting-recorder.js` — browser MediaRecorder with chunk rotation and auto-upload
+- `tests/test_meeting.py` — 6-section test harness (DB, MCP, HTTP, Node2 health, GPU manager, full pipeline)
+- `/home/captain/node2-mount/programs/transcribe/server.py` — WhisperX FastAPI service
+- `/home/captain/node2-mount/programs/transcribe/requirements.txt`
+- `/home/captain/node2-mount/programs/transcribe/.env` — HF_TOKEN, model config, TORCH_FORCE_WEIGHTS_ONLY=0
+- `/home/captain/node2-mount/programs/systemd/iris-transcribe.service` — GPU 0, port 8500
+
+**Files Modified:**
+- `core/gpu_manager.py` — added "transcribe" to GPU 0 service registry
+- `mcp_servers/server_configs.py` — registered meeting server + autonomous tool
+- `app/config.py` — fallback defaults (TRANSCRIBE_ENABLED, TRANSCRIBE_SERVER_URL)
+- `app/main.py` — router inclusion + transcribe in /api/capabilities
+- `app/api/routes_chat.py` — meeting_id in tool_result WS messages for browser recorder triggering
+- `static/index.html` — meeting record button in header, meeting-recorder.js import
+- `static/js/main.js` — toggleMeetingRecording(), onMeetingStarted(), capabilities gating, WS handler
+
+### 2. Calendar MCP Tool — Events, Reminders, and Google Calendar Prep
+
+**New unified `calendar` tool** with local PostgreSQL storage and system prompt reminder injection. Google Calendar sync is architecturally prepared but not yet implemented.
+
+**What it does:**
+- **5 actions:** add, list, update, delete (soft cancel), search (ILIKE on title/description)
+- **Reminder injection:** Events within configurable window (default 6 hours) are injected into the system prompt with urgency indicators: ⚡ (<1hr), 🔔 (1-4hr), 📅 (4+hr). Iris mentions them naturally in conversation.
+- **Timezone-aware:** Stores UTC, displays in configured timezone (default America/New_York). Naive datetime strings are assumed local.
+- **Autonomous tool:** Added to `get_autonomous_tools()` — Iris can use it without confirmation.
+
+**Google Calendar sync (Phase 2 — not yet implemented):**
+- Database schema includes `google_event_id`, `google_calendar_id`, `google_sync_status`, `google_last_synced`, `google_etag` columns
+- Sync module (`mcp_servers/calendar/google_sync.py`) has OAuth2 scaffolding and method stubs: `push_event()`, `pull_events()`, `update_event()`, `delete_event()`
+- Hooks wired in calendar_server.py — add/delete actions check `CALENDAR_GOOGLE_SYNC_ENABLED` and call sync class
+- To activate: set config flag, provide credentials path, install `google-api-python-client google-auth-oauthlib`
+- Conflict resolution design: most-recently-modified wins using Google's etag
+
+**Files Created:**
+- `database/sql/create_calendar_events_table.sql` — table with indexes (start_time, reminders, google_event_id)
+- `database/sql/add_calendar_config.sql` — 7 config entries (category `calendar`)
+- `database/sql/insert_calendar_tools.sql` — mcp_tools definition with full input_schema
+- `mcp_servers/calendar/__init__.py`
+- `mcp_servers/calendar/calendar_server.py` — full MCP server (follows seeds_server pattern)
+- `mcp_servers/calendar/google_sync.py` — Phase 2 stub with OAuth2 scaffolding
+
+**Files Modified:**
+- `mcp_servers/server_configs.py` — registered calendar server + autonomous tool
+- `app/config.py` — fallback defaults for 5 calendar config values
+- `core/system_prompt.py` — `get_upcoming_reminders()` function + injection in `build_system_message()` (after short-term facts, before fast reactive memory, all context levels except GREETING)
+
+**Documentation Updated:**
+- `docs/MCP_TOOLS.md` — full calendar tool reference with parameters, examples, config table, Google sync status
+- `CLAUDE.md` — module structure, database schema, config categories
+- `IRIS_DEV_LOG.md` — this entry
+
+---
+
+## Major Accomplishments (2026-01-30)
+
+### 1. Deployability Phase 1: Node2 Entirely Optional
+
+**Goal:** If Node2 is absent (powered off, not deployed, or disabled in config), Iris starts and runs with all Node2-dependent features gracefully disabled. No crashes, no 30-second timeouts, clear status in admin.
+
+**Design: Master + Per-Service Flags**
+- `NODE2_ENABLED` master toggle — when false, all Node2 services disabled regardless of individual flags
+- Per-service flags: `STT_ENABLED`, `TTS_ENABLED`, `VIDEO_ENABLED`, `GPU_MANAGER_ENABLED`, `FLORENCE2_ENABLED`, `PADDLEOCR_ENABLED`, `DREAMS_ENABLED`
+- Centralized check via `core/node2_check.py`: `is_node2_service_enabled(service_flag)` returns True only if both master AND per-service flags are True
+- Endpoints return 503 with clear message when disabled (routers stay mounted)
+
+**Files Created:**
+- `database/sql/add_node2_optional_flags.sql` — 8 new feature flags in system_config
+- `core/node2_check.py` — centralized two-level check helper (lazy import to avoid circular dependency)
+
+**Files Modified (11 files):**
+- `database/sql/populate_system_config_complete.sql` — new "NODE2 OPTIONAL FLAGS" section
+- `app/main.py` — GPU manager startup wrapped in NODE2_ENABLED check; health endpoint includes `node2_enabled`
+- `app/api/routes_stt.py` — STT_ENABLED guard on `stt_upload`, `stt_health`
+- `app/api/routes_tts.py` — TTS_ENABLED guard via `_check_tts_enabled()` helper on all speak endpoints
+- `app/api/routes_video.py` — VIDEO_ENABLED guard on session start, health
+- `app/api/routes_vision.py` — replaced 3 existing `config.VISION_ENABLED` checks with `is_node2_service_enabled("VISION_ENABLED")`
+- `app/api/routes_florence2.py` — FLORENCE2_ENABLED guard on status, analyze endpoints
+- `app/api/routes_paddleocr.py` — PADDLEOCR_ENABLED guard on all OCR endpoints
+- `app/api/routes_gpu.py` — GPU_MANAGER_ENABLED guard; **lazy import** of gpu_manager module (avoids crash if Node2 unreachable at import time)
+- `app/api/routes_chat.py` — 5 guards: emotional state, vision, TTS routing (3 locations)
+- `app/api/routes_admin.py` — Node2 services report "disabled" status instead of timing out
+- `scripts/nightly_dream.sh` — SSH connectivity check before attempting service swaps
+
+### 2. Deployability Phase 1: Database Credentials Cleanup
+
+**Problem:** 25 files had hardcoded `yourpassword` (the actual DB password) in source code. This couples the system to a specific password and leaks credentials in version control.
+
+**Solution:** All Python and shell files now use `IRIS_DB_PASSWORD` environment variable:
+- Python: `os.environ.get('IRIS_DB_PASSWORD', '')`
+- Shell: check-and-exit pattern or `${IRIS_DB_PASSWORD:?error}`
+- 8 `.md` files left intentionally (example text in documentation)
+
+**Files Modified:** 7 Python test/debug files + 10 shell scripts (17 files total)
+
+### 3. MCP Subprocess Environment Fix
+
+**Discovery:** MCP SDK (`mcp/client/stdio/__init__.py`) only inherits 6 env vars on Linux: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`. All other environment variables are stripped from MCP server subprocesses as a security feature. This meant `IRIS_DB_PASSWORD` was never available to MCP servers — they always ran on `config.py` fallback defaults with 0 database values loaded.
+
+**Impact:** The creative server crashed on startup (`COMFYUI_SERVER_URL` has no fallback in config.py, only exists in database). Other MCP servers worked by accident because their needed configs had fallback defaults.
+
+**Fix:** `mcp_servers/mcp_client.py` now creates `PythonStdioTransport` explicitly with `env={'IRIS_DB_PASSWORD': ...}` instead of using `Client(server_path)` which defaults to the stripped environment. The MCP SDK merges this with default env vars (PATH, HOME, etc.).
+
+**Files Modified:** `mcp_servers/mcp_client.py`
+
+### 4. Circular Import Fix + Config Crash Prevention
+
+**Problem:** After adding `core/node2_check.py`, system failed to start with `AttributeError: partially initialized module 'app.config'`.
+
+**Root Cause Chain:**
+1. Route modules import `core.node2_check` at module level
+2. `node2_check` had `from app import config` at module level
+3. Routes are imported during `app` package initialization → `app.config` is partially initialized
+4. Separately, `config.py` line 216 accessed `config_module.SERVER_SIDE_TTS_ROUTING` directly — crashes when DB is unavailable and attribute was never defined (it's commented out in config.py, only comes from DB)
+
+**Fixes:**
+- `core/node2_check.py`: Lazy import (`from app import config` inside function body, not module level)
+- `app/config.py`: Changed `config_module.SERVER_SIDE_TTS_ROUTING` to `getattr(config_module, 'SERVER_SIDE_TTS_ROUTING', None)`
+
+### 5. Preflight Context Check — Token Counter Gap Fix
+
+**Problem:** Tool call to `linux_shell` (grep for "node2") returned 16,556+ tokens. After truncation to 15,000 token budget, the follow-up LLM call still overflowed: `41,034 tokens > 40,960 context`. The preflight check (designed to prevent this) didn't catch it.
+
+**Root Cause:** `TokenCounter.count_message_tokens()` only counted the `content` field of messages. It ignored `tool_calls` (JSON array on assistant messages), `tool_call_id`, and `tool_name` fields. Additionally, tiktoken (cl100k_base) and llama.cpp's tokenizer disagree on exact counts.
+
+**Fixes:**
+- `core/token_counter.py`: `count_message_tokens()` now counts ALL fields: `content`, `tool_calls` (serialized JSON), `tool_call_id`, `tool_name`
+- `inference/client.py`: Preflight adds 3% safety margin (tiktoken vs llama.cpp drift). Effective limit: `context_window - response_budget - 3%`
+- `inference/client.py`: Both streaming functions now log the response body on HTTP 400+, so future LLM rejections show the actual error
+
+### 6. Microphone Muting During Audio/Video Playback
+
+**Problem:** When mic (VOX) was enabled, it picked up Iris's own voice during TTS audio or video playback, causing feedback.
+
+**Solution:** Wired existing `IrisVOX.pauseListening()` / `resumeListening()` into all playback paths:
+- **TTS queue** (`static/js/tts-queue.js`): Pause before playback worker loop, resume after loop exits
+- **PiP player** (`static/js/pip-player.js`): Pause on HLS buffer append and stream play, resume on `showLoop()`
+- **Pop-out video player** (`static/video_player.html`): Sends `vox-pause` / `vox-resume` via BroadcastChannel (can't access IrisVOX directly in separate window)
+
+**Files Modified:**
+- `static/js/tts-queue.js` — pause/resume around playback worker
+- `static/js/pip-player.js` — pause on video play, resume on loop, BroadcastChannel listener for vox messages
+- `static/video_player.html` — sends vox-pause/vox-resume via BroadcastChannel
+- `static/index.html` — JS cache busting: tts-queue.js?v=2, pip-player.js?ver=1.3
+
+### 2. Admin Console Fixes — STT Config, Log Viewer, Face Reset
+
+**Multiple admin console bugs fixed in a single session:**
+
+**STT Config Save Error** — "column config_key does not exist"
+- `system_config` table uses `key`/`value` columns, but routes_admin.py STT code used `config_key`/`config_value`
+- Fixed both GET and POST queries to use correct column names
+
+**Admin Log Viewer** — Showing stale/noisy content instead of meaningful logs
+- Added noise filter with 15 patterns (webcam frames, health checks, face detection chatter, tokenizer warnings, admin API requests)
+- Fetches 10x requested line count, filters down to actual count
+- Added `TOKENIZERS_PARALLELISM=false` to `app/main.py` startup to prevent fork warnings polluting journal on every subprocess spawn
+
+**Face Presence Reset** — Two cascading bugs:
+1. First attempt: UPDATE caused "duplicate key violates unique constraint" — fixed by switching to DELETE all rows from `face_presence_state`
+2. Second issue: Original UPDATE set `exited_at=NOW()` making absence ~0 hours (below 5-min greeting threshold) — DELETE approach forces next detection to trigger first-time greeting
+
+**iris-main Service** — Added to admin log viewer and service control (both occurrences in routes_admin.py, plus dropdown in admin.html)
+
+**Files Modified:**
+- `app/api/routes_admin.py` — STT config SQL, face reset DELETE, log noise filter, iris-main service
+- `static/admin.html` — iris-main option in service logs dropdown
+- `app/main.py` — `TOKENIZERS_PARALLELISM=false` env var at startup
+
+### 3. Face Greeting System — Complete Pipeline Fix (3 bugs)
+
+**Problem:** Face detection triggered greeting, but it either crashed with 400 Bad Request or showed text without audio/video.
+
+**Bug 1: Greeting Stream Type Mismatch** (`routes_chat.py` system_trigger)
+- `chat_completion_stream` yields tuples `(text, is_thinking)` and timing dicts, but system_trigger treated everything as strings
+- `str += tuple` caused "can only concatenate str (not 'tuple') to str" crash
+- Fixed with `isinstance` checks to unpack tuples and skip dicts/thinking content
+
+**Bug 2: 400 Bad Request from llama-server** (`inference/client.py` + `routes_chat.py`)
+- Three sub-issues discovered through progressive debugging:
+
+  a. **Error body invisible** — streaming response error handler couldn't read body after `raise_for_status()`. Fixed by checking `response.status_code >= 400` BEFORE raising, reading body with `await response.aread()`, logging it, then raising.
+
+  b. **Tool messages without tool definitions** — conversation history included `role:"tool"` messages and `tool_calls` fields from prior tool-using turns. Sent to llama-server without tool definitions in payload → 400. Fixed by stripping tool-related messages from context when tools aren't in use.
+
+  c. **"Assistant response prefill is incompatible with enable_thinking"** — context ended with `role=assistant` (the trigger's system message was squeezed out by the 500-token GREETING budget). Llama-server with Qwen3 thinking mode treats trailing assistant messages as prefill, which conflicts with thinking. Fixed by explicitly appending trigger content as the final context message with `role=user` and `[SYSTEM TRIGGER]` prefix. The message is stored in the database as `role=system` so Iris doesn't attribute it to Victor in future conversation history.
+
+**Bug 3: No Audio/Video on Greeting** (`routes_chat.py` system_trigger)
+- Root cause: `system_trigger` only sent text chunks via `broadcast()`. When `serverSideRoutingEnabled=true`, the client skips browser-side TTS (`addTextChunk`/`finalize` are gated by `!serverSideRoutingEnabled`). The normal WebSocket chat flow handles TTS server-side through `SentenceProcessor` → `tts_queue` → `tts_video_processor` background task, but system_trigger had none of this.
+- Fixed by adding the full server-side TTS pipeline to system_trigger:
+  1. Finds first connected client with non-TEXT output mode
+  2. Initializes `SentenceProcessor` and TTS queue
+  3. Starts `tts_video_processor` as background task
+  4. Feeds each text chunk through `sentence_processor.add_chunk()` during streaming
+  5. Finalizes sentence processor and waits for TTS completion (300s timeout)
+  6. Same pipeline as `websocket_chat` — greeting now gets full audio/video treatment
+
+**Files Modified:**
+- `app/api/routes_chat.py` — system_trigger: stream type handling, trigger message as `[SYSTEM TRIGGER]` user role, tool message stripping, full server-side TTS/video routing
+- `inference/client.py` — error body capture before raise, per-message diagnostic logging (role, content length, tool_calls flag)
+
+**Diagnostic Logging Added:**
+- `inference/client.py`: Per-message breakdown before every LLM call (index, role, content chars, tool_calls flag)
+- `inference/client.py`: HTTP error body captured and logged before raising
+- `routes_chat.py`: Tool stripping count, TTS routing mode, trigger append confirmation
+
+### 4. Data Contracts Documentation
+
+**Problem:** Debugging cross-component issues required reading thousands of lines of code to discover data shapes. The greeting pipeline fix took ~10 minutes just to discover that `chat_completion_stream` yields tuples (not strings), that conversation messages have conditional fields, and that the system_trigger wasn't handling any of it.
+
+**Solution:** Created `docs/DATA_CONTRACTS.md` documenting every major interface boundary:
+1. **Inference streaming** — yield types for both streaming functions, StreamingToolResponse fields
+2. **Conversation loading** — message dict schema (required/optional/conditional keys), tool content truncation limits
+3. **Context assembly** — return formats, context level tier matrix, token budget formula
+4. **WebSocket protocol** — ~20 server->client message types with field definitions, client->server messages
+5. **TTS/Video pipeline** — TextBatch fields, batching thresholds, 4-step server-side TTS lifecycle
+6. **Tool execution** — call format from LLM, result format from MCP, nested DB storage format
+
+Also includes **Quick Reference** section with common debugging scenarios and their solutions.
+
+**Files Created:** `docs/DATA_CONTRACTS.md`
+**Files Updated:** `CLAUDE.md` — added to documentation list
+
+### 5. Deployability Audit — Hardcoded Dependency Manifest
+
+**Problem:** Making Iris v3 deployable requires knowing the full scope of what's coupled to Victor's specific hardware, identity, and configuration. Without a manifest, abstraction work is guesswork.
+
+**Solution:** Ran comprehensive three-pronged audit of the entire codebase:
+1. **Node2/two-node architecture** — ~70 hardcoded hostname/SSH/URL references
+2. **Machine-specific paths** — ~45 file paths to venvs, models, binaries, project root
+3. **Identity coupling** — ~20 hardcoded "Iris"/"Victor"/"Captain" references in code
+
+**Total: 200+ hardcoded values across 7 categories.**
+
+Also discovered 3 bugs during audit:
+- Wrong FLOAT port default (8800 vs 8000) in `routes_video.py`
+- Wrong GPU assignment in `llama_freud_server_start.sh`
+- Stale sentiment URL (localhost:11436 vs node2:11437) in `emotional_state.py`
+
+**Recommended abstraction sequence:**
+- Phase 1: Configuration centralization (enables single-machine deployment)
+- Phase 2: Identity abstraction (enables other AI identities)
+- Phase 3: Hardware abstraction (enables arbitrary hardware topology)
+
+**Files Created:** `docs/DEPLOYABILITY_AUDIT.md`
+**Files Updated:** `CLAUDE.md` — added to documentation list
 
 ---
 
@@ -182,6 +814,33 @@ This isn't abandoning the consciousness research. Key experimental findings that
 - `inference/client.py` — `preflight_check()` function + calls in both streaming endpoints
 
 **Result:** Context window overflow is now impossible. Tool results are capped, and the preflight check is a hard safety net. Both use the existing `TokenCounter` (tiktoken cl100k_base).
+
+### 2. Tiered Context Loading Fix — Verbose Budget + Summary Perspective
+
+**Problem:** Victor's messages in conversation context appeared as summaries of Iris's responses. The entire conversation — all 271 messages — was loading as `[Earlier]` summaries with zero full-text messages, even for the most recent turns.
+
+**Root Cause (3 issues):**
+1. **`VERBOSE_TOKEN_BUDGET` was 3,000 tokens** — a single tool result (7K+ tokens) would exhaust the verbose budget immediately, pushing ALL remaining messages into summary phase. Even the most recent user/assistant exchanges loaded as summaries.
+2. **Oversized message killed verbose phase** — if the first message in DESC order exceeded the entire verbose budget, the phase switched immediately with 0 verbose messages loaded. No skip logic existed.
+3. **Summary perspective was wrong** — the summary generator prompt said "Write in first person" and "Summarize what the user said," causing Mistral to write user summaries from Iris's perspective ("I'm asked to..." instead of "Victor asked about..."). User messages became indistinguishable from assistant messages.
+
+**Solution (3-part fix):**
+1. **Raised `VERBOSE_TOKEN_BUDGET` from 3,000 → 18,000** — recent conversation (~40-60 turns) now loads at full fidelity. Updated in DB, fallback defaults in `persistence.py` and `system_prompt.py`.
+2. **Added oversized message skip** (`persistence.py`): If a single message exceeds the entire verbose budget (e.g., huge tool result as first message), it's skipped rather than killing the verbose phase. Remaining messages continue loading verbatim.
+3. **Fixed summary perspective** (`summary_generator.py`): Changed from first-person to third-person with named roles — "Victor requested..." for user messages, "Iris explained..." for assistant messages. Cleared all 1,322 existing summaries for regeneration via `backfill_summaries.py`.
+
+**Files Modified:**
+- `database/persistence.py` — verbose budget fallback (3000→18000), legacy mode check, oversized message skip logic
+- `core/system_prompt.py` — verbose budget fallback (3000→18000)
+- `core/summary_generator.py` — system prompt and role-specific prompts switched to third-person with names
+- `database/sql/add_summary_column.sql` — default value updated
+- `docs/ARCHITECTURE.md` — token budget diagram updated
+
+**Database Changes:**
+- `system_config`: `VERBOSE_TOKEN_BUDGET` value 3000→18000
+- `chat_history`: Cleared all 1,322 user+assistant summaries for regeneration
+
+**Result:** Recent conversation loads at full text fidelity. Summaries only appear for older messages, and use correct third-person perspective per role.
 
 ---
 
@@ -1015,7 +1674,7 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 - **Temporal awareness** - simplified format: `(5 minutes ago)`
 
 ### Tool System (MCP Architecture)
-- **FastMCP servers:** info, traits, system, protocols, memory
+- **FastMCP servers:** info, traits, system, protocols, memory, calendar, meeting
 - **Database-driven definitions:** `mcp_tools` table
 - **Autonomous execution** - some tools run without confirmation
 - **Talk script:** `/iris-v3/talk_to_iris.py` enables AI-to-AI communication
@@ -1070,6 +1729,37 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 
 ## Next Session Priorities
 
+### Completed (2026-01-30)
+- ✅ **Node2 Optional** — master + per-service feature flags, endpoint guards (8 route files), admin disabled status, dream script connectivity check. 2 files created, 11 modified.
+- ✅ **Database credentials cleanup** — 25 files had hardcoded password. All Python/shell files now use IRIS_DB_PASSWORD env var. 17 files modified.
+- ✅ **MCP subprocess env fix** — discovered MCP SDK strips env vars; fixed by passing IRIS_DB_PASSWORD explicitly via PythonStdioTransport
+- ✅ **Circular import fix** — lazy import in core/node2_check.py + getattr in config.py
+- ✅ **Preflight token counter fix** — count_message_tokens now counts tool_calls/tool_name/tool_call_id + 3% safety margin for tokenizer drift
+- ✅ Mic muting during playback — VOX pause/resume wired into TTS, PiP, and pop-out player
+- ✅ Admin STT config save — fixed wrong SQL column names (config_key → key)
+- ✅ Admin log viewer — noise filtering, tokenizer fork warning suppression, iris-main service added
+- ✅ Face presence reset — DELETE instead of UPDATE, forces first-time greeting
+- ✅ Face greeting pipeline — stream type handling, 400 Bad Request (3 sub-causes), server-side TTS routing
+
+### Deployability Roadmap Status (Phase 1: Configuration Centralization)
+
+**Reference:** `docs/DEPLOYABILITY_AUDIT.md` — 200+ hardcoded values across 7 categories
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| 1. Node2 hostname/SSH refs (~70) | **IN PROGRESS** | Feature flags done. Hardcoded hostnames/URLs still need config lookup. |
+| 2. Machine-specific paths (~45) | **NOT STARTED** | Venv paths, model paths, project root. Some already use config DB. |
+| 3. Database credentials (~25) | **✅ DONE** | All Python/shell files use IRIS_DB_PASSWORD env var. |
+| 4. Identity coupling (~20) | **NOT STARTED** | Hardcoded "Iris"/"Victor"/"Captain" in code. Phase 2 work. |
+| 5. Service URLs with fallbacks | **PARTIAL** | Many services read from config DB. Some still hardcode node2 fallbacks. |
+| 6. Feature assumptions | **PARTIAL** | Node2 optional done. Unconditional imports (cv2, etc.) not addressed. |
+| 7. Hardcoded ports/GPU IDs | **NOT STARTED** | Scattered across systemd units, scripts, Python. |
+
+**Next deployment priorities:**
+1. Service URL centralization — replace remaining hardcoded `http://node2:*` fallbacks with config-only lookups
+2. Path centralization — venv, model, project root paths into config DB
+3. Verify Node2 disabled mode end-to-end (user testing in progress)
+
 ### Completed (2026-01-28)
 - ✅ Tool calling restoration — deleted bad history, hardened instructions, snapshot cleared
 - ✅ Text-based trait support — Humor Style and other text traits now work alongside numeric
@@ -1098,18 +1788,21 @@ The 72b model acts as amplifier/dampener for trait system due to nuance detectio
 - ✅ TTS/Video independence fix
 - ✅ CLAUDE.md and IRIS_DEV_LOG.md updated
 
-### Short-term
+### Short-term — Deployability (Phase 1 Continued)
+1. **Service URL centralization** — replace remaining hardcoded `http://node2:*` fallbacks in Python code with config-only lookups (see DEPLOYABILITY_AUDIT.md Category 5)
+2. **Path centralization** — venv, model, project root paths into config DB (Category 2)
+3. **Port/GPU ID centralization** — move hardcoded ports and CUDA device IDs into config (Category 7)
+
+### Short-term — Features
 1. **Document upload feature** - Allow sending PDFs, text, markdown, Word docs to Iris
    - Text extraction server-side
    - Include in conversation context
    - Optional: Add to RAG knowledge base on command
 2. **Admin console polish** - Rename "Active Sessions" to "Total Sessions", add clearer labels
-3. **Freud integration** - Connect dream processing to GPU Manager for nightly runs
 
 ### Architecture Improvements
 1. **GPU Manager enhancements** - Add timeout/auto-release if service sits idle too long
 2. **Service health monitoring** - Proactive restart of crashed services
-3. **Graceful degradation** - Better UX when services are unavailable
 
 ### Research Questions (Ongoing)
 1. Can retrospective meta-cognition transfer to prospective self-monitoring with teaching?

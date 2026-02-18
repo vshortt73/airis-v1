@@ -25,8 +25,15 @@ from app.api.phoneme_mapper import text_to_rhubarb_phonemes
 from app.api.whisperx_mapper import whisperx_text_to_phonemes
 from app.api.wav2vec2_aligner import align_audio_wav2vec2
 from app.api.tts_normalizer import normalize_for_tts
+from core.node2_check import is_node2_service_enabled
 
 router = APIRouter(tags=["tts"])
+
+
+def _check_tts_enabled():
+    """Raise 503 if TTS service is disabled."""
+    if not is_node2_service_enabled("TTS_ENABLED"):
+        raise HTTPException(status_code=503, detail="TTS service disabled (Node2 not available)")
 
 # XTTS server configuration
 # Note: No trailing slash - XTTS redirects if present
@@ -106,6 +113,7 @@ async def speak(request: TTSRequest):
     Returns:
         Audio stream (OGG format)
     """
+    _check_tts_enabled()
 
 
 
@@ -182,6 +190,7 @@ async def speak_with_phonemes(request: TTSWithPhonemeRequest):
     Returns:
         JSON with audio (base64) and phoneme timing data
     """
+    _check_tts_enabled()
     temp_audio_path = None
 
     try:
@@ -294,6 +303,7 @@ async def speak_with_whisperx(request: TTSWithPhonemeRequest):
     Returns:
         JSON with audio (base64) and accurate phoneme timing data
     """
+    _check_tts_enabled()
     temp_audio_path = None
 
     try:
@@ -413,6 +423,7 @@ async def speak_with_wav2vec2(request: TTSWithPhonemeRequest):
     Returns:
         JSON with audio (base64) and frame-accurate phoneme timing data
     """
+    _check_tts_enabled()
     temp_audio_path = None
 
     try:
@@ -557,7 +568,7 @@ async def analyze_uploaded_audio(audio: UploadFile = File(...), text: str = Form
 
         # Step 4: Run Rhubarb
         rhubarb_cmd = [
-            '/home/captain/bin/rhubarb',
+            config.RHUBARB_PATH,
             '-f', 'json',
             '-o', temp_output_path,
             '--dialogFile', temp_dialog_path,

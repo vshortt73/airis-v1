@@ -13,7 +13,7 @@ import os
 
 DB_NAME = "irisdb"
 DB_USER = "irisuser"
-DB_PASS = "yourpassword"
+DB_PASS = os.environ.get('IRIS_DB_PASSWORD', '')
 DB_HOST = "localhost"
 
 # Force offline mode
@@ -21,7 +21,7 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 
 #model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/", local_files_only=True)
 #model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/", model_kwargs={"local_files_only": True})
-model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/")
+model = SentenceTransformer(os.environ.get('EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/'))
 
 config = {}
 

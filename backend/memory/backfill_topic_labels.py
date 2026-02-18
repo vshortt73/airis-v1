@@ -32,9 +32,9 @@ import numpy as np
 
 # Load embedding model
 print("Loading embedding model...")
-model = SentenceTransformer("/models/llm_models/huggingface/models/all-mpnet-base-v2/", local_files_only=True)
+model = SentenceTransformer(os.environ.get('EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/'), local_files_only=True)
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def normalize(vec):
     """L2 normalization"""

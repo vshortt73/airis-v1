@@ -19,13 +19,14 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from mcp_servers.base.base_server import IrisMCPServer
+from app import config
 
 # ============================================================================
-# CONFIGURATION
+# CONFIGURATION (database source of truth)
 # ============================================================================
 
-COMFYUI_URL = "http://node2:8189"
-COMFYUI_OUTPUT_DIR = "/home/captain/node2-mount/programs/ComfyUI/output"
+COMFYUI_URL = config.COMFYUI_SERVER_URL
+COMFYUI_OUTPUT_DIR = config.COMFYUI_OUTPUT_PATH
 WORKFLOW_DIR = Path(__file__).parent / "workflows"
 
 # Style configurations

@@ -1,9 +1,10 @@
 #!/bin/bash
 
-source /venv/iris-v3/bin/activate
+source "$(dirname "$0")/paths.env"
+source "$IRIS_VENV/bin/activate"
 export CUDA_VISIBLE_DEVICES=0
-/programs/llama.cpp/build/bin/llama-server \
-  -m /localmodels/qwen/Qwen3-32B-Q4_K_M.gguf \
+"$IRIS_LLAMA_SERVER" \
+  -m "$IRIS_MAIN_MODEL" \
   --port 11434 \
   --host 0.0.0.0 \
   -c 40960 \

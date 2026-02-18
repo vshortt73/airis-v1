@@ -854,6 +854,11 @@ button:disabled { background: #555; cursor: not-allowed; }
     animation: pulse 1.5s ease-in-out infinite;
 }
 
+.pip-launch-btn.meeting-recording {
+    background: linear-gradient(135deg, #ff4444 0%, #cc2222 100%);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
 /* ============================================
    MOBILE RESPONSIVE STYLES
    ============================================ */

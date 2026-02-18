@@ -29,7 +29,8 @@ USE_SSL = (SSL_DIR / "key.pem").exists() and (SSL_DIR / "cert.pem").exists()
 # Import config for port
 from app import config
 PROTOCOL = "https" if USE_SSL else "http"
-NOTIFY_URL = f"{PROTOCOL}://localhost:{config.PORT}/api/ui/notify"
+ACTIVE_PORT = 8443 if USE_SSL else config.PORT
+NOTIFY_URL = f"{PROTOCOL}://localhost:{ACTIVE_PORT}/api/ui/notify"
 
 
 def ui_msg(message: str, style: str = "info") -> bool:

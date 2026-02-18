@@ -230,6 +230,12 @@
     mediaRecorder.onstop = async () => {
       if (!chunks.length) return;
 
+      // Skip STT upload if meeting is recording (meeting recorder handles its own audio)
+      if (typeof meetingRecorder !== 'undefined' && meetingRecorder.isRecording) {
+        console.log("⏸️ Meeting recording active - skipping STT upload");
+        return;
+      }
+
       const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
       const formData = new FormData();
       formData.append("file", blob, "speech.webm");
@@ -287,7 +293,12 @@
     //console.log("🛑 VOX stopped.");
   }
 
-  return { startVox, stopVox, pauseListening, resumeListening, disableListening, vox_button_toggle, voxPaused, loadVoxSettings };
+  // Check if VOX is currently active (for meeting mode integration)
+  function isActive() {
+    return vbt;
+  }
+
+  return { startVox, stopVox, pauseListening, resumeListening, disableListening, vox_button_toggle, voxPaused, loadVoxSettings, isActive };
 })();
 
 

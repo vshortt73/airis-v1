@@ -22,9 +22,9 @@ class DreamModelConfig:
     # Freud (Guide) - runs on node2:11435 (GPU 0, RTX 4080 SUPER)
     # Swaps with Vision model during nightly dream processing
     # Uses message sanitizer to handle strict user/assistant alternation requirement
-    FREUD_URL = getattr(config, 'FREUD_URL', 'http://node2:11435')
+    FREUD_URL = config.FREUD_URL
 
-    FREUD_MODEL = getattr(config, 'FREUD_MODEL', 'gemma3:4b')  # Freud's model
+    FREUD_MODEL = config.FREUD_MODEL
     FREUD_DREAM_TEMP = 0.8    # Dream phase temperature
     FREUD_REFLECTION_TEMP = 0.5  # Reflection phase temperature
     FREUD_SEED_TEMP = 1.2     # Creative seed scenarios

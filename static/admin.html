@@ -285,6 +285,11 @@
             color: var(--warning);
         }
 
+        .badge-muted {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-secondary);
+        }
+
         .full-width {
             grid-column: 1 / -1;
         }
@@ -480,10 +485,23 @@
                     <p style="color: var(--text-secondary);">Loading protocol information...</p>
                 </div>
             </div>
-        </div>
 
-        <!-- Configuration Row -->
-        <div class="card-grid">
+            <!-- Smart Tool Selection -->
+            <!--
+            <div class="card">
+
+                <div class="card-header">
+                    <div class="card-title">
+                        🔧 Tool Selection
+                    </div>
+                    <span class="refresh-icon" onclick="refreshToolSelection()" id="tools-refresh">🔄</span>
+                </div>
+                <div class="card-body" id="tool-selection-info">
+                    <p style="color: var(--text-secondary);">Loading tool selection...</p>
+                </div>
+            </div>
+        </div>
+            -->
             <!-- Face Monitoring Config -->
             <div class="card">
                 <div class="card-header">
@@ -507,9 +525,36 @@
                     <button class="btn btn-success" onclick="saveFaceConfig()">💾 Save Face Config</button>
                 </div>
             </div>
+        </div>
+        <!-- Configuration Row -->
+        <div class="card-grid">
+            <!-- Face Monitoring Config -->
+            <!--<div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        👤 Face Monitoring
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="config-item">
+                        <label class="config-label">Monitoring Interval (seconds)</label>
+                        <input type="number" class="config-input" id="config-face-interval" value="30">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Min Absence for Greeting (minutes)</label>
+                        <input type="number" class="config-input" id="config-greeting-min" value="5">
+                    </div>
+                    <div class="config-item">
+                        <label class="config-label">Greeting Cooldown (minutes)</label>
+                        <input type="number" class="config-input" id="config-greeting-cooldown" value="15">
+                    </div>
+                    <button class="btn btn-success" onclick="saveFaceConfig()">💾 Save Face Config</button>
+                </div>
+            </div>
+            -->
 
             <!-- Token Budget Visualization -->
-            <div class="card" style="grid-column: span 2;">
+            <div class="card" style="grid-column: span 3;">
                 <div class="card-header">
                     <div class="card-title">
                         🎫 Token Budget
@@ -811,11 +856,12 @@
                 <div class="card-body">
                     <button class="btn btn-primary" style="width: 100%;" onclick="clearWebcamCache()">🗑️ Clear Webcam Cache</button>
                     <button class="btn btn-primary" style="width: 100%;" onclick="resetFacePresence()">🔄 Reset Face Presence</button>
-                    <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/protocol_editor.html'">🎭 Open Protocol Editor</button>
-                    <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/paddleocr_lab.html'">🔍 PaddleOCR Lab</button>
-                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/ephemeral_chat.html'">👥 Ephemrel Chat</button>
-                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/florence2_lab.html'">🔍 Florence2 OCR Lab</button>
-                     <button class="btn btn-primary" style="width: 100%;" onclick="window.location.href='/static/face_manager.html'">👺 Face Recognition manager</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="window.open('static/observability.html', '_blank')">📊 Observability Monitor</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="window.open('/static/protocol_editor.html', '_blank')">🎭 Open Protocol Editor</button>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="window.open('/static/paddleocr lab.html', '_blank')">🔍 PaddleOCR Lab</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.open('/static/ephemeral_chat.html', '_blank')">👥 Ephemrel Chat</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.open('/static/florence2_lab.html', '_blank')">🔍 Florence2 OCR Lab</button>
+                     <button class="btn btn-primary" style="width: 100%;" onclick="window.open('/static/face_manager.html', '_blank')">👺 Face Recognition manager</button>
                     <button class="btn btn-primary" style="width: 100%;" onclick="viewLogs()">📝 View Server Logs</button>
                 </div>
             </div>
@@ -853,6 +899,7 @@
                         <select id="log-service-select" class="config-input" style="min-width: 150px;" onchange="loadServiceLogs()">
                             <option value="">-- Select Service --</option>
                             <optgroup label="Localhost">
+                                <option value="iris-main">🌺 Iris Main</option>
                                 <option value="iris-llama">🧠 Main Inference</option>
                             </optgroup>
                             <optgroup label="Node2">
@@ -1309,6 +1356,59 @@
             }
         }
 
+        async function refreshToolSelection() {
+            const container = document.getElementById('tool-selection-info');
+            try {
+                const data = await apiGet('admin/tools/selection');
+                if (!data.success) {
+                    container.innerHTML = '<p style="color: var(--danger);">Failed to load tool selection</p>';
+                    return;
+                }
+
+                const enabledBadge = data.enabled
+                    ? '<span class="status-badge badge-success">Enabled</span>'
+                    : '<span class="status-badge badge-danger">Disabled</span>';
+
+                // Build group chips
+                const allGroups = [...data.active_groups, ...data.inactive_groups].sort();
+                const groupChips = allGroups.map(g => {
+                    const isActive = data.active_groups.includes(g);
+                    const isForced = data.force_groups.includes(g);
+                    const tools = data.groups[g] ? data.groups[g].tools.join(', ') : '';
+                    let cls = isActive ? 'badge-success' : 'badge-muted';
+                    let suffix = '';
+                    if (isForced) { cls = 'badge-warning'; suffix = ' (forced)'; }
+                    return `<span class="status-badge ${cls}" title="${tools}" style="margin: 2px; cursor: help;">${g}${suffix}</span>`;
+                }).join('');
+
+                // Core tools list
+                const coreList = data.core_tools.map(t =>
+                    `<span style="color: var(--text-secondary); font-size: 0.85rem; margin-right: 0.5rem;">${t}</span>`
+                ).join('');
+
+                container.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <div>
+                            <span style="font-size: 1.5rem; font-weight: bold; color: var(--accent);">${data.selected_count}</span>
+                            <span style="color: var(--text-secondary);"> / ${data.total_tools} tools</span>
+                        </div>
+                        ${enabledBadge}
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <div style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.25rem;">CORE (always on)</div>
+                        ${coreList}
+                    </div>
+                    <div>
+                        <div style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.25rem;">GROUPS</div>
+                        ${groupChips}
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Failed to refresh tool selection:', e);
+                container.innerHTML = '<p style="color: var(--danger);">Error loading tool selection</p>';
+            }
+        }
+
         async function refreshLogs() {
             await viewLogs();
         }
@@ -1319,6 +1419,7 @@
                 refreshMCPServers(),
                 refreshStats(),
                 refreshProtocol(),
+                refreshToolSelection(),
                 refreshTokenBudget()
             ]);
         }
@@ -2101,7 +2202,7 @@
                         return `<div class="${className}">${escaped}</div>`;
                     }).join('');
 
-                    // Scroll to bottom
+                    // Scroll to bottom to show newest entries
                     viewer.scrollTop = viewer.scrollHeight;
                 } else {
                     viewer.innerHTML = `<div class="log-entry log-error">Error: ${data.error || 'Failed to load logs'}</div>`;

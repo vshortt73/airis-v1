@@ -61,7 +61,7 @@ async def main():
 
     # Get URLs from config
     iris_url = config.OLLAMA_BASE_URL  # localhost:11434
-    freud_url = getattr(config, 'FREUD_URL', 'http://node2:11435')
+    freud_url = config.FREUD_URL
 
     print(f"\nConfiguration:")
     print(f"  Iris URL: {iris_url}")

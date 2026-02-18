@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from mcp_servers.base.base_server import IrisMCPServer
+from app import config
 
 @dataclass
 class DriveInfo:
@@ -475,15 +476,15 @@ def linux_shell(command: str) -> dict:
             text=True,
             timeout=60,  # Longer timeout for complex operations
             executable="/bin/bash",
-            cwd="/iris-v3"
+            cwd=config.PROJECT_ROOT
         )
-        
+
         return {
             "success": True,
             "output": result.stdout.strip(),
             "error": result.stderr.strip() if result.stderr else None
         }
-    
+
     except subprocess.TimeoutExpired:
         return {
             "success": False,
@@ -604,12 +605,13 @@ def linux_shell(command: str) -> dict:
         if base_cmd in SAFE_COMMANDS:
             return True, None
         
-        # Iris-restricted commands must operate within /iris-v3/
+        # Iris-restricted commands must operate within project root
         if base_cmd in IRIS_RESTRICTED:
+            project_root = config.PROJECT_ROOT
             path_args = [arg for arg in args if arg.startswith("/")]
             for path in path_args:
-                if not path.startswith("/iris-v3/"):
-                    return False, f"Command '{base_cmd}' can only access /iris-v3/ directory. Attempted: {path}"
+                if not path.startswith(f"{project_root}/"):
+                    return False, f"Command '{base_cmd}' can only access {project_root}/ directory. Attempted: {path}"
             return True, None
         
         # Dangerous commands need special validation
@@ -737,7 +739,7 @@ def linux_shell(command: str) -> dict:
             text=True,
             timeout=30,  # 30 second timeout
             executable="/bin/bash",
-            cwd="/iris-v3"  # Default to Iris's home directory
+            cwd=config.PROJECT_ROOT  # Default to Iris's home directory
         )
         
         return {
@@ -1085,6 +1087,294 @@ def database_query(query: str) -> dict:
 #             "success": False,
 #             "error": f"Query failed: {str(e)}"
 #         }
+
+# ============================================================================
+# DISTRIBUTED SYSTEM HEALTH (Both Nodes)
+# ============================================================================
+
+@server.register_tool
+def distributed_system_health() -> dict:
+    """
+    Get comprehensive health status across both localhost and Node2.
+
+    Returns GPU memory usage per service (with service names), service health,
+    GPU Manager state, and any services in crash loops. Use this to diagnose
+    issues like OOM errors, service failures, or GPU resource conflicts.
+
+    Returns:
+        dict with:
+          - localhost: GPU and service info for main node
+          - node2: GPU and service info for GPU server
+          - gpu_manager: Current GPU Manager state
+          - alerts: List of issues detected
+          - summary: Human-readable summary
+    """
+    import subprocess
+    import httpx
+    import asyncio
+
+    result = {
+        "success": True,
+        "localhost": {"gpus": [], "services": []},
+        "node2": {"gpus": [], "services": []},
+        "gpu_manager": {},
+        "alerts": [],
+        "summary": ""
+    }
+
+    # Node2 SSH target from config
+    node2_host = getattr(config, 'NODE2_HOST', 'node2')
+    node2_user = getattr(config, 'NODE2_SSH_USER', 'captain')
+    node2_ssh = f"{node2_user}@{node2_host}"
+
+    # ─────────────────────────────────────────────────────────────
+    # LOCALHOST GPU
+    # ─────────────────────────────────────────────────────────────
+    try:
+        # Get GPU info
+        gpu_result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=index,name,memory.total,memory.used,memory.free,temperature.gpu',
+             '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=10
+        )
+        if gpu_result.returncode == 0:
+            for line in gpu_result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 6:
+                        result["localhost"]["gpus"].append({
+                            "index": int(parts[0]),
+                            "name": parts[1],
+                            "total_mb": int(parts[2]),
+                            "used_mb": int(parts[3]),
+                            "free_mb": int(parts[4]),
+                            "temp_c": int(parts[5]),
+                            "processes": []
+                        })
+
+        # Get processes per GPU with names
+        proc_result = subprocess.run(
+            ['nvidia-smi', '--query-compute-apps=gpu_uuid,pid,process_name,used_memory',
+             '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=10
+        )
+
+        # Map UUID to index
+        uuid_result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=index,uuid', '--format=csv,noheader'],
+            capture_output=True, text=True, timeout=10
+        )
+        uuid_to_idx = {}
+        if uuid_result.returncode == 0:
+            for line in uuid_result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 2:
+                        uuid_to_idx[parts[1]] = int(parts[0])
+
+        if proc_result.returncode == 0:
+            for line in proc_result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 4:
+                        gpu_uuid = parts[0]
+                        gpu_idx = uuid_to_idx.get(gpu_uuid, 0)
+                        proc_info = {
+                            "pid": int(parts[1]),
+                            "name": parts[2],
+                            "memory_mb": int(parts[3])
+                        }
+                        # Add to matching GPU
+                        for gpu in result["localhost"]["gpus"]:
+                            if gpu["index"] == gpu_idx:
+                                gpu["processes"].append(proc_info)
+                                break
+    except Exception as e:
+        result["alerts"].append(f"Localhost GPU query failed: {e}")
+
+    # ─────────────────────────────────────────────────────────────
+    # NODE2 GPU (via SSH)
+    # ─────────────────────────────────────────────────────────────
+    try:
+        # Get GPU info from Node2
+        ssh_cmd = f"ssh -o BatchMode=yes -o ConnectTimeout=5 {node2_ssh}"
+
+        gpu_result = subprocess.run(
+            f"{ssh_cmd} 'nvidia-smi --query-gpu=index,name,memory.total,memory.used,memory.free,temperature.gpu --format=csv,noheader,nounits'",
+            shell=True, capture_output=True, text=True, timeout=15
+        )
+
+        if gpu_result.returncode == 0:
+            for line in gpu_result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 6:
+                        result["node2"]["gpus"].append({
+                            "index": int(parts[0]),
+                            "name": parts[1],
+                            "total_mb": int(parts[2]),
+                            "used_mb": int(parts[3]),
+                            "free_mb": int(parts[4]),
+                            "temp_c": int(parts[5]),
+                            "processes": []
+                        })
+
+        # Get processes with service names
+        proc_result = subprocess.run(
+            f"{ssh_cmd} 'nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits'",
+            shell=True, capture_output=True, text=True, timeout=15
+        )
+
+        if proc_result.returncode == 0:
+            for line in proc_result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 3:
+                        proc_info = {
+                            "pid": int(parts[0]),
+                            "name": parts[1],  # Will be service name thanks to setproctitle
+                            "memory_mb": int(parts[2])
+                        }
+                        # Determine GPU index based on known service assignments
+                        # GPU 0: vision, float, freud, transcribe, comfyui
+                        # GPU 1: xtts, stt, sentiment
+                        gpu_0_services = ['iris-vision', 'iris-float', 'iris-freud', 'iris-transcribe', 'comfyui']
+                        gpu_idx = 0 if any(svc in proc_info["name"] for svc in gpu_0_services) else 1
+
+                        for gpu in result["node2"]["gpus"]:
+                            if gpu["index"] == gpu_idx:
+                                gpu["processes"].append(proc_info)
+                                break
+    except subprocess.TimeoutExpired:
+        result["alerts"].append("Node2 SSH timeout - is Node2 reachable?")
+    except Exception as e:
+        result["alerts"].append(f"Node2 GPU query failed: {e}")
+
+    # ─────────────────────────────────────────────────────────────
+    # NODE2 SERVICE HEALTH
+    # ─────────────────────────────────────────────────────────────
+    # health=None means check TCP port only (service has no health endpoint)
+    node2_services = {
+        "iris-vision": {"port": 11435, "health": "/health", "gpu": 0},
+        "iris-float": {"port": 8000, "health": "/", "gpu": 0},
+        "iris-freud": {"port": 11435, "health": "/health", "gpu": 0},
+        "iris-transcribe": {"port": 8500, "health": "/health", "gpu": 0},
+        "comfyui": {"port": 8189, "health": "/system_stats", "gpu": 0},
+        "iris-xtts": {"port": 8700, "health": None, "gpu": 1},  # No health endpoint, check TCP
+        "iris-stt": {"port": 8600, "health": "/health", "gpu": 1},
+        "iris-sentiment": {"port": 11437, "health": "/health", "gpu": 1},
+    }
+
+    for service_name, svc_info in node2_services.items():
+        svc_status = {
+            "name": service_name,
+            "gpu": svc_info["gpu"],
+            "port": svc_info["port"],
+            "healthy": False,
+            "systemd_state": "unknown",
+            "restart_count": 0
+        }
+
+        # Check health endpoint (or just TCP connection if health is None)
+        try:
+            if svc_info["health"] is None:
+                # No health endpoint - just check if port accepts connections
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                sock.connect((node2_host, svc_info["port"]))
+                sock.close()
+                svc_status["healthy"] = True
+            else:
+                url = f"http://{node2_host}:{svc_info['port']}{svc_info['health']}"
+                response = httpx.get(url, timeout=3.0)
+                svc_status["healthy"] = response.status_code == 200
+        except:
+            pass
+
+        # Check systemd state and restart count via SSH
+        try:
+            state_result = subprocess.run(
+                f"ssh -o BatchMode=yes -o ConnectTimeout=3 {node2_ssh} "
+                f"'systemctl show {service_name}.service --property=ActiveState,NRestarts --no-pager'",
+                shell=True, capture_output=True, text=True, timeout=10
+            )
+            if state_result.returncode == 0:
+                for line in state_result.stdout.strip().split('\n'):
+                    if '=' in line:
+                        key, val = line.split('=', 1)
+                        if key == 'ActiveState':
+                            svc_status["systemd_state"] = val
+                        elif key == 'NRestarts':
+                            svc_status["restart_count"] = int(val)
+                            if int(val) > 5:
+                                result["alerts"].append(
+                                    f"CRASH LOOP: {service_name} has restarted {val} times"
+                                )
+        except:
+            pass
+
+        result["node2"]["services"].append(svc_status)
+
+    # ─────────────────────────────────────────────────────────────
+    # GPU MANAGER STATE
+    # ─────────────────────────────────────────────────────────────
+    try:
+        from core.gpu_manager import get_gpu_manager
+        manager = get_gpu_manager()
+        result["gpu_manager"] = manager.get_status()
+    except Exception as e:
+        result["gpu_manager"] = {"error": str(e)}
+
+    # ─────────────────────────────────────────────────────────────
+    # GENERATE SUMMARY
+    # ─────────────────────────────────────────────────────────────
+    summary_lines = ["=== DISTRIBUTED SYSTEM HEALTH ===\n"]
+
+    # Localhost
+    summary_lines.append("📍 LOCALHOST:")
+    for gpu in result["localhost"]["gpus"]:
+        pct = round((gpu["used_mb"] / gpu["total_mb"]) * 100, 1) if gpu["total_mb"] > 0 else 0
+        summary_lines.append(f"  GPU {gpu['index']} ({gpu['name']}): {gpu['used_mb']}MB / {gpu['total_mb']}MB ({pct}%) @ {gpu['temp_c']}°C")
+        for proc in gpu["processes"]:
+            summary_lines.append(f"    └─ {proc['name']}: {proc['memory_mb']}MB")
+
+    # Node2
+    summary_lines.append(f"\n📍 NODE2 ({node2_host}):")
+    for gpu in result["node2"]["gpus"]:
+        pct = round((gpu["used_mb"] / gpu["total_mb"]) * 100, 1) if gpu["total_mb"] > 0 else 0
+        summary_lines.append(f"  GPU {gpu['index']} ({gpu['name']}): {gpu['used_mb']}MB / {gpu['total_mb']}MB ({pct}%) @ {gpu['temp_c']}°C")
+        for proc in gpu["processes"]:
+            summary_lines.append(f"    └─ {proc['name']}: {proc['memory_mb']}MB")
+
+    # Services
+    summary_lines.append("\n🔧 NODE2 SERVICES:")
+    for svc in result["node2"]["services"]:
+        status_icon = "✓" if svc["healthy"] else "✗"
+        state = svc["systemd_state"]
+        restarts = f" (restarts: {svc['restart_count']})" if svc["restart_count"] > 0 else ""
+        summary_lines.append(f"  {status_icon} {svc['name']}: {state}{restarts}")
+
+    # GPU Manager
+    gm = result["gpu_manager"]
+    if "error" not in gm:
+        summary_lines.append(f"\n🎮 GPU MANAGER:")
+        summary_lines.append(f"  Current service: {gm.get('current_service', 'none')}")
+        summary_lines.append(f"  State: {gm.get('state', 'unknown')}")
+        summary_lines.append(f"  Active requests: {gm.get('active_requests', 0)}")
+
+    # Alerts
+    if result["alerts"]:
+        summary_lines.append("\n🚨 ALERTS:")
+        for alert in result["alerts"]:
+            summary_lines.append(f"  • {alert}")
+    else:
+        summary_lines.append("\n✅ No alerts")
+
+    result["summary"] = "\n".join(summary_lines)
+
+    return result
+
 
 # ============================================================================
 # SERVER STARTUP

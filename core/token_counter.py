@@ -3,6 +3,7 @@ Token counting for Iris v3
 Uses tiktoken for fast, accurate token estimation
 """
 
+import json
 import tiktoken
 from typing import List, Dict
 
@@ -33,30 +34,44 @@ class TokenCounter:
         if not text:
             return 0
         encoder = cls.get_encoder()
-        return len(encoder.encode(text))
+        return len(encoder.encode(text, disallowed_special=()))
     
     @classmethod
     def count_message_tokens(cls, messages: List[Dict[str, str]]) -> int:
         """
-        Count tokens for a list of messages
-        Includes overhead for role formatting
-        
+        Count tokens for a list of messages.
+        Counts ALL fields the LLM will see: content, tool_calls, tool_call_id, tool_name.
+
         Args:
-            messages: List of message dicts with 'role' and 'content'
-            
+            messages: List of message dicts
+
         Returns:
             Total token count including formatting overhead
         """
         total = 0
         for msg in messages:
-            # Format: role + ": " + content + newline
-            # This approximates how chat formats messages
-            formatted = f"{msg.get('role', 'user')}: {msg.get('content', '')}\n"
+            content = msg.get('content') or ''
+            formatted = f"{msg.get('role', 'user')}: {content}\n"
             total += cls.count_tokens(formatted)
-        
-        # Add ~3 tokens per message for chat formatting overhead
+
+            # Count tool_calls JSON (assistant messages requesting tool use)
+            if 'tool_calls' in msg and msg['tool_calls']:
+                try:
+                    tc = msg['tool_calls']
+                    tc_str = json.dumps(tc) if not isinstance(tc, str) else tc
+                    total += cls.count_tokens(tc_str)
+                except (TypeError, ValueError):
+                    total += 50  # conservative estimate on serialization failure
+
+            # Count tool_call_id and tool_name (tool result messages)
+            if 'tool_call_id' in msg:
+                total += cls.count_tokens(str(msg['tool_call_id']))
+            if 'tool_name' in msg:
+                total += cls.count_tokens(str(msg['tool_name']))
+
+        # Per-message chat formatting overhead
         total += len(messages) * 3
-        
+
         return total
     
     @classmethod

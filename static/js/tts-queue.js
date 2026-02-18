@@ -399,6 +399,12 @@ class TTSQueue {
         this.isPlaying = true;
         console.log('[TTS] Playback worker started');
 
+        // Mute microphone while audio plays to prevent Iris hearing herself
+        if (typeof IrisVOX !== 'undefined') {
+            console.log('[TTS] Pausing VOX - audio playback starting');
+            IrisVOX.pauseListening();
+        }
+
         while (this.enabled) {
             // Wait for audio to be available
             if (this.playbackQueue.length === 0) {
@@ -433,6 +439,12 @@ class TTSQueue {
 
         this.isPlaying = false;
         console.log('[TTS] Playback worker finished');
+
+        // Resume microphone after audio playback completes
+        if (typeof IrisVOX !== 'undefined') {
+            console.log('[TTS] Resuming VOX - audio playback finished');
+            IrisVOX.resumeListening();
+        }
     }
 
     // Split text into smaller chunks for faster first-video playback
@@ -533,7 +545,7 @@ class TTSQueue {
             // 1. No artificial text splitting needed
             // 2. FLOAT handles whole audio for better lip sync
             // 3. Segments arrive as they're generated, not after full completion
-            if (this.useStreamingVideo && typeof pipPlayer !== 'undefined' && pipPlayer.streamVideo) {
+            if (this.useStreamingVideo && typeof pipPlayer !== 'undefined' && pipPlayer.streamVideo && pipPlayer.sessionId) {
                 console.log('[TTS] Using streaming video API');
                 // Don't await - let it stream in background
                 pipPlayer.streamVideo(text);

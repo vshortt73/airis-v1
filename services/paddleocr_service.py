@@ -16,11 +16,8 @@ import httpx
 import base64
 from typing import Dict, Any, Optional, List
 
-try:
-    from app import config
-    PADDLEOCR_REMOTE_URL = getattr(config, 'PADDLEOCR_SERVER_URL', 'http://node2:5200')
-except ImportError:
-    PADDLEOCR_REMOTE_URL = "http://node2:5200"
+from app import config
+PADDLEOCR_REMOTE_URL = config.PADDLEOCR_SERVER_URL
 
 PADDLEOCR_TIMEOUT = 60.0  # seconds
 

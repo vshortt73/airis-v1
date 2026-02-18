@@ -336,12 +336,21 @@ function createToolStatus(icon, toolName) {
     return statusDiv;
 }
 
-function createMessage(role, content, images, contextLevel) {
+function createMessage(role, content, images, contextLevel, sender) {
     images = images || [];
     contextLevel = contextLevel || null;
+    sender = sender || null;
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
+
+    // Check if this is a contact message (sender starts with 'contact_victor')
+    const isContactMessage = sender && sender.startsWith('contact_victor');
+
+    // Add special class for contact messages
+    if (isContactMessage) {
+        messageDiv.classList.add('contact-message');
+    }
 
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
@@ -350,7 +359,14 @@ function createMessage(role, content, images, contextLevel) {
     } else if (role === 'assistant') {
         avatar.textContent = 'I';
 
-        if (contextLevel) {
+        // Show Telegram badge for contact messages
+        if (isContactMessage) {
+            const badge = document.createElement('div');
+            badge.className = 'context-tier-badge tier-telegram';
+            badge.textContent = '✈️';
+            badge.title = 'Iris reached out via Telegram';
+            avatar.appendChild(badge);
+        } else if (contextLevel) {
             const badge = document.createElement('div');
             badge.className = 'context-tier-badge';
 
@@ -468,7 +484,8 @@ async function loadConversationHistory() {
                         pendingToolImages = [];
                     }
 
-                    const messageDiv = createMessage(msg.role, msg.content, images);
+                    // Pass sender for contact message styling (Telegram icon)
+                    const messageDiv = createMessage(msg.role, msg.content, images, null, msg.sender);
                     messageDiv.style.animation = 'none';
                     chatContainer.appendChild(messageDiv);
                 }
@@ -661,6 +678,23 @@ function handleWebSocketMessage(data) {
                     }
                 }
             }
+
+            // Meeting recording: start browser audio capture when meeting tool returns a meeting_id
+            if (data.tool_name === 'meeting' || data.tool_name === 'meeting_start') {
+                console.log(`[meeting] Tool result received: tool_name=${data.tool_name}, success=${data.success}, meeting_id=${data.meeting_id}, action=${data.action}, isRecording=${meetingRecorder.isRecording}, storedMeetingId=${meetingRecorder.meetingId}`);
+                // Only start recording for 'start' action or meeting_start tool
+                const isStartAction = data.tool_name === 'meeting_start' || data.action === 'start';
+                if (data.success && data.meeting_id && isStartAction && !meetingRecorder.isRecording) {
+                    console.log(`[meeting] Starting browser recording for meeting #${data.meeting_id}`);
+                    onMeetingStarted(data.meeting_id);
+                }
+                // Stop browser recorder when stop action is called - use browser's stored meeting ID
+                // This handles cases where Iris doesn't pass meeting_id (success=false)
+                if (data.action === 'stop' && meetingRecorder.isRecording) {
+                    console.log(`[meeting] Stop action received, stopping browser recording for meeting #${meetingRecorder.meetingId}`);
+                    meetingRecorder.stop();
+                }
+            }
             break;
 
         case 'thinking_start':
@@ -736,6 +770,21 @@ function handleWebSocketMessage(data) {
                 addCopyButtonsToCodeBlocks(textSpan);
                 scrollToBottom();
             }
+            break;
+
+        case 'hallucination_retry':
+            // Model narrated tool usage instead of calling tools — server is retrying
+            // Clear the hallucinated response so retry chunks replace it
+            console.warn('[hallucination_retry]', data.reason);
+            currentAssistantText = '';
+            if (currentAssistantMessage) {
+                const content = currentAssistantMessage.querySelector('.message-content');
+                if (content) {
+                    content.innerHTML = '<span class="active-text" style="color: #999; font-style: italic;">Retrying (tool hallucination detected)...</span>';
+                }
+            }
+            // Server handles TTS cancellation for server-side routing.
+            // Client-side TTS (if enabled) will be overwritten by retry chunks.
             break;
 
         case 'interrupted':
@@ -901,6 +950,16 @@ function handleWebSocketMessage(data) {
             }
             break;
 
+        case 'contact_message':
+            // Iris reached out via Telegram/autonomous drive - render as assistant message
+            {
+                console.log('[WS] Contact message received:', data.sender);
+                const contactMsgDiv = createMessage(data.role, data.content, [], null, data.sender);
+                chatContainer.appendChild(contactMsgDiv);
+                scrollToBottom();
+            }
+            break;
+
         case 'tool_image':
             console.log('[WS] Tool generated image:', data.tool_name, data.filename);
 
@@ -934,6 +993,18 @@ function handleWebSocketMessage(data) {
             if (typeof pipPlayer !== 'undefined' && pipPlayer.sessionId === data.session_id) {
                 pipPlayer.onHLSSegmentReady(data);
             }
+            // Relay to pop-out window via BroadcastChannel
+            ttsQueue.videoChannel.postMessage({
+                type: 'hls-segment-ready',
+                data: {
+                    sessionId: data.session_id,
+                    segment: data.segment,
+                    segmentIndex: data.segment_index,
+                    duration: data.duration,
+                    playlistUrl: data.playlist_url,
+                    isLast: data.is_last
+                }
+            });
             break;
 
         case 'hls_new_turn':
@@ -941,6 +1012,14 @@ function handleWebSocketMessage(data) {
             if (typeof pipPlayer !== 'undefined' && pipPlayer.sessionId === data.session_id) {
                 pipPlayer.onHLSNewTurn(data);
             }
+            // Relay to pop-out window via BroadcastChannel
+            ttsQueue.videoChannel.postMessage({
+                type: 'hls-new-turn',
+                data: {
+                    sessionId: data.session_id,
+                    playlistUrl: data.playlist_url
+                }
+            });
             break;
 
         case 'hls_stream_complete':
@@ -948,6 +1027,14 @@ function handleWebSocketMessage(data) {
             if (typeof pipPlayer !== 'undefined' && pipPlayer.sessionId === data.session_id) {
                 pipPlayer.onHLSStreamComplete(data);
             }
+            // Relay to pop-out window via BroadcastChannel
+            ttsQueue.videoChannel.postMessage({
+                type: 'hls-stream-complete',
+                data: {
+                    sessionId: data.session_id,
+                    playlistUrl: data.playlist_url
+                }
+            });
             break;
 
         case 'protocol_status':
@@ -997,6 +1084,8 @@ function sendMessage() {
     if (typeof pipPlayer !== 'undefined' && pipPlayer.isActive) {
         pipPlayer.showThinking();
     }
+    // Relay thinking state to pop-out window
+    ttsQueue.videoChannel.postMessage({ type: 'show-thinking', data: {} });
 
     const payload = {
         message: message || (attachedImages.length > 0 ? '(attached image)' : '(attached document)'),
@@ -1306,6 +1395,119 @@ function setupEventListeners() {
 }
 
 // ============================================================
+// Capabilities (feature flag discovery)
+// ============================================================
+
+// ============================================================
+// Meeting Recording
+// ============================================================
+
+async function toggleMeetingRecording() {
+    if (meetingRecorder.isRecording) {
+        // Stop recording — tell Iris via chat so MCP stop action fires
+        meetingRecorder.stop();
+    } else {
+        // Prompt for title, then send chat message so Iris calls the MCP meeting tool
+        const title = prompt('Meeting title:');
+        if (!title) return;
+
+        try {
+            // Send start command through chat — Iris calls meeting(action="start")
+            // which creates the DB record and returns meeting_id via tool_result
+            const input = document.getElementById('messageInput');
+            if (input) {
+                input.value = `Start a meeting called "${title}"`;
+                sendMessage();
+            }
+
+            // Wire up recorder UI elements (actual recording starts in onMeetingStarted
+            // when tool_result arrives with meeting_id)
+            meetingRecorder.btnEl = document.getElementById('meetingBtn');
+            meetingRecorder.statusEl = document.getElementById('meetingStatus');
+            meetingRecorder.timerEl = document.getElementById('meetingTimer');
+
+        } catch (err) {
+            console.error('[meeting] Failed to start:', err);
+        }
+    }
+}
+
+/**
+ * Called by the WebSocket message handler when Iris starts a meeting via MCP.
+ * Receives the meeting_id and begins browser audio recording.
+ */
+async function onMeetingStarted(meetingId) {
+    try {
+        meetingRecorder.btnEl = document.getElementById('meetingBtn');
+        meetingRecorder.statusEl = document.getElementById('meetingStatus');
+        meetingRecorder.timerEl = document.getElementById('meetingTimer');
+        await meetingRecorder.start(meetingId);
+        console.log(`[meeting] Browser recording started for meeting #${meetingId}`);
+    } catch (err) {
+        console.error('[meeting] Browser recording failed:', err);
+    }
+}
+
+async function loadCapabilities() {
+    try {
+        const resp = await fetch('/api/capabilities');
+        const caps = await resp.json();
+        applyCapabilities(caps);
+    } catch (e) {
+        console.warn('[capabilities] Failed to load, all controls enabled:', e);
+    }
+}
+
+function applyCapabilities(caps) {
+    console.log('[capabilities]', caps);
+
+    // Voice toggle (TTS)
+    if (!caps.tts) {
+        const toggle = document.getElementById('speechToggle');
+        const label = toggle?.closest('.speech-toggle');
+        if (toggle) {
+            toggle.disabled = true;
+            toggle.checked = false;
+        }
+        if (label) {
+            label.classList.add('disabled-feature');
+            label.title = 'Voice disabled \u2014 TTS service not available';
+        }
+    }
+
+    // VOX / Microphone (STT)
+    if (!caps.stt) {
+        const voxBtn = document.getElementById('voxToggle');
+        const voxControls = voxBtn?.closest('.vox-controls');
+        if (voxBtn) voxBtn.disabled = true;
+        if (voxControls) {
+            voxControls.classList.add('disabled-feature');
+            voxControls.title = 'Microphone disabled \u2014 STT service not available';
+        }
+    }
+
+    // Video launch button
+    if (!caps.video) {
+        const videoBtn = document.getElementById('pipLaunchBtn');
+        if (videoBtn) {
+            videoBtn.disabled = true;
+            videoBtn.classList.add('disabled-feature');
+            videoBtn.title = 'Video disabled \u2014 FLOAT service not available';
+        }
+    }
+
+    // Meeting record button
+    if (!caps.transcribe) {
+        const meetBtn = document.getElementById('meetingBtn');
+        if (meetBtn) {
+            meetBtn.disabled = true;
+            meetBtn.classList.add('disabled-feature');
+            meetBtn.title = 'Meeting recording disabled \u2014 transcription service not available';
+        }
+    }
+}
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -1319,6 +1521,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initWebcamDraggable();
 
     setupEventListeners();
+
+    loadCapabilities();
 
     loadConversationHistory().then(() => {
         connectWebSocket();

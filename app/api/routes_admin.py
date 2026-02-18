@@ -30,6 +30,15 @@ from app import config
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+async def _update_status_file():
+    """Fire-and-forget update of the service status file."""
+    try:
+        from core.service_status import write_service_status
+        await write_service_status()
+    except Exception as e:
+        print(f"[routes_admin.py] Status file update failed: {e}")
+
+
 # ============================================================================
 # Request Models
 # ============================================================================
@@ -296,51 +305,71 @@ async def check_all_services():
             "icon": "🧠"
         },
         {
+            "name": "Iris",
+            "url": "https://localhost:8443",
+            "type": "iris",
+            "location": "localhost",
+            "gpu": "CPU",
+            "expected_model": "FastAPI",
+            "icon": "🌐"
+        },
+        {
             "name": "Vision / Freud",
-            "url": getattr(config, 'VISION_OLLAMA_URL', 'http://node2:11435'),
+            "url": config.VISION_OLLAMA_URL,
             "type": "llama",
-            "location": "node2",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
             "gpu": "GPU 0 (RTX 4080 SUPER)",
             "expected_model": "llama3.2-vision:11b / gemma3:4b",
             "icon": "👁️"
         },
         {
             "name": "STT (Whisper)",
-            "url": getattr(config, 'STT_SERVER_URL', 'http://node2:8600'),
+            "url": config.STT_SERVER_URL,
             "type": "stt",
-            "location": "node2",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
             "gpu": "GPU 1 (RTX 3060)",
             "expected_model": "whisper",
             "icon": "🎤"
         },
         {
             "name": "XTTS",
-            "url": getattr(config, 'XTTS_SERVER_URL', 'http://node2:8700'),
+            "url": config.XTTS_SERVER_URL,
             "type": "xtts",
-            "location": "node2",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
             "gpu": "GPU 1 (RTX 3060)",
             "expected_model": "xtts-v2",
             "icon": "🔊"
         },
         {
             "name": "FLOAT",
-            "url": getattr(config, 'FLOAT_SERVER_URL', 'http://node2:8000'),
+            "url": config.FLOAT_SERVER_URL,
             "type": "float",
-            "location": "node2",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
             "gpu": "GPU 0 (RTX 4080 SUPER)",
             "expected_model": "float",
             "icon": "🎬"
         },
         {
             "name": "Sentiment",
-            "url": "http://node2:11437",
+            "url": config.MISTRAL_URL.rsplit('/v1/', 1)[0],  # Strip /v1/chat/completions suffix
             "type": "llama",
-            "location": "node2",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
             "gpu": "GPU 1 (RTX 3060)",
             "expected_model": "mistral-7b",
             "icon": "💭"
+        },
+        {
+            "name": "Transcribe",
+            "url": getattr(config, 'TRANSCRIBE_SERVER_URL', 'http://node2:8500'),
+            "type": "transcribe",
+            "location": getattr(config, 'NODE2_HOST', 'node2'),
+            "gpu": "GPU 0 (RTX 4080 SUPER)",
+            "expected_model": "whisperx",
+            "icon": "🎙️"
         }
     ]
+
+    node2_enabled = getattr(config, 'NODE2_ENABLED', True)
 
     async def check_single_service(svc_config):
         """Check a single service and return enriched result"""
@@ -358,8 +387,16 @@ async def check_all_services():
             "success": False
         }
 
+        # Skip Node2 services when Node2 is disabled (avoids timeout)
+        if svc_config["location"] != "localhost" and not node2_enabled:
+            result["status"] = "disabled"
+            result["success"] = True
+            result["disabled_reason"] = "Node2 disabled in configuration"
+            return result
+
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            # Use verify=False for HTTPS with self-signed certs (Iris itself)
+            async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
                 svc_type = svc_config["type"]
                 url = svc_config["url"]
 
@@ -382,7 +419,18 @@ async def check_all_services():
                         except Exception:
                             pass
 
-                elif svc_type in ["xtts", "stt", "float"]:
+                elif svc_type == "iris":
+                    # Iris itself — check /api/health
+                    try:
+                        response = await client.get(f"{url}/api/health")
+                        if response.status_code == 200:
+                            result["status"] = "running"
+                            result["success"] = True
+                            result["model"] = svc_config["expected_model"]
+                    except Exception:
+                        pass
+
+                elif svc_type in ["xtts", "stt", "float", "transcribe"]:
                     # Try health, then docs endpoint
                     for endpoint in ["/health", "/docs", "/"]:
                         try:
@@ -405,8 +453,9 @@ async def check_all_services():
     services = await asyncio.gather(*tasks)
 
     # Group by location
+    node2_host = getattr(config, 'NODE2_HOST', 'node2')
     localhost_services = [s for s in services if s["location"] == "localhost"]
-    node2_services = [s for s in services if s["location"] == "node2"]
+    node2_services = [s for s in services if s["location"] == node2_host]
 
     # Calculate overall health
     all_running = all(s["status"] == "running" for s in services)
@@ -440,8 +489,8 @@ async def control_service(service_name: str, action: str):
         return {"success": False, "error": f"Invalid action: {action}. Must be start, stop, or restart"}
 
     # Define which services are on which host
-    localhost_services = ['iris-llama']
-    node2_services = ['iris-vision', 'iris-freud', 'iris-stt', 'iris-xtts', 'iris-float', 'iris-sentiment']
+    localhost_services = ['iris-main', 'iris-llama']
+    node2_services = ['iris-vision', 'iris-freud', 'iris-stt', 'iris-xtts', 'iris-float', 'iris-sentiment', 'iris-transcribe']
 
     # Validate service name
     all_services = localhost_services + node2_services
@@ -460,6 +509,7 @@ async def control_service(service_name: str, action: str):
             stdout, stderr = await process.communicate()
 
             if process.returncode == 0:
+                await _update_status_file()
                 return {
                     "success": True,
                     "message": f"Service {service_name} {action}ed successfully",
@@ -473,7 +523,10 @@ async def control_service(service_name: str, action: str):
                 }
         else:
             # Node2 service - use SSH
-            cmd = f"ssh captain@node2 'sudo systemctl {action} {service_name}'"
+            # Note: sudoers requires full path /bin/systemctl and .service suffix
+            node2_ssh = f"{getattr(config, 'NODE2_SSH_USER', 'captain')}@{getattr(config, 'NODE2_HOST', 'node2')}"
+            node2_host = getattr(config, 'NODE2_HOST', 'node2')
+            cmd = f"ssh {node2_ssh} 'sudo /bin/systemctl {action} {service_name}.service'"
             process = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -482,16 +535,17 @@ async def control_service(service_name: str, action: str):
             stdout, stderr = await process.communicate()
 
             if process.returncode == 0:
+                await _update_status_file()
                 return {
                     "success": True,
-                    "message": f"Service {service_name} {action}ed successfully on node2",
-                    "host": "node2"
+                    "message": f"Service {service_name} {action}ed successfully on {node2_host}",
+                    "host": node2_host
                 }
             else:
                 return {
                     "success": False,
-                    "error": stderr.decode().strip() or f"Failed to {action} {service_name} on node2",
-                    "host": "node2"
+                    "error": stderr.decode().strip() or f"Failed to {action} {service_name} on {node2_host}",
+                    "host": node2_host
                 }
 
     except Exception as e:
@@ -585,14 +639,14 @@ async def get_stt_config():
 
         try:
             cursor.execute("""
-                SELECT config_key, config_value
+                SELECT key, value
                 FROM system_config
-                WHERE config_key LIKE 'STT_%'
+                WHERE key LIKE 'STT_%'
             """)
             rows = cursor.fetchall()
             for row in rows:
-                key = row['config_key'].lower().replace('stt_', '')
-                value = row['config_value']
+                key = row['key'].lower().replace('stt_', '')
+                value = row['value']
                 if key in stt_config:
                     # Convert to appropriate type
                     if key in ['vox_threshold']:
@@ -654,11 +708,11 @@ async def update_stt_config(updates: Dict[str, Any]):
 
             # Upsert into system_config
             cursor.execute("""
-                INSERT INTO system_config (config_key, config_value, modified_by, modified_at)
-                VALUES (%s, %s, 'admin_console', NOW())
-                ON CONFLICT (config_key)
-                DO UPDATE SET config_value = %s, modified_by = 'admin_console', modified_at = NOW()
-            """, (db_key, str(value), str(value)))
+                INSERT INTO system_config (category, key, value, value_type, default_value, modified_by, last_modified)
+                VALUES ('stt', %s, %s, 'string', %s, 'admin_console', NOW())
+                ON CONFLICT (key)
+                DO UPDATE SET value = %s, modified_by = 'admin_console', last_modified = NOW()
+            """, (db_key, str(value), str(value), str(value)))
 
             saved.append(key)
 
@@ -696,7 +750,8 @@ async def update_stt_model(model: str):
 # This file is read by systemd when starting iris-stt service
 WHISPER_MODEL={model}
 """
-        cmd = f"ssh captain@node2 'echo \"{config_content}\" > /programs/stt/stt.conf'"
+        node2_ssh = f"{getattr(config, 'NODE2_SSH_USER', 'captain')}@{getattr(config, 'NODE2_HOST', 'node2')}"
+        cmd = f"ssh {node2_ssh} 'echo \"{config_content}\" > /programs/stt/stt.conf'"
         process = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -801,11 +856,12 @@ async def update_config(update: ConfigUpdate):
         if not success:
             raise HTTPException(status_code=400, detail=f"Failed to update config: {key}")
 
-        # Reload config into runtime
+        # Reload config into runtime — this re-reads from DB with proper
+        # type conversion, then re-inject into config module so the running
+        # process uses correctly typed values (int, bool, etc.)
         reload_config()
-
-        # Also update the config module for immediate effect
-        setattr(config, key, value)
+        from database.config_loader import inject_into_module
+        inject_into_module(config)
 
         return {
             "success": True,
@@ -851,6 +907,46 @@ async def reload_config_from_database():
         return {"success": False, "error": str(e)}
 
 
+@router.post("/conversation/reload")
+async def reload_conversation_from_database():
+    """
+    Force reload conversation history from database
+
+    Use this if the in-memory conversation becomes stale or corrupted
+    without restarting the server.
+    """
+    try:
+        from app.api.routes_context import active_conversation
+
+        if active_conversation is None:
+            return {
+                "success": False,
+                "error": "No active conversation found"
+            }
+
+        # Get count before reload
+        old_count = active_conversation.get_message_count()
+
+        # Reload from database
+        active_conversation.reload_from_database()
+
+        # Get count after reload
+        new_count = active_conversation.get_message_count()
+
+        # Also invalidate snapshot to force fresh context assembly
+        active_conversation.invalidate_snapshot(reason="Conversation reloaded from database")
+
+        return {
+            "success": True,
+            "message": f"Conversation reloaded from database",
+            "messages_before": old_count,
+            "messages_after": new_count
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 # ============================================================================
 # Quick Actions
 # ============================================================================
@@ -887,12 +983,10 @@ async def reset_face_presence():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            UPDATE face_presence_state
-            SET is_present = false,
-                exited_at = NOW()
-            WHERE is_present = true
-        """)
+        # Full reset: clear all presence state so next detection triggers a greeting.
+        # Simply delete all rows — next face detection will see no prior presence
+        # (absence = None → "first_time" greeting) and no last_greeting_at (cooldown passes).
+        cursor.execute("DELETE FROM face_presence_state")
 
         affected = cursor.rowcount
         conn.commit()
@@ -901,7 +995,7 @@ async def reset_face_presence():
 
         return {
             "success": True,
-            "message": f"Reset {affected} presence record(s)"
+            "message": f"Cleared {affected} presence record(s) — next detection will trigger greeting"
         }
 
     except Exception as e:
@@ -975,18 +1069,49 @@ async def get_service_logs(service_name: str, lines: int = 100):
     import asyncio
 
     # Define which services are on which host
-    localhost_services = ['iris-llama']
-    node2_services = ['iris-vision', 'iris-freud', 'iris-stt', 'iris-xtts', 'iris-float', 'iris-sentiment']
+    localhost_services = ['iris-main', 'iris-llama']
+    node2_services = ['iris-vision', 'iris-freud', 'iris-stt', 'iris-xtts', 'iris-float', 'iris-sentiment', 'iris-transcribe']
+
+    # Noise patterns to filter out (high-frequency repetitive lines)
+    noise_patterns = [
+        'POST /api/faces/webcam_frame',
+        'GET /health',
+        'GET /docs',
+        '[face_monitor][scan_and_process] Checking for webcam frame',
+        '[face_monitor][scan_and_process] Frame age:',
+        '[face_monitor][scan_and_process] Processing frame',
+        '[face_recognition.py][detect_faces] Detected',
+        '[face_recognition.py][find_best_match] Found',
+        '[face_recognition.py][recognize_face] Recognized',
+        'huggingface/tokenizers: The current process just got forked',
+        'Avoid using `tokenizers` before the fork',
+        'Explicitly set the environment variable TOKENIZERS_PARALLELISM',
+        'To disable this warning',
+        'GET /api/admin/',
+    ]
+
+    def filter_noise(raw_lines: list, desired_count: int) -> list:
+        """Filter out high-frequency noise lines, return up to desired_count."""
+        filtered = []
+        for line in raw_lines:
+            if not any(pattern in line for pattern in noise_patterns):
+                filtered.append(line)
+                if len(filtered) >= desired_count:
+                    break
+        return filtered
 
     # Validate service name
     all_services = localhost_services + node2_services
     if service_name not in all_services:
         return {"success": False, "error": f"Unknown service: {service_name}"}
 
+    # Fetch extra lines to compensate for noise filtering, then trim to requested count
+    fetch_lines = lines * 10
+
     try:
         if service_name in localhost_services:
-            # Local service
-            cmd = f"journalctl -u {service_name} -n {lines} --no-pager"
+            # Local service — chronological order, UI scrolls to bottom for newest
+            cmd = f"journalctl -u {service_name} -n {fetch_lines} --no-pager"
             process = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -995,7 +1120,8 @@ async def get_service_logs(service_name: str, lines: int = 100):
             stdout, stderr = await process.communicate()
 
             if process.returncode == 0:
-                log_lines = stdout.decode().strip().split('\n')
+                raw_lines = stdout.decode().strip().split('\n')
+                log_lines = filter_noise(raw_lines, lines)
                 return {
                     "success": True,
                     "service": service_name,
@@ -1010,7 +1136,9 @@ async def get_service_logs(service_name: str, lines: int = 100):
                 }
         else:
             # Node2 service - use SSH
-            cmd = f"ssh captain@node2 'journalctl -u {service_name} -n {lines} --no-pager'"
+            node2_ssh = f"{getattr(config, 'NODE2_SSH_USER', 'captain')}@{getattr(config, 'NODE2_HOST', 'node2')}"
+            node2_host = getattr(config, 'NODE2_HOST', 'node2')
+            cmd = f"ssh {node2_ssh} 'journalctl -u {service_name} -n {fetch_lines} --no-pager'"
             process = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -1019,18 +1147,19 @@ async def get_service_logs(service_name: str, lines: int = 100):
             stdout, stderr = await process.communicate()
 
             if process.returncode == 0:
-                log_lines = stdout.decode().strip().split('\n')
+                raw_lines = stdout.decode().strip().split('\n')
+                log_lines = filter_noise(raw_lines, lines)
                 return {
                     "success": True,
                     "service": service_name,
-                    "host": "node2",
+                    "host": node2_host,
                     "logs": log_lines
                 }
             else:
                 return {
                     "success": False,
-                    "error": stderr.decode().strip() or "Failed to get logs from node2",
-                    "host": "node2"
+                    "error": stderr.decode().strip() or f"Failed to get logs from {node2_host}",
+                    "host": node2_host
                 }
 
     except Exception as e:
@@ -1286,7 +1415,7 @@ async def get_token_budget():
 
         try:
             # Import here to avoid circular imports
-            from core.system_prompt import assemble_full_context
+            from core.system_prompt import assemble_full_context, build_per_turn_context
             from core.conversation import ConversationHistory
             from mcp_servers.tool_manager import get_tool_manager
 
@@ -1301,6 +1430,13 @@ async def get_token_budget():
                 # Assemble context
                 all_messages, budget = assemble_full_context(active_conversation, tool_definitions)
 
+                # Include per-turn tail (episodic memories, emotional state, datetime)
+                per_turn_msg = build_per_turn_context(user_message=None, conversation=active_conversation)
+                per_turn_tokens = 0
+                if per_turn_msg:
+                    from core.token_counter import TokenCounter as TC
+                    per_turn_tokens = TC.count_tokens(per_turn_msg["content"])
+
                 # Parse stats
                 system_msg = all_messages[0] if all_messages else {"content": ""}
                 conversation_msgs = all_messages[1:] if len(all_messages) > 1 else []
@@ -1308,10 +1444,11 @@ async def get_token_budget():
                 from core.token_counter import TokenCounter
                 system_tokens = TokenCounter.count_tokens(system_msg.get("content", ""))
                 conversation_tokens = TokenCounter.count_message_tokens(conversation_msgs)
-                total_tokens = system_tokens + conversation_tokens
+                total_tokens = system_tokens + per_turn_tokens + conversation_tokens
 
                 live_usage = {
                     "system_tokens": system_tokens,
+                    "per_turn_tokens": per_turn_tokens,
                     "conversation_tokens": conversation_tokens,
                     "total_tokens": total_tokens,
                     "utilization_percent": round((total_tokens / context_window) * 100, 1) if context_window > 0 else 0,
@@ -1337,7 +1474,9 @@ async def get_token_budget():
         mismatches = []
         for key, running_val in running_config.items():
             db_val = configurable.get(key, {}).get('value')
-            if db_val is not None and db_val != running_val:
+            # Compare as same type to avoid int/string false positives
+            # (e.g., setattr from admin UI may store "32768" instead of 32768)
+            if db_val is not None and str(db_val) != str(running_val):
                 mismatches.append({
                     "key": key,
                     "database": db_val,
@@ -1749,6 +1888,72 @@ async def invalidate_snapshot():
         return {
             "success": True,
             "message": "Snapshot invalidated. Next message will rebuild context from scratch."
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/tools/selection")
+async def get_tool_selection():
+    """
+    Get current smart tool selection state.
+    Returns which tools are active, which groups are selected, and feature status.
+    """
+    try:
+        from mcp_servers.tool_manager import get_tool_manager, CORE_TOOLS, TOOL_GROUPS
+
+        tool_manager = get_tool_manager()
+        enabled = getattr(config, 'SMART_TOOL_SELECTION', False)
+
+        # Get active conversation's snapshot_tools if available
+        active_conversation = None
+        try:
+            from app.api.routes_chat import active_conversation
+        except ImportError:
+            pass
+
+        snapshot_tools = None
+        force_groups = []
+        if active_conversation and hasattr(active_conversation, 'snapshot_tools'):
+            snapshot_tools = active_conversation.snapshot_tools
+            force_groups = list(active_conversation.snapshot_force_groups)
+
+        all_tool_names = tool_manager.get_tool_names()
+        total_tools = len(all_tool_names)
+
+        # Determine which groups are currently active
+        active_groups = []
+        inactive_groups = []
+        if enabled and snapshot_tools is not None:
+            snapshot_set = set(snapshot_tools)
+            for group_name, group_def in TOOL_GROUPS.items():
+                if group_def["tools"] & snapshot_set:
+                    active_groups.append(group_name)
+                else:
+                    inactive_groups.append(group_name)
+            selected_count = len(snapshot_tools)
+        else:
+            # Feature disabled or no snapshot yet — all tools active
+            active_groups = list(TOOL_GROUPS.keys())
+            selected_count = total_tools
+
+        return {
+            "success": True,
+            "enabled": enabled,
+            "total_tools": total_tools,
+            "selected_count": selected_count,
+            "selected_tools": snapshot_tools or all_tool_names,
+            "core_tools": sorted(CORE_TOOLS),
+            "active_groups": active_groups,
+            "inactive_groups": inactive_groups,
+            "force_groups": force_groups,
+            "groups": {
+                name: {
+                    "tools": sorted(gdef["tools"]),
+                    "triggers": gdef["triggers"],
+                }
+                for name, gdef in TOOL_GROUPS.items()
+            }
         }
     except Exception as e:
         return {"success": False, "error": str(e)}

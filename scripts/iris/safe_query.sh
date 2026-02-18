@@ -17,7 +17,7 @@ esac
 threshold=$((threshold * 85 / 100))
 
 # Sample 100 rows to estimate average token size
-avg_tokens=$(PGPASSWORD='yourpassword' psql -t -h localhost -U irisuser -d irisdb -c "
+avg_tokens=$(PGPASSWORD="${IRIS_DB_PASSWORD:?IRIS_DB_PASSWORD not set}" psql -t -h localhost -U irisuser -d irisdb -c "
   SELECT AVG(
     LENGTH(COALESCE(message,'')) + 
     LENGTH(COALESCE(summary_context,'')) + 

@@ -41,7 +41,7 @@ print(f"\nQuery Topic: '{topic_label}'")
 print(f"Query Narrative: '{narrative_context[:60]}...'")
 
 # Get 10 random cruise memories
-conn = psycopg2.connect(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+conn = psycopg2.connect(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 cur = conn.cursor()
 
 cur.execute("""

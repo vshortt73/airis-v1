@@ -1,0 +1,20 @@
+[Unit]
+Description=Iris Autonomous Drive Daemon (Phase 1)
+After=postgresql.service network.target
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=captain
+Group=captain
+WorkingDirectory=/iris-v3
+Environment=PYTHONPATH=/iris-v3
+Environment=IRIS_DB_PASSWORD=%REPLACE_WITH_PASSWORD%
+ExecStart=/venv/iris-v3/bin/python /iris-v3/services/drive_daemon.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

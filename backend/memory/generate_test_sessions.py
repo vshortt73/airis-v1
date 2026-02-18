@@ -8,13 +8,14 @@ Stratifies by:
 - Recency (recent, week old, older)
 """
 
+import os
 import sys
 import psycopg2
 from psycopg2.extras import DictCursor
 import json
 import random
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password="yourpassword", host="localhost", port=5432)
+DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def get_sessions_stratified(total_sessions=10):
     """Get stratified sample of sessions"""
