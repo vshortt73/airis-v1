@@ -8,7 +8,6 @@
 #   0 4 * * * /iris-v3/scripts/nightly_dream.sh >> /iris-v3/logs/dreams/cron.log 2>&1
 # ============================================================================
 
-set -e  # Exit on error
 export IRIS_DB_PASSWORD='yourpassword'
 
 # ============================================================================
@@ -21,6 +20,54 @@ DREAM_MODERATOR="$PROJECT_ROOT/backend/memory/dreams/dream_moderator.py"
 LOG_DIR="$PROJECT_ROOT/logs/dreams"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/dream_$TIMESTAMP.log"
+
+# Node2 configuration
+NODE2_HOST="node2"
+NODE2_USER="captain"
+SSH_OPTS="-o ConnectTimeout=10 -o BatchMode=yes"
+
+# Track whether we swapped to Freud (cleanup only needed if we did)
+FREUD_STARTED=false
+
+# ============================================================================
+# CLEANUP TRAP — runs on ANY exit (success, failure, signal)
+# ============================================================================
+
+cleanup() {
+    if [ "$FREUD_STARTED" = false ]; then
+        return 0  # Never swapped, nothing to restore
+    fi
+
+    echo "" | tee -a "$LOG_FILE"
+    echo "[4/4] Cleanup - restoring vision service on node2..." | tee -a "$LOG_FILE"
+
+    for attempt in 1 2 3; do
+        echo "Stopping Freud service on node2 (attempt $attempt)..." | tee -a "$LOG_FILE"
+        ssh $SSH_OPTS ${NODE2_USER}@${NODE2_HOST} \
+            "sudo systemctl stop iris-freud" 2>&1 | tee -a "$LOG_FILE" || true
+        sleep 2
+
+        echo "Starting Vision service on node2 (attempt $attempt)..." | tee -a "$LOG_FILE"
+        ssh $SSH_OPTS ${NODE2_USER}@${NODE2_HOST} \
+            "sudo systemctl start iris-vision" 2>&1 | tee -a "$LOG_FILE" || true
+        sleep 8
+
+        if curl -sf http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
+            echo "✓ Vision service restored on node2 (port 11435)" | tee -a "$LOG_FILE"
+            # Deactivate virtual environment
+            deactivate 2>/dev/null || true
+            return 0
+        fi
+        echo "⚠ Vision health check failed (attempt $attempt)" | tee -a "$LOG_FILE"
+    done
+
+    echo "✗ CRITICAL: Vision service could not be restored after 3 attempts" | tee -a "$LOG_FILE"
+    # Deactivate virtual environment
+    deactivate 2>/dev/null || true
+    return 1
+}
+
+trap cleanup EXIT
 
 # ============================================================================
 # SETUP
@@ -68,10 +115,6 @@ echo "" | tee -a "$LOG_FILE"
 
 echo "[2/4] Setting up llama.cpp servers for dreaming..." | tee -a "$LOG_FILE"
 
-# Node2 configuration
-NODE2_HOST="node2"
-NODE2_USER="captain"
-
 # Check Iris server (port 11434 - Qwen 32B on local GPU 0)
 if ! curl -s http://localhost:11434/health > /dev/null 2>&1; then
     echo "⚠ Iris server (port 11434) not responding - attempting to start via systemctl..." | tee -a "$LOG_FILE"
@@ -87,20 +130,24 @@ echo "✓ Iris llama.cpp server running (port 11434)" | tee -a "$LOG_FILE"
 
 # Swap Vision -> Freud on node2 using systemctl
 echo "Stopping Vision service on node2..." | tee -a "$LOG_FILE"
-ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-vision" 2>&1 | tee -a "$LOG_FILE"
+if ! ssh $SSH_OPTS ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-vision" 2>&1 | tee -a "$LOG_FILE"; then
+    echo "⚠ Failed to stop vision (may not be running)" | tee -a "$LOG_FILE"
+fi
 sleep 2
 echo "✓ Vision service stopped on node2" | tee -a "$LOG_FILE"
 
 # Start Freud service on node2 (gemma-3-4b on GPU 0, port 11435)
 echo "Starting Freud service on node2 (gemma-3-4b)..." | tee -a "$LOG_FILE"
-ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl start iris-freud" 2>&1 | tee -a "$LOG_FILE"
+if ! ssh $SSH_OPTS ${NODE2_USER}@${NODE2_HOST} "sudo systemctl start iris-freud" 2>&1 | tee -a "$LOG_FILE"; then
+    echo "✗ SSH failed to start Freud service on node2" | tee -a "$LOG_FILE"
+    exit 1
+fi
+FREUD_STARTED=true
 sleep 10  # Give Freud time to load
 
-if ! curl -s http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
-    echo "✗ Failed to start Freud service on node2" | tee -a "$LOG_FILE"
-    # Try to restore vision
-    ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-freud; sudo systemctl start iris-vision" 2>&1 | tee -a "$LOG_FILE"
-    exit 1
+if ! curl -sf http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
+    echo "✗ Failed to start Freud service on node2 (health check failed)" | tee -a "$LOG_FILE"
+    exit 1  # trap will restore vision
 fi
 echo "✓ Freud service running on node2 (port 11435)" | tee -a "$LOG_FILE"
 
@@ -135,35 +182,10 @@ else
     fi
 fi
 
-echo "" | tee -a "$LOG_FILE"
-
 # ============================================================================
-# CLEANUP & RESTORE VISION SERVICE ON NODE2
+# COMPLETION (cleanup runs via trap EXIT)
 # ============================================================================
 
-echo "[4/4] Cleanup - restoring vision service on node2..." | tee -a "$LOG_FILE"
-
-# Swap Freud -> Vision on node2 using systemctl
-echo "Stopping Freud service on node2..." | tee -a "$LOG_FILE"
-ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl stop iris-freud" 2>&1 | tee -a "$LOG_FILE"
-sleep 2
-echo "✓ Freud service stopped on node2" | tee -a "$LOG_FILE"
-
-# Restart vision service on node2
-echo "Starting Vision service on node2 (llava-phi-3)..." | tee -a "$LOG_FILE"
-ssh ${NODE2_USER}@${NODE2_HOST} "sudo systemctl start iris-vision" 2>&1 | tee -a "$LOG_FILE"
-sleep 8
-
-if curl -s http://${NODE2_HOST}:11435/health > /dev/null 2>&1; then
-    echo "✓ Vision service restored on node2 (port 11435)" | tee -a "$LOG_FILE"
-else
-    echo "⚠ Vision service may not have started on node2 - check with: ssh node2 'sudo systemctl status iris-vision'" | tee -a "$LOG_FILE"
-fi
-
-# Deactivate virtual environment
-deactivate 2>/dev/null || true
-
-# Log completion
 echo "" | tee -a "$LOG_FILE"
 echo "============================================================================" | tee -a "$LOG_FILE"
 echo "Dream Script Complete - $(date)" | tee -a "$LOG_FILE"

@@ -23,9 +23,11 @@ Usage:
 import asyncio
 import subprocess
 from typing import Optional, Tuple, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import httpx
+
+from app import config
 
 
 class GPUState(Enum):
@@ -35,40 +37,52 @@ class GPUState(Enum):
     UNKNOWN = "unknown"     # State uncertain
 
 
-# Service registry - GPU 0 services only
-# Note: Vision and Freud share port 11435 (Freud has Conflicts=iris-vision.service)
-GPU0_SERVICES = {
-    "vision": {
-        "unit": "iris-vision.service",
-        "health_url": "http://node2:11435/health",
-        "port": 11435,
-        "startup_delay": 8,
-        "description": "Vision model"
-    },
-    "float": {
-        "unit": "iris-float.service",
-        "health_url": "http://node2:8000/",  # FLOAT serves HTML at root, no /health endpoint
-        "port": 8000,
-        "startup_delay": 12,
-        "description": "Video generation"
-    },
-    "freud": {
-        "unit": "iris-freud.service",
-        "health_url": "http://node2:11435/health",
-        "port": 11435,
-        "startup_delay": 8,
-        "description": "Dream processor"
-    },
-    "comfyui": {
-        "unit": "comfyui.service",
-        "health_url": "http://node2:8189/system_stats",
-        "port": 8189,
-        "startup_delay": 30,
-        "description": "Image generation"
+def _build_gpu0_services() -> Dict[str, Dict[str, Any]]:
+    """Build service registry from config (database source of truth)"""
+    return {
+        "vision": {
+            "unit": "iris-vision.service",
+            "health_url": f"{config.VISION_OLLAMA_URL}/health",
+            "port": 11435,
+            "startup_delay": 8,
+            "description": "Vision model"
+        },
+        "float": {
+            "unit": "iris-float.service",
+            "health_url": f"{config.FLOAT_SERVER_URL}/",  # FLOAT serves HTML at root, no /health endpoint
+            "port": 8000,
+            "startup_delay": 12,
+            "description": "Video generation"
+        },
+        "freud": {
+            "unit": "iris-freud.service",
+            "health_url": f"{config.FREUD_URL}/health",
+            "port": 11435,
+            "startup_delay": 8,
+            "description": "Dream processor"
+        },
+        "comfyui": {
+            "unit": "comfyui.service",
+            "health_url": f"{config.COMFYUI_SERVER_URL}/system_stats",
+            "port": 8189,
+            "startup_delay": 30,
+            "description": "Image generation"
+        },
+        "transcribe": {
+            "unit": "iris-transcribe.service",
+            "health_url": f"http://{getattr(config, 'NODE2_HOST', 'node2')}:8500/health",
+            "port": 8500,
+            "startup_delay": 15,
+            "description": "Meeting transcription (WhisperX)"
+        }
     }
-}
 
-NODE2_SSH = "captain@node2"
+
+GPU0_SERVICES = _build_gpu0_services()
+
+def _get_node2_ssh():
+    """Build SSH target from config (database source of truth)."""
+    return f"{getattr(config, 'NODE2_SSH_USER', 'captain')}@{getattr(config, 'NODE2_HOST', 'node2')}"
 
 
 class Node2GPUManager:
@@ -82,6 +96,10 @@ class Node2GPUManager:
             cls._instance._initialized = False
         return cls._instance
 
+    # Circuit breaker thresholds
+    CIRCUIT_FAILURE_THRESHOLD = 3   # Open after 3 consecutive failures
+    CIRCUIT_RESET_SECONDS = 120     # Try again after 2 minutes
+
     def __init__(self):
         if self._initialized:
             return
@@ -89,8 +107,36 @@ class Node2GPUManager:
         self._state = GPUState.UNKNOWN
         self._active_requests = 0
         self._lock = asyncio.Lock()
+        # Circuit breaker state
+        self._consecutive_failures: int = 0
+        self._circuit_open_until: Optional[datetime] = None
         self._initialized = True
         print("[gpu_manager.py] Node2GPUManager initialized")
+
+    def _check_circuit(self) -> Optional[str]:
+        """Returns error message if circuit is open, None if OK to proceed."""
+        if self._circuit_open_until and datetime.now() < self._circuit_open_until:
+            remaining = int((self._circuit_open_until - datetime.now()).total_seconds())
+            return f"Node2 circuit breaker open ({remaining}s remaining after {self._consecutive_failures} failures)"
+        return None
+
+    def _record_success(self):
+        """Reset circuit breaker on success."""
+        if self._consecutive_failures > 0:
+            print(f"[gpu_manager.py] Circuit breaker reset (was {self._consecutive_failures} failures)")
+        self._consecutive_failures = 0
+        self._circuit_open_until = None
+
+    def _record_failure(self):
+        """Record failure, potentially open circuit."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self.CIRCUIT_FAILURE_THRESHOLD:
+            self._circuit_open_until = datetime.now() + timedelta(seconds=self.CIRCUIT_RESET_SECONDS)
+            print(f"[gpu_manager.py] Circuit breaker OPEN — Node2 unreachable after {self._consecutive_failures} failures. Retry in {self.CIRCUIT_RESET_SECONDS}s")
+
+    def is_node2_healthy(self) -> bool:
+        """Quick check: is the circuit breaker closed? Used by other modules to fail fast."""
+        return self._check_circuit() is None
 
     async def request_gpu(self, service: str) -> Tuple[bool, Optional[str]]:
         """
@@ -107,6 +153,12 @@ class Node2GPUManager:
 
         if service not in GPU0_SERVICES:
             return (False, f"Unknown service: {service}")
+
+        # Check circuit breaker before acquiring lock
+        circuit_error = self._check_circuit()
+        if circuit_error:
+            print(f"[gpu_manager.py] {circuit_error}")
+            return (False, circuit_error)
 
         async with self._lock:
             # Already loaded and idle
@@ -140,6 +192,7 @@ class Node2GPUManager:
             self._state = GPUState.SWITCHING
 
             try:
+                prev_service = self._current_service
                 success = await self._swap_service(service)
                 if success:
                     self._current_service = service
@@ -147,26 +200,37 @@ class Node2GPUManager:
                     svc = GPU0_SERVICES[service]
                     ui_msg(f"{svc['description']} ready", "success")
                     print(f"[gpu_manager.py] ✓ {service} ready")
+                    await self._update_status_file()
+                    # Log GPU swap for gap report
+                    try:
+                        from database.service_events import log_service_event
+                        swap_name = f"{prev_service or 'none'}→{service}"
+                        log_service_event("service_swap", swap_name, "gpu_manager")
+                    except Exception:
+                        pass
                     return (True, None)
                 else:
                     self._state = GPUState.UNKNOWN
                     ui_msg(f"Failed to start {service}", "error")
                     print(f"[gpu_manager.py] ✗ Failed to start {service}")
+                    await self._update_status_file()
                     return (False, f"Failed to start {service}")
             except Exception as e:
                 self._state = GPUState.UNKNOWN
                 ui_msg(f"GPU error: {e}", "error")
                 print(f"[gpu_manager.py] ✗ GPU error: {e}")
+                await self._update_status_file()
                 return (False, str(e))
 
     async def _swap_service(self, target: str) -> bool:
-        """Stop current service, start target, verify health."""
-        # Stop current
-        if self._current_service:
-            current_unit = GPU0_SERVICES[self._current_service]["unit"]
-            print(f"[gpu_manager.py] Stopping {current_unit}...")
-            await self._ssh_systemctl("stop", current_unit)
-            await asyncio.sleep(2)
+        """Stop ALL GPU 0 services, start target, verify health."""
+        # Stop ALL GPU 0 services (not just tracked one) to ensure clean state
+        # This handles cases where services were started outside GPU Manager
+        print(f"[gpu_manager.py] Stopping ALL GPU 0 services before starting {target}...")
+        for service_name, service_info in GPU0_SERVICES.items():
+            if service_name != target:  # Don't stop the one we're about to start
+                await self._ssh_systemctl("stop", service_info["unit"])
+        await asyncio.sleep(3)  # Give services time to release GPU memory
 
         # Start target
         target_info = GPU0_SERVICES[target]
@@ -181,42 +245,62 @@ class Node2GPUManager:
         healthy = await self._check_health(target_info["health_url"])
         if healthy:
             print(f"[gpu_manager.py] ✓ Health check passed: {target_info['health_url']}")
+            self._record_success()
         else:
             print(f"[gpu_manager.py] ✗ Health check failed: {target_info['health_url']}")
+            self._record_failure()
         return healthy
 
-    async def _ssh_systemctl(self, action: str, unit: str) -> bool:
+    async def _ssh_systemctl(self, action: str, unit: str, max_retries: int = 3) -> bool:
         """
-        Execute systemctl on Node2 via SSH.
+        Execute systemctl on Node2 via SSH with retry and backoff.
+
+        Retries up to max_retries times with exponential backoff (2s, 4s).
+        Auth errors (password/terminal prompts) fail immediately — retrying won't help.
 
         Requires passwordless sudo on Node2. Add to /etc/sudoers.d/iris:
-            captain ALL=(ALL) NOPASSWD: /bin/systemctl start iris-*.service
-            captain ALL=(ALL) NOPASSWD: /bin/systemctl stop iris-*.service
-            captain ALL=(ALL) NOPASSWD: /bin/systemctl restart iris-*.service
-            captain ALL=(ALL) NOPASSWD: /bin/systemctl status iris-*.service
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl start iris-*
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop iris-*
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart iris-*
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl status iris-*
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl start comfyui.service
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop comfyui.service
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart comfyui.service
+            captain ALL=(ALL) NOPASSWD: /usr/bin/systemctl status comfyui.service
         """
-        # Use -t to allocate pseudo-terminal, but sudo still needs NOPASSWD config
-        cmd = f"ssh -o BatchMode=yes {NODE2_SSH} 'sudo systemctl {action} {unit}'"
-        try:
-            result = await asyncio.to_thread(
-                subprocess.run, cmd, shell=True,
-                capture_output=True, timeout=30
-            )
-            if result.returncode != 0:
+        cmd = f"ssh -o ConnectTimeout=10 -o BatchMode=yes {_get_node2_ssh()} 'sudo /bin/systemctl {action} {unit}'"
+        for attempt in range(max_retries):
+            try:
+                result = await asyncio.to_thread(
+                    subprocess.run, cmd, shell=True,
+                    capture_output=True, timeout=30
+                )
+                if result.returncode == 0:
+                    return True
                 stderr = result.stderr.decode() if result.stderr else ""
                 if "password" in stderr.lower() or "terminal" in stderr.lower():
                     print(f"[gpu_manager.py] SSH sudo requires NOPASSWD config on Node2")
                     print(f"[gpu_manager.py] Add to /etc/sudoers.d/iris on Node2:")
                     print(f"[gpu_manager.py]   captain ALL=(ALL) NOPASSWD: /bin/systemctl * iris-*.service")
+                    return False  # Auth misconfiguration — don't retry
+                if attempt < max_retries - 1:
+                    delay = 2 ** (attempt + 1)  # 2s, 4s
+                    print(f"[gpu_manager.py] SSH attempt {attempt+1} failed ({action} {unit}), retrying in {delay}s...")
+                    await asyncio.sleep(delay)
                 else:
-                    print(f"[gpu_manager.py] SSH command failed: {stderr}")
-            return result.returncode == 0
-        except subprocess.TimeoutExpired:
-            print(f"[gpu_manager.py] SSH command timed out")
-            return False
-        except Exception as e:
-            print(f"[gpu_manager.py] SSH error: {e}")
-            return False
+                    print(f"[gpu_manager.py] SSH command failed after {max_retries} attempts: {stderr}")
+            except subprocess.TimeoutExpired:
+                if attempt < max_retries - 1:
+                    delay = 2 ** (attempt + 1)
+                    print(f"[gpu_manager.py] SSH timeout ({action} {unit}), retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    print(f"[gpu_manager.py] SSH timed out after {max_retries} attempts")
+                    return False
+            except Exception as e:
+                print(f"[gpu_manager.py] SSH error: {e}")
+                return False  # Non-transient errors don't retry
+        return False
 
     async def _check_health(self, url: str, retries: int = 3) -> bool:
         """Check service health endpoint with retries."""
@@ -231,6 +315,14 @@ class Node2GPUManager:
                     print(f"[gpu_manager.py] Health check attempt {attempt + 1} failed: {e}, retrying...")
                     await asyncio.sleep(2)
         return False
+
+    async def _update_status_file(self):
+        """Fire-and-forget update of the service status file."""
+        try:
+            from core.service_status import write_service_status
+            await write_service_status()
+        except Exception as e:
+            print(f"[gpu_manager.py] Status file update failed: {e}")
 
     def mark_busy(self):
         """Mark GPU as busy (call before API request)."""
@@ -262,13 +354,28 @@ class Node2GPUManager:
         print("[gpu_manager.py] No GPU 0 service detected on Node2")
         return None
 
+    async def reconcile_state(self) -> Optional[str]:
+        """Re-detect current service and fix internal state if mismatched."""
+        if self._state == GPUState.SWITCHING:
+            return self._current_service  # Don't interfere with active swap
+
+        detected = await self.detect_current_service()
+        if detected != self._current_service:
+            old = self._current_service
+            self._current_service = detected
+            self._state = GPUState.IDLE if detected else GPUState.UNKNOWN
+            print(f"[gpu_manager.py] State reconciled: {old} -> {detected}")
+        return detected
+
     def get_status(self) -> Dict[str, Any]:
         """Get current status."""
         return {
             "current_service": self._current_service,
             "state": self._state.value,
             "active_requests": self._active_requests,
-            "services": list(GPU0_SERVICES.keys())
+            "services": list(GPU0_SERVICES.keys()),
+            "circuit_open": self._check_circuit() is not None,
+            "consecutive_failures": self._consecutive_failures,
         }
 
 
