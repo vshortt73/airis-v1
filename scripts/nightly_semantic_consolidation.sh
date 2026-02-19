@@ -125,13 +125,26 @@ check_llama() {
     log "CHECKING LLAMA.CPP SERVICE"
     log "=========================================="
 
+    # Quick check first
     if curl -sf "$LLAMA_URL/v1/models" >/dev/null 2>&1; then
         log "llama.cpp API responding on port $LLAMA_PORT"
         log ""
         return 0
     fi
 
-    log_error "llama.cpp API not responding on port $LLAMA_PORT"
+    # Retry — memory creation may have just restarted it
+    log "llama.cpp not responding, retrying..."
+    for i in $(seq 1 10); do
+        if curl -sf "$LLAMA_URL/v1/models" >/dev/null 2>&1; then
+            log "llama.cpp API ready (attempt $i)"
+            log ""
+            return 0
+        fi
+        log "Health check $i/10..."
+        sleep 3
+    done
+
+    log_error "llama.cpp API not responding after 30s"
     return 1
 }
 
