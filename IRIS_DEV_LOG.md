@@ -168,6 +168,27 @@ This isn't abandoning the consciousness research. Key experimental findings that
 
 ---
 
+## Major Accomplishments (2026-02-18)
+
+### 1. Nightly Pipeline Hardening — Orchestrator + Cron Fixes
+
+**Problem:** The nightly pipeline ran 6 independent cron jobs with no orchestration. Three were broken: semantic consolidation was never scheduled, knowledge indexing had a path typo (`/iris=v3/`), and drift metrics was failing silently. Memory-dependent jobs (memory creation → semantic consolidation) relied on fixed 30-minute gaps with no dependency checking — if memory creation ran long, it could overlap with downstream jobs. No Python script had a timeout, so a hung LLM call could block the pipeline indefinitely.
+
+**Solution:**
+- **Master orchestrator** (`scripts/nightly_pipeline.sh`): Runs memory creation → semantic consolidation → drift metrics sequentially. Per-stage timeouts (45m/30m/15m) via `timeout --kill-after=60`. Stage failure does not block later stages. Lock file prevents concurrent runs. Logs service events for gap reports; only inserts system message to Iris on failure.
+- **Semantic consolidation retry**: Replaced single-shot llama.cpp health check with 10-retry loop (30s total), matching the pattern in memory creation. Handles the case where memory creation just restarted the service.
+- **Cron fixes**: Fixed knowledge indexing path typo, added missing `IRIS_DB_PASSWORD`, fixed log directory. Replaced 3 standalone entries (memory + semantic + drift) with single pipeline entry at 3:00 AM.
+
+**New cron schedule:**
+```
+0 1  * * *  index_knowledge.sh          # Fixed path + credentials
+30 2 * * *  backup_database.sh          # Unchanged
+0 3  * * *  nightly_pipeline.sh         # memory → semantic → drift
+0 4  * * *  nightly_dream.sh            # Unchanged
+```
+
+---
+
 ## Major Accomplishments (2026-02-07)
 
 ### 1. KV Cache Rework — Spoilage-Only Rebuild + Per-Turn Tail

@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: `3.MINOR.PA
 
 ---
 
+## [3.1.0] - 2026-02-18
+
+### Added
+- **Nightly pipeline orchestrator** (`scripts/nightly_pipeline.sh`) — Master script runs memory creation, semantic consolidation, and drift metrics sequentially with per-stage timeouts (45m/30m/15m). Failure in one stage does not block later stages. Lock file prevents concurrent runs. Logs service events for gap reports.
+
+### Fixed
+- **Semantic consolidation never scheduled** — Was missing from crontab entirely. Now runs as pipeline stage 2.
+- **Knowledge indexing broken** — Cron path typo (`/iris=v3/` → `/iris-v3/`), missing `IRIS_DB_PASSWORD`, wrong log directory.
+- **Drift metrics failing silently** — Now runs as pipeline stage 3 with 15-minute timeout.
+- **Semantic consolidation llama.cpp health check** — Single-shot check replaced with 10-retry loop (30s total) to survive restarts from preceding memory creation.
+
+---
+
 ## [3.0.0] - 2026-02-18
 
 Stable baseline. Declares the current state of Iris v3 as the versioned starting point.
