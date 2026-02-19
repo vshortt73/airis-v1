@@ -10,7 +10,7 @@ DB_CONFIG = {
     "port": 5432,
     "database": os.environ.get('AIRIS_DB_NAME', 'airisdb'),
     "user": os.environ.get('AIRIS_DB_USER', 'airisuser'),
-    "password": 'yourpassword',
+    "password": os.environ.get('AIRIS_DB_PASSWORD', ''),
 }
 
 

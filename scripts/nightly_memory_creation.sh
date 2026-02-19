@@ -5,8 +5,8 @@
 # Cron: 0 3 * * * /iris-v3/scripts/nightly_memory_creation.sh
 # (runs at 3:00 AM, before semantic consolidation at 3:30 AM)
 
-export AIRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 set -o pipefail
 

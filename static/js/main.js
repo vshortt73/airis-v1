@@ -193,7 +193,7 @@ function updateTokenDisplay(tokens) {
     const totalFormatted = total.toLocaleString();
     const maxFormatted = max.toLocaleString();
 
-    let color = '#03dac6';
+    let color = '#5b9bd5';
     if (percentage > 80) {
         color = '#ff4444';
     } else if (percentage > 60) {
@@ -669,7 +669,7 @@ function handleWebSocketMessage(data) {
 
                     if (data.success) {
                         statusText.textContent = `${data.tool_name} ✓`;
-                        statusText.style.color = '#03dac6';
+                        statusText.style.color = '#5b9bd5';
                         icon.style.animation = 'none';
                     } else {
                         statusText.textContent = `${data.tool_name} failed: ${data.error}`;

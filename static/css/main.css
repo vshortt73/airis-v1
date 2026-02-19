@@ -1,6 +1,6 @@
 /**
- * Iris v3 Main Styles
- * Extracted from index.html for maintainability
+ * Airis v1 Main Styles
+ * Warm gold + blue theme — visually distinct from Iris (purple + teal)
  */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -30,7 +30,7 @@ body {
     padding-right: max(1rem, env(safe-area-inset-right));
 }
 
-.header h1 { font-size: 1.5rem; color: #bb86fc; }
+.header h1 { font-size: 1.5rem; color: #e8a838; }
 .info { font-size: 0.85rem; color: #888; }
 
 .speech-toggle {
@@ -59,7 +59,7 @@ body {
 }
 
 .speech-toggle input[type="checkbox"]:checked {
-    background: #03dac6;
+    background: #5b9bd5;
 }
 
 .speech-toggle input[type="checkbox"]::before {
@@ -128,7 +128,7 @@ body {
     padding: 0.5rem 1rem;
     background: #2a2a2a;
     border-radius: 1rem;
-    border-left: 3px solid #bb86fc;
+    border-left: 3px solid #e8a838;
     animation: fadeIn 0.3s ease-in;
 }
 
@@ -144,7 +144,7 @@ body {
 
 .tool-status-text {
     font-size: 0.9rem;
-    color: #bb86fc;
+    color: #e8a838;
 }
 
 /* Thinking block (collapsible <details>) */
@@ -236,8 +236,8 @@ body {
     position: relative;
 }
 
-.message.user .message-avatar { background: #03dac6; color: #000; }
-.message.assistant .message-avatar { background: #bb86fc; color: #000; }
+.message.user .message-avatar { background: #5b9bd5; color: #000; }
+.message.assistant .message-avatar { background: #e8a838; color: #000; }
 .message.system .message-avatar { background: #555; color: #aaa; }
 
 .message-content {
@@ -313,8 +313,8 @@ body {
 }
 
 .code-copy-button.copied {
-    background: #03dac6;
-    border-color: #03dac6;
+    background: #5b9bd5;
+    border-color: #5b9bd5;
     color: #000;
 }
 
@@ -330,19 +330,19 @@ body {
 .message-content li { margin: 0.25em 0; }
 
 .message-content blockquote {
-    border-left: 3px solid #bb86fc;
+    border-left: 3px solid #e8a838;
     padding-left: 1em;
     margin: 0.5em 0;
     color: #aaa;
 }
 
 .message-content a {
-    color: #03dac6;
+    color: #5b9bd5;
     text-decoration: none;
 }
 
 .message-content a:hover { text-decoration: underline; }
-.message.user .message-content { background: #03dac6; color: #000; }
+.message.user .message-content { background: #5b9bd5; color: #000; }
 
 /* Context tier badge */
 .context-tier-badge {
@@ -350,7 +350,7 @@ body {
     top: -8px;
     right: -8px;
     background: #1a1a1a;
-    border: 2px solid #bb86fc;
+    border: 2px solid #e8a838;
     border-radius: 50%;
     width: 28px;
     height: 28px;
@@ -363,11 +363,11 @@ body {
 }
 
 .context-tier-badge.tier-task {
-    border-color: #03dac6;
+    border-color: #5b9bd5;
 }
 
 .context-tier-badge.tier-conversational {
-    border-color: #bb86fc;
+    border-color: #e8a838;
 }
 
 .context-tier-badge.tier-deep {
@@ -442,7 +442,7 @@ body {
     position: relative;
     width: 100px;
     height: 100px;
-    border: 2px solid #bb86fc;
+    border: 2px solid #e8a838;
     border-radius: 0.5rem;
     overflow: hidden;
 }
@@ -484,7 +484,7 @@ body {
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     background: #2d2d3d;
-    border: 2px solid #03dac6;
+    border: 2px solid #5b9bd5;
     border-radius: 0.5rem;
     max-width: 200px;
 }
@@ -530,7 +530,7 @@ body {
 }
 
 #documentUploadButton {
-    background: #03dac6;
+    background: #5b9bd5;
     color: #121212;
     border: none;
     border-radius: 0.5rem;
@@ -540,7 +540,7 @@ body {
 }
 
 #documentUploadButton:hover {
-    background: #00bfa5;
+    background: #4a87bf;
 }
 
 .input-controls {
@@ -564,11 +564,11 @@ body {
     line-height: 1.5;
 }
 
-#messageInput:focus { outline: none; border-color: #bb86fc; }
+#messageInput:focus { outline: none; border-color: #e8a838; }
 
 button {
     padding: 0.75rem 1.5rem;
-    background: #bb86fc;
+    background: #e8a838;
     color: #000;
     border: none;
     border-radius: 0.5rem;
@@ -576,7 +576,7 @@ button {
     cursor: pointer;
 }
 
-button:hover { background: #d4b3ff; }
+button:hover { background: #f0be5e; }
 button:disabled { background: #555; cursor: not-allowed; }
 
 /* Stop button styling */
@@ -601,8 +601,8 @@ button:disabled { background: #555; cursor: not-allowed; }
     color: #888;
 }
 
-.status.connected { color: #03dac6; }
-.status.loading { color: #bb86fc; }
+.status.connected { color: #5b9bd5; }
+.status.loading { color: #e8a838; }
 
 /* Webcam Preview Styles */
 .webcam-preview {
@@ -636,7 +636,7 @@ button:disabled { background: #555; cursor: not-allowed; }
 .webcam-preview-title {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #03dac6;
+    color: #5b9bd5;
 }
 
 .webcam-preview-close {
@@ -705,7 +705,7 @@ button:disabled { background: #555; cursor: not-allowed; }
 .pip-header-title {
     font-size: 0.85rem;
     font-weight: 600;
-    color: #bb86fc;
+    color: #e8a838;
 }
 
 .pip-header-buttons {
@@ -825,7 +825,7 @@ button:disabled { background: #555; cursor: not-allowed; }
 }
 
 .pip-launch-btn {
-    background: linear-gradient(135deg, #bb86fc 0%, #03dac6 100%);
+    background: linear-gradient(135deg, #e8a838 0%, #5b9bd5 100%);
     color: #000;
     border: none;
     padding: 0.5rem 1rem;
@@ -841,7 +841,7 @@ button:disabled { background: #555; cursor: not-allowed; }
 
 .pip-launch-btn:hover {
     transform: scale(1.02);
-    box-shadow: 0 4px 12px rgba(187, 134, 252, 0.3);
+    box-shadow: 0 4px 12px rgba(232, 168, 56, 0.3);
 }
 
 .pip-launch-btn:disabled {

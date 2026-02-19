@@ -6,8 +6,8 @@
 # Cron: 30 3 * * * /iris-v3/scripts/nightly_semantic_consolidation.sh
 # (runs 30 min after memory creation at 3:00 AM)
 
-export AIRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 set -o pipefail
 

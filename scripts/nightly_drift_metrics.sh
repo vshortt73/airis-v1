@@ -6,8 +6,8 @@
 # Cron: 0 4 * * * /iris-v3/scripts/nightly_drift_metrics.sh
 # (runs at 4:00 AM, 30 min after semantic consolidation)
 
-export AIRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 set -o pipefail
 

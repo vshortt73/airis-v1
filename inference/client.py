@@ -661,7 +661,7 @@ async def chat_completion_stream_with_tools(
                                 yield (content, None, False)
 
                             # Check for tool_calls in delta (streaming tool calls)
-                            if "tool_calls" in delta:
+                            if delta.get("tool_calls"):
                                 # Accumulate tool calls from streaming chunks
                                 for tc in delta["tool_calls"]:
                                     idx = tc.get("index", 0)
@@ -673,10 +673,10 @@ async def chat_completion_stream_with_tools(
                                         response_obj.tool_calls[idx]["id"] = tc["id"]
                                     if "type" in tc:
                                         response_obj.tool_calls[idx]["type"] = tc["type"]
-                                    if "function" in tc:
-                                        if "name" in tc["function"]:
+                                    if "function" in tc and tc["function"]:
+                                        if tc["function"].get("name"):
                                             response_obj.tool_calls[idx]["function"]["name"] += tc["function"]["name"]
-                                        if "arguments" in tc["function"]:
+                                        if tc["function"].get("arguments"):
                                             response_obj.tool_calls[idx]["function"]["arguments"] += tc["function"]["arguments"]
 
                             # Store finish_reason and capture timings from final chunk

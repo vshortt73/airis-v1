@@ -1,0 +1,20 @@
+[Unit]
+Description=Airis Companion Server
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=captain
+WorkingDirectory=/airis-v1
+EnvironmentFile=/etc/airis/env
+Environment=AIRIS_DB_NAME=airisdb
+Environment=AIRIS_DB_USER=airisuser
+Environment=AIRIS_DB_HOST=localhost
+Environment=PYTHONPATH=/airis-v1
+Environment=PATH=/venv/iris-v3/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/venv/iris-v3/bin/python app/main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

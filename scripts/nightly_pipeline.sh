@@ -7,8 +7,8 @@
 #
 # Cron: 0 3 * * * AIRIS_DB_PASSWORD='...' /iris-v3/scripts/nightly_pipeline.sh
 
-export AIRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/paths.env"

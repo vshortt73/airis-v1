@@ -38,22 +38,39 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-    # Sync context window from running llama-server
-    try:
-        import httpx
-        url = f"{config.OLLAMA_BASE_URL}/props"
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(url)
-            props = resp.json()
-            actual_ctx = props["default_generation_settings"]["n_ctx"]
-            if actual_ctx != config.OLLAMA_CONTEXT_WINDOW:
-                print(f"[main.py] Context window sync: DB={config.OLLAMA_CONTEXT_WINDOW}, server={actual_ctx} → updating")
-                config.OLLAMA_CONTEXT_WINDOW = actual_ctx
-                config.CONTEXT_WINDOW = actual_ctx
-            else:
-                print(f"[main.py] ✓ Context window: {actual_ctx} (matches DB)")
-    except Exception as e:
-        print(f"[main.py] ⚠ Could not sync context window from server: {e} (using DB value: {config.OLLAMA_CONTEXT_WINDOW})")
+    # Sync context window from inference server
+    import httpx
+    backend = getattr(config, 'INFERENCE_BACKEND', 'llamacpp').lower()
+    if backend == 'sglang':
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{config.OLLAMA_BASE_URL}/v1/models")
+                models = resp.json()
+                model_id = models.get("data", [{}])[0].get("id", "unknown")
+                ctx = models.get("data", [{}])[0].get("max_model_len", config.OLLAMA_CONTEXT_WINDOW)
+                if ctx != config.OLLAMA_CONTEXT_WINDOW:
+                    print(f"[main.py] Context window sync: DB={config.OLLAMA_CONTEXT_WINDOW}, sglang={ctx} → updating")
+                    config.OLLAMA_CONTEXT_WINDOW = ctx
+                    config.CONTEXT_WINDOW = ctx
+                else:
+                    print(f"[main.py] ✓ sglang ready: {model_id} (context: {ctx})")
+        except Exception as e:
+            print(f"[main.py] ⚠ Could not reach sglang server: {e} (using DB value: {config.OLLAMA_CONTEXT_WINDOW})")
+    else:
+        try:
+            url = f"{config.OLLAMA_BASE_URL}/props"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url)
+                props = resp.json()
+                actual_ctx = props["default_generation_settings"]["n_ctx"]
+                if actual_ctx != config.OLLAMA_CONTEXT_WINDOW:
+                    print(f"[main.py] Context window sync: DB={config.OLLAMA_CONTEXT_WINDOW}, server={actual_ctx} → updating")
+                    config.OLLAMA_CONTEXT_WINDOW = actual_ctx
+                    config.CONTEXT_WINDOW = actual_ctx
+                else:
+                    print(f"[main.py] ✓ Context window: {actual_ctx} (matches DB)")
+        except Exception as e:
+            print(f"[main.py] ⚠ Could not sync context window from server: {e} (using DB value: {config.OLLAMA_CONTEXT_WINDOW})")
 
     # Detect current GPU service on Node2
     if getattr(config, 'NODE2_ENABLED', False) and getattr(config, 'GPU_MANAGER_ENABLED', True):

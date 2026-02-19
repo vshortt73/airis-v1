@@ -51,8 +51,10 @@ def get_embedding_model(force_cpu: bool = False):
         # Double-check inside lock (another thread may have loaded it)
         if _embedding_model is None:
             try:
-                # Determine device: force_cpu for MCP subprocesses, otherwise try CUDA
-                if force_cpu:
+                # Determine device: force_cpu for MCP subprocesses or client boxes without GPU
+                # Config flag EMBEDDINGS_CPU_ONLY forces CPU for Airis client deployments
+                cpu_only = force_cpu or getattr(config, 'EMBEDDINGS_CPU_ONLY', False)
+                if cpu_only:
                     device = 'cpu'
                 else:
                     device = 'cuda' if torch.cuda.is_available() else 'cpu'

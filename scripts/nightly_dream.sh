@@ -8,7 +8,8 @@
 #   0 4 * * * /iris-v3/scripts/nightly_dream.sh >> /iris-v3/logs/dreams/cron.log 2>&1
 # ============================================================================
 
-export AIRIS_DB_PASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 # ============================================================================
 # CONFIGURATION

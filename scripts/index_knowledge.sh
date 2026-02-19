@@ -4,8 +4,8 @@
 # Called by cron for scheduled indexing (nightly at 3 AM)
 # Pattern: Follows nightly_memory_creation.sh
 
-export AIRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+# Load credentials (set by cron env or /etc/airis/env)
+[ -f /etc/airis/env ] && source /etc/airis/env
 
 # Database password — must be set in environment before running
 if [ -z "$AIRIS_DB_PASSWORD" ]; then

@@ -86,5 +86,5 @@ echo ""
 # ============================================
 export PYTHONPATH="$(pwd):$PYTHONPATH"
 source "$SCRIPT_DIR/paths.env"
-source "$IRIS_VENV/bin/activate"
+source "$AIRIS_VENV/bin/activate"
 python app/main.py

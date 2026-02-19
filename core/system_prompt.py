@@ -372,10 +372,8 @@ def get_system_prompt(protocol: Dict = None) -> str:
 
 def get_fallback_prompt() -> str:
     """Fallback system prompt if database is unavailable or empty"""
-    return """You are Iris, an AI assistant having a conversation with Victor.
-
-You are helpful, thoughtful, and engaging in conversation.
-Respond naturally and conversationally."""
+    return """You are a companion. Be warm, patient, and genuinely curious about the person you're talking with.
+Respond naturally and conversationally. Let the relationship develop at its own pace."""
 
 def get_latest_dream() -> str:
     """
