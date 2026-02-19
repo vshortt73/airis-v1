@@ -86,8 +86,8 @@ COMMENT ON VIEW chat_history_readable IS
 -- Grant permissions (adjust user as needed)
 -- ============================================================================
 
-GRANT SELECT ON episodic_memories_readable TO irisuser;
-GRANT SELECT ON chat_history_readable TO irisuser;
+GRANT SELECT ON episodic_memories_readable TO CURRENT_USER;
+GRANT SELECT ON chat_history_readable TO CURRENT_USER;
 
 -- ============================================================================
 -- Verification queries

@@ -14,7 +14,8 @@
 -- ----------------------------------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS vector;       -- pgvector 0.8.0+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;     -- password hashing
-CREATE EXTENSION IF NOT EXISTS plpython3u;   -- Python stored procedures
+-- plpython3u is optional (not needed on client boxes)
+-- CREATE EXTENSION IF NOT EXISTS plpython3u;
 -- pg_dirtyread is optional (recovery tool), skip if not available
 
 -- ----------------------------------------------------------------------------

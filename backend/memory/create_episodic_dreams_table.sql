@@ -257,9 +257,9 @@ $$ LANGUAGE plpgsql;
 -- GRANTS
 -- ============================================================================
 
-GRANT SELECT, INSERT, UPDATE ON episodic_dreams TO irisuser;
-GRANT USAGE, SELECT ON SEQUENCE episodic_dreams_id_seq TO irisuser;
-GRANT SELECT ON episodic_dreams_with_age TO irisuser;
+GRANT SELECT, INSERT, UPDATE ON episodic_dreams TO CURRENT_USER;
+GRANT USAGE, SELECT ON SEQUENCE episodic_dreams_id_seq TO CURRENT_USER;
+GRANT SELECT ON episodic_dreams_with_age TO CURRENT_USER;
 
 -- ============================================================================
 -- SAMPLE QUERY PATTERNS

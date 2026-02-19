@@ -76,8 +76,8 @@ run_sql "$SQL_DIR/create_seeds_table.sql"           "seeds"
 run_sql "$SQL_DIR/create_knowledge_tables.sql"      "knowledge"
 run_sql "$SQL_DIR/create_semantic_memories_table.sql" "semantic_memories"
 run_sql "$SQL_DIR/create_face_tables.sql"           "face recognition"
-run_sql "$SQL_DIR/create_meeting_tables.sql"        "meetings"
 run_sql "$SQL_DIR/create_calendar_events_table.sql" "calendar_events"
+run_sql "$SQL_DIR/create_meeting_tables.sql"        "meetings"
 
 # ── PHASE 3: Observability ──
 echo ""
@@ -124,8 +124,8 @@ echo "── Phase 6: Post-Processing ──"
 run_sql "$SQL_DIR/update_seed_tool_batch_dismiss.sql"  "seed tool update"
 run_sql "$SQL_DIR/update_trait_evaluation_rule.sql"     "trait eval rule"
 run_sql "$SQL_DIR/update_knowledge_tool_save.sql"       "knowledge save update"
-run_sql "$SQL_DIR/populate_tool_metadata.sql"           "tool metadata"
 run_sql "$SQL_DIR/alter_mcp_tools_smart_selection.sql"  "smart selection columns"
+run_sql "$SQL_DIR/populate_tool_metadata.sql"           "tool metadata"
 run_sql "$SQL_DIR/alter_protocols_blocked_tools.sql"    "protocol blocked tools"
 run_sql "$SQL_DIR/convert_all_instructions_to_xml.sql"  "XML instruction format"
 run_sql "$SQL_DIR/fix_instruction_103_add_read_directives.sql" "instruction 103 fix"
@@ -167,20 +167,13 @@ echo "  Verification"
 echo "============================================"
 psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "
 SELECT 'tables' AS check, COUNT(*)::TEXT AS result FROM information_schema.tables WHERE table_schema = 'public'
-UNION ALL
-SELECT 'system_config', COUNT(*)::TEXT FROM system_config
-UNION ALL
-SELECT 'instructions', COUNT(*)::TEXT FROM system_instructions WHERE active = true
-UNION ALL
-SELECT 'tools', COUNT(*)::TEXT FROM mcp_tools WHERE enabled = true
-UNION ALL
-SELECT 'traits', COUNT(*)::TEXT FROM fulltraits
-UNION ALL
-SELECT 'bloom_level', bloom_level::TEXT FROM bloom_tracking LIMIT 1
-UNION ALL
-SELECT 'backend', value FROM system_config WHERE key = 'INFERENCE_BACKEND'
-UNION ALL
-SELECT 'embeddings_cpu', value FROM system_config WHERE key = 'EMBEDDINGS_CPU_ONLY';
+UNION ALL SELECT 'system_config', COUNT(*)::TEXT FROM system_config
+UNION ALL SELECT 'instructions', COUNT(*)::TEXT FROM system_instructions WHERE active = true
+UNION ALL SELECT 'tools', COUNT(*)::TEXT FROM mcp_tools WHERE enabled = true
+UNION ALL SELECT 'traits', COUNT(*)::TEXT FROM fulltraits
+UNION ALL SELECT 'bloom_level', bloom_level::TEXT FROM (SELECT bloom_level FROM bloom_tracking LIMIT 1) b
+UNION ALL SELECT 'backend', value FROM system_config WHERE key = 'INFERENCE_BACKEND'
+UNION ALL SELECT 'embeddings_cpu', value FROM system_config WHERE key = 'EMBEDDINGS_CPU_ONLY';
 "
 
 echo ""

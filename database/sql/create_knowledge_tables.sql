@@ -205,13 +205,13 @@ COMMENT ON COLUMN knowledge_chunks.emb_context IS '768-dim embedding of document
 -- GRANT PERMISSIONS
 -- ============================================
 
--- Grant permissions to irisuser (assuming standard Iris setup)
-GRANT ALL PRIVILEGES ON TABLE knowledge_documents TO irisuser;
-GRANT ALL PRIVILEGES ON TABLE knowledge_chunks TO irisuser;
-GRANT ALL PRIVILEGES ON TABLE knowledge_index_status TO irisuser;
-GRANT ALL PRIVILEGES ON SEQUENCE knowledge_documents_doc_id_seq TO irisuser;
-GRANT ALL PRIVILEGES ON SEQUENCE knowledge_chunks_chunk_id_seq TO irisuser;
-GRANT ALL PRIVILEGES ON SEQUENCE knowledge_index_status_status_id_seq TO irisuser;
+-- Grant permissions to current database user
+GRANT ALL PRIVILEGES ON TABLE knowledge_documents TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON TABLE knowledge_chunks TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON TABLE knowledge_index_status TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON SEQUENCE knowledge_documents_doc_id_seq TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON SEQUENCE knowledge_chunks_chunk_id_seq TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON SEQUENCE knowledge_index_status_status_id_seq TO CURRENT_USER;
 
 -- ============================================
 -- SUCCESS MESSAGE
