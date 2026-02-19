@@ -11,9 +11,11 @@ echo ""
 
 # Load config from /etc/airis/env (written by bootstrap)
 ENV_FILE="/etc/airis/env"
-if [ -f "$ENV_FILE" ]; then
+if [ -r "$ENV_FILE" ]; then
     # shellcheck source=/dev/null
     source "$ENV_FILE"
+elif [ -f "$ENV_FILE" ]; then
+    echo "WARNING: $ENV_FILE exists but is not readable. Run: sudo chmod 640 $ENV_FILE && sudo chown root:$(id -gn) $ENV_FILE"
 fi
 
 # Database credentials
@@ -30,55 +32,34 @@ export PGPASSWORD="$AIRIS_DB_PASSWORD"
 
 
 
-# Detect backend from database (default: llamacpp)
-BACKEND=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -t -A -c \
-    "SELECT value FROM system_config WHERE key = 'INFERENCE_BACKEND'" 2>/dev/null)
-BACKEND=${BACKEND:-llamacpp}
-echo "Inference backend: $BACKEND"
+# Inference server URL (from /etc/airis/env or environment)
+INFERENCE_URL="${AIRIS_INFERENCE_URL:-http://localhost:11434}"
+echo "Inference server: $INFERENCE_URL"
 
-if [ "$BACKEND" = "sglang" ]; then
-    # SGLang health check
-    echo -n "Checking SGLang server (port 11434)... "
-    if curl -s http://localhost:11434/v1/models 2>/dev/null | grep -q '"data"'; then
-        echo "✓ Running"
-    elif curl -s http://localhost:11434/health 2>/dev/null | grep -q '"status"'; then
-        echo "✓ Running"
-    else
-        echo "✗ Not accessible"
-        echo ""
-        echo "SGLang server is not running on port 11434."
-        echo "Start it with:"
-        echo "  sudo systemctl start airis-sglang"
-        echo "  # or: ./scripts/sglang_server_start.sh"
-        echo ""
-        exit 1
-    fi
+# Health check
+echo -n "Checking inference server... "
+if curl -s "${INFERENCE_URL}/v1/models" 2>/dev/null | grep -q '"data"'; then
+    echo "✓ Online"
+elif curl -s "${INFERENCE_URL}/health" 2>/dev/null | grep -q '"status"'; then
+    echo "✓ Online"
 else
-    # llama-server health check (existing behavior)
-    echo -n "Checking llama-server (port 11434)... "
-    if curl -s http://localhost:11434/health 2>/dev/null | grep -q '"status":"ok"'; then
-        echo "✓ Running"
-    else
-        echo "✗ Not accessible"
-        echo ""
-        echo "llama-server is not running on port 11434."
-        echo "Please start it manually:"
-        echo "  llama-server -m /path/to/model.gguf --port 11434 --ctx-size 32768"
-        echo ""
-        exit 1
-    fi
+    echo "✗ Not reachable"
+    echo ""
+    echo "Inference server is not responding at $INFERENCE_URL"
+    echo "Check that the facility server is running and reachable."
+    exit 1
 fi
 
 # Quick API test
-echo -n "Testing chat completions endpoint... "
-RESPONSE=$(curl -s -X POST http://localhost:11434/v1/chat/completions \
+echo -n "Testing chat completions... "
+RESPONSE=$(curl -s -X POST "${INFERENCE_URL}/v1/chat/completions" \
     -H "Content-Type: application/json" \
     -d '{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}' 2>/dev/null)
 
 if echo "$RESPONSE" | grep -q '"choices"'; then
-    echo "✓ Accessible"
+    echo "✓ OK"
 else
-    echo "✗ API not responding correctly"
+    echo "✗ API not responding"
     echo "Response: $RESPONSE"
     exit 1
 fi

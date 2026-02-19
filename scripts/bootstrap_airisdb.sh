@@ -94,8 +94,9 @@ AIRIS_DB_PASSWORD=$AIRIS_DB_PASSWORD
 AIRIS_INFERENCE_URL=$AIRIS_INFERENCE_URL
 AIRIS_PORT=$AIRIS_PORT
 ENVEOF
-sudo chmod 600 "$ENV_FILE"
-echo "  ✓ $ENV_FILE written (mode 600)"
+sudo chown root:"$(id -gn)" "$ENV_FILE"
+sudo chmod 640 "$ENV_FILE"
+echo "  ✓ $ENV_FILE written (owner root, group $(id -gn), mode 640)"
 
 # Source it for the rest of this script
 export AIRIS_DB_PASSWORD
