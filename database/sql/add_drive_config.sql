@@ -4,8 +4,8 @@
 
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart)
 VALUES
-    ('drive', 'DRIVE_WAKE_ENABLED', 'true', 'bool', 'true',
-     'Master kill switch for wake system. Thresholds still checked, just no wake fired.', false),
+    ('drive', 'DRIVE_WAKE_ENABLED', 'false', 'bool', 'false',
+     'Master kill switch for wake system. Disabled by default for Airis deployments.', false),
 
     ('drive', 'DRIVE_WAKE_COOLDOWN_SECONDS', '1800', 'int', '1800',
      'Minimum seconds between wake events (default 30 minutes).', false),

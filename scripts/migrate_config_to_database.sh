@@ -17,15 +17,15 @@ if [ ! -f "app/config.py" ]; then
 fi
 
 # Check database password
-if [ -z "$IRIS_DB_PASSWORD" ]; then
-    echo "✗ Error: IRIS_DB_PASSWORD environment variable not set"
-    echo "  Export it first: export IRIS_DB_PASSWORD='your_password'"
+if [ -z "$AIRIS_DB_PASSWORD" ]; then
+    echo "✗ Error: AIRIS_DB_PASSWORD environment variable not set"
+    echo "  Export it first: export AIRIS_DB_PASSWORD='your_password'"
     exit 1
 fi
 
 echo "Step 1: Creating system_config table..."
-export PGPASSWORD="$IRIS_DB_PASSWORD"
-psql -h iris-desktop -U irisuser -d irisdb -f database/sql/create_system_config_table.sql
+export PGPASSWORD="$AIRIS_DB_PASSWORD"
+psql -h iris-desktop -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -f database/sql/create_system_config_table.sql
 
 if [ $? -ne 0 ]; then
     echo "✗ Failed to create table"
@@ -36,7 +36,7 @@ echo "✓ Table created"
 echo ""
 
 echo "Step 2: Populating with default values..."
-psql -h iris-desktop -U irisuser -d irisdb -f database/sql/populate_system_config.sql
+psql -h iris-desktop -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -f database/sql/populate_system_config.sql
 
 if [ $? -ne 0 ]; then
     echo "✗ Failed to populate config"
@@ -47,7 +47,7 @@ echo "✓ Configuration populated"
 echo ""
 
 echo "Step 3: Verifying migration..."
-COUNT=$(psql -h iris-desktop  -U irisuser -d irisdb -t -c "SELECT COUNT(*) FROM system_config;")
+COUNT=$(psql -h iris-desktop  -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -t -c "SELECT COUNT(*) FROM system_config;")
 echo "  Found $COUNT configuration entries"
 
 if [ "$COUNT" -lt "20" ]; then

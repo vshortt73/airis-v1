@@ -140,14 +140,14 @@ ON CONFLICT (key) DO UPDATE SET
 -- ============================================================================
 
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
-('features', 'NODE2_ENABLED', 'true', 'bool', 'true', 'Master toggle for Node2 GPU server. When false, all Node2-dependent services are disabled.', true),
-('features', 'STT_ENABLED', 'true', 'bool', 'true', 'Enable speech-to-text (Whisper on Node2). Requires NODE2_ENABLED.', false),
-('features', 'TTS_ENABLED', 'true', 'bool', 'true', 'Enable text-to-speech (XTTS on Node2). Requires NODE2_ENABLED.', false),
-('features', 'VIDEO_ENABLED', 'true', 'bool', 'true', 'Enable FLOAT video generation (Node2 GPU 0). Requires NODE2_ENABLED.', false),
-('features', 'GPU_MANAGER_ENABLED', 'true', 'bool', 'true', 'Enable Node2 GPU manager for service coordination. Requires NODE2_ENABLED.', false),
-('features', 'FLORENCE2_ENABLED', 'true', 'bool', 'true', 'Enable Florence2 vision model (Node2). Requires NODE2_ENABLED.', false),
-('features', 'PADDLEOCR_ENABLED', 'true', 'bool', 'true', 'Enable PaddleOCR service (Node2). Requires NODE2_ENABLED.', false),
-('features', 'DREAMS_ENABLED', 'true', 'bool', 'true', 'Enable dream processing (Freud on Node2). Requires NODE2_ENABLED.', false)
+('features', 'NODE2_ENABLED', 'false', 'bool', 'false', 'Master toggle for Node2 GPU server. When false, all Node2-dependent services are disabled.', true),
+('features', 'STT_ENABLED', 'false', 'bool', 'false', 'Enable speech-to-text (Whisper on Node2). Requires NODE2_ENABLED.', false),
+('features', 'TTS_ENABLED', 'false', 'bool', 'false', 'Enable text-to-speech (XTTS on Node2). Requires NODE2_ENABLED.', false),
+('features', 'VIDEO_ENABLED', 'false', 'bool', 'false', 'Enable FLOAT video generation (Node2 GPU 0). Requires NODE2_ENABLED.', false),
+('features', 'GPU_MANAGER_ENABLED', 'false', 'bool', 'false', 'Enable Node2 GPU manager for service coordination. Requires NODE2_ENABLED.', false),
+('features', 'FLORENCE2_ENABLED', 'false', 'bool', 'false', 'Enable Florence2 vision model (Node2). Requires NODE2_ENABLED.', false),
+('features', 'PADDLEOCR_ENABLED', 'false', 'bool', 'false', 'Enable PaddleOCR service (Node2). Requires NODE2_ENABLED.', false),
+('features', 'DREAMS_ENABLED', 'false', 'bool', 'false', 'Enable dream processing (Freud on Node2). Requires NODE2_ENABLED.', false)
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     description = EXCLUDED.description,

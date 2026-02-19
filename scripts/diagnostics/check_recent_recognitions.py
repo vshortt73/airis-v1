@@ -9,7 +9,7 @@ import psycopg2.extras
 from app import config
 
 def get_db_connection():
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
     conn_params = {
         'host': config.DB_HOST,
         'port': config.DB_PORT,

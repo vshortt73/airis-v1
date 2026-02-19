@@ -34,7 +34,7 @@ import numpy as np
 print("Loading embedding model...")
 model = SentenceTransformer(os.environ.get('EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/'), local_files_only=True)
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
+DB_CFG = dict(dbname=os.environ.get('AIRIS_DB_NAME', 'airisdb'), user=os.environ.get('AIRIS_DB_USER', 'airisuser'), password=os.environ.get('AIRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def normalize(vec):
     """L2 normalization"""

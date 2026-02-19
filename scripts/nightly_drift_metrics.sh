@@ -6,7 +6,7 @@
 # Cron: 0 4 * * * /iris-v3/scripts/nightly_drift_metrics.sh
 # (runs at 4:00 AM, 30 min after semantic consolidation)
 
-export IRIS_DB_PASSWORD='yourpassword'
+export AIRIS_DB_PASSWORD='yourpassword'
 export PGPASSWORD='yourpassword'
 
 set -o pipefail
@@ -45,7 +45,7 @@ log_service_event() {
     local service_name="$2"
     local source="$3"
     local detail="$4"
-    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+    PGPASSWORD="$AIRIS_DB_PASSWORD" psql -h localhost -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -c \
         "INSERT INTO service_events (event_type, service_name, source, detail) VALUES ('$event_type', '$service_name', '$source', '$detail');" \
         >> "$LOG_FILE" 2>&1 || true
 }
@@ -77,8 +77,8 @@ main() {
     touch "$LOCK_FILE"
 
     # Check prerequisites
-    if [ -z "$IRIS_DB_PASSWORD" ]; then
-        log_error "IRIS_DB_PASSWORD not set"
+    if [ -z "$AIRIS_DB_PASSWORD" ]; then
+        log_error "AIRIS_DB_PASSWORD not set"
         exit 1
     fi
 

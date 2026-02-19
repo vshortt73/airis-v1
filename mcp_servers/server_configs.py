@@ -27,7 +27,7 @@ def _load_servers_from_database() -> Optional[List[Dict[str, Any]]]:
         sys.path.insert(0, str(PROJECT_ROOT))
         from app import config
 
-        password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+        password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
         conn_params = {
             'host': config.DB_HOST,
             'port': config.DB_PORT,
@@ -98,7 +98,7 @@ def _load_tool_server_mapping() -> Dict[str, str]:
         sys.path.insert(0, str(PROJECT_ROOT))
         from app import config
 
-        password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+        password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
         conn_params = {
             'host': config.DB_HOST,
             'port': config.DB_PORT,
@@ -319,7 +319,7 @@ def _load_autonomous_tools_from_db() -> Optional[List[str]]:
         sys.path.insert(0, str(PROJECT_ROOT))
         from app import config
 
-        password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+        password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
         conn_params = {
             'host': config.DB_HOST,
             'port': config.DB_PORT,

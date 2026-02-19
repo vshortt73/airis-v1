@@ -110,7 +110,7 @@ _MODEL_CACHE = {}
 
 def get_db_connection():
     """Get database connection with password from environment"""
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
     conn_params = {
         'host': config.DB_HOST,
         'port': config.DB_PORT,

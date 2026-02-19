@@ -32,9 +32,9 @@ app.add_middleware(
 )
 
 
-DB_NAME = "irisdb"
-DB_USER = "irisuser"
-DB_PASS = os.environ.get('IRIS_DB_PASSWORD', '')
+DB_NAME = os.environ.get('AIRIS_DB_NAME', 'airisdb')
+DB_USER = os.environ.get('AIRIS_DB_USER', 'airisuser')
+DB_PASS = os.environ.get('AIRIS_DB_PASSWORD', '')
 DB_HOST = "localhost"
 
 config = {}

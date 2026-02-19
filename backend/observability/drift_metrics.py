@@ -36,9 +36,9 @@ import psycopg2.extras
 import numpy as np
 
 DB_CFG = {
-    'dbname': 'irisdb',
-    'user': 'irisuser',
-    'password': os.environ.get('IRIS_DB_PASSWORD', ''),
+    'dbname': os.environ.get('AIRIS_DB_NAME', 'airisdb'),
+    'user': os.environ.get('AIRIS_DB_USER', 'airisuser'),
+    'password': os.environ.get('AIRIS_DB_PASSWORD', ''),
     'host': 'localhost',
     'port': 5432,
 }

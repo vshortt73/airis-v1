@@ -17,7 +17,7 @@ from app import config
 
 def get_db_connection():
     """Create database connection"""
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
 
     conn_params = {
         'host': config.DB_HOST,
@@ -105,7 +105,7 @@ async def test_server_startup():
             ['python', server_script, '--help'],
             capture_output=True,
             timeout=5,
-            env={**os.environ, 'IRIS_DB_PASSWORD': os.environ.get('IRIS_DB_PASSWORD', '')}
+            env={**os.environ, 'AIRIS_DB_PASSWORD': os.environ.get('AIRIS_DB_PASSWORD', '')}
         )
 
         # MCP servers via stdio exit immediately without a client

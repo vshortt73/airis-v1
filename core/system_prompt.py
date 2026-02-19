@@ -12,6 +12,7 @@ import os
 import sys
 import os; PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..' if '__file__' in dir() else '.')); sys.path.insert(0, PROJECT_ROOT)
 from app import config
+from core.progressive_activation import get_activation_state
 from database.character_traits import get_trait_list
 from database.memory_loader_experimental import get_memories
 from database.fast_reactive_memory import FastReactiveMemory
@@ -163,7 +164,7 @@ def get_fast_memory():
 
 def get_db_connection():
     """Create database connection"""
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
 
     conn_params = {
         'host': config.DB_HOST,
@@ -745,6 +746,13 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
 
     sections = []
 
+    # Progressive activation — determine which subsystems are ready
+    activation = get_activation_state()
+    if activation.get('bypassed'):
+        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + f" Progressive activation BYPASSED (all sections included)")
+    else:
+        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.CYAN + f" Bloom level: {activation['bloom_level']}")
+
     # Load system components (cached if conversation provided)
     if conversation:
         # Use cached components
@@ -782,7 +790,7 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
             sections.append(section)
             if 'each of these traits represents an influencing factor' in section.lower() or \
                'trait settings control the way in which you respond' in section.lower():
-                if config.CHARACTER_TRAITS:
+                if config.CHARACTER_TRAITS and activation['include_traits']:
                     if conversation:
                         print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + " Inserting cached trait values after evaluation instruction")
                         traits = conversation.system_cache['traits']
@@ -805,8 +813,8 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
         except Exception as e:
             print(f"[system_prompt.py][build_system_message] " + Fore.RED + f" Seeds error: {e}")
 
-    # Short-term facts - recent manually flagged facts
-    if getattr(config, 'SHORT_TERM_FACTS', True):
+    # Short-term facts - recent manually flagged facts (Layer 1+)
+    if getattr(config, 'SHORT_TERM_FACTS', True) and activation['include_facts']:
         if conversation:
             # Use cached facts
             print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + " Using cached short-term facts")
@@ -835,7 +843,7 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
     # TIERED: GREETING=skip, TASK=skip, CONVERSATIONAL=include, DEEP=include, FULL=include
     include_dreams = context_level in ["CONVERSATIONAL", "DEEP", "FULL"]
 
-    if include_dreams:
+    if include_dreams and activation['include_dreams']:
         if conversation:
             # Use cached dreams
             print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + " Using cached recent dreams")
@@ -846,13 +854,13 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
         sections.append(dream_section)
         hash_compare(dream_section, "dream_section")
     else:
-        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping dreams (context level: {context_level})")
+        print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.YELLOW + f" Skipping dreams (context level: {context_level}, activation: {activation['include_dreams']})")
 
     # Dream truths - fleeting insights from recent high-impact dreams
     # TIERED: GREETING=skip, TASK=skip, CONVERSATIONAL=skip, DEEP=include, FULL=include
     include_dream_truths = context_level in ["DEEP", "FULL"]
 
-    if include_dream_truths:
+    if include_dream_truths and activation['include_dreams']:
         if conversation:
             # Use cached dream truths
             print(f"[system_prompt.py][build_system_message] " + Style.BRIGHT + Fore.GREEN + " Using cached dream truths")
@@ -869,7 +877,7 @@ def build_system_message(user_message: str = None, conversation=None, skip_fast_
     # Semantic memories - distilled knowledge from episodic memory clusters
     # Placed before episodic memories: semantic knowledge frames interpretation of episodic recall
     # Changes only after nightly runs, so very KV-cache-stable
-    if getattr(config, 'SEMANTIC_MEMORIES', False) and protocol.get('show_memories', True):
+    if getattr(config, 'SEMANTIC_MEMORIES', False) and protocol.get('show_memories', True) and activation['include_semantic']:
         if context_level in ["CONVERSATIONAL", "DEEP", "FULL"]:
             from database.memory_loader_experimental import get_semantic_memories
             semantic_limit = int(getattr(config, 'SEMANTIC_MEMORY_LIMIT', 10))

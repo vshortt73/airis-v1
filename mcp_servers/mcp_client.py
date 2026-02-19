@@ -58,12 +58,12 @@ class MCPServerConnection:
 
             # Create FastMCP client with stdio transport
             # MCP SDK strips env vars by default (security feature), so we
-            # explicitly pass IRIS_DB_PASSWORD so subprocesses can reach the DB
+            # explicitly pass AIRIS_DB_PASSWORD so subprocesses can reach the DB
             server_path = self.args[0]  # Path to server script
             env = {}
-            db_password = os.environ.get('IRIS_DB_PASSWORD')
+            db_password = os.environ.get('AIRIS_DB_PASSWORD')
             if db_password:
-                env['IRIS_DB_PASSWORD'] = db_password
+                env['AIRIS_DB_PASSWORD'] = db_password
             transport = PythonStdioTransport(script_path=server_path, env=env or None)
             self.client = Client(transport)
 

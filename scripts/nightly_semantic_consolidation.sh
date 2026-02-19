@@ -6,7 +6,7 @@
 # Cron: 30 3 * * * /iris-v3/scripts/nightly_semantic_consolidation.sh
 # (runs 30 min after memory creation at 3:00 AM)
 
-export IRIS_DB_PASSWORD='yourpassword'
+export AIRIS_DB_PASSWORD='yourpassword'
 export PGPASSWORD='yourpassword'
 
 set -o pipefail
@@ -48,7 +48,7 @@ insert_system_message() {
     local message="$1"
     log "Notifying Iris: $message"
     local escaped_message="${message//\'/\'\'}"
-    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+    PGPASSWORD="$AIRIS_DB_PASSWORD" psql -h localhost -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -c \
         "INSERT INTO chat_history (role, message, c_timestamp) VALUES ('system', E'$escaped_message', NOW());" \
         >> "$LOG_FILE" 2>&1
 
@@ -65,7 +65,7 @@ log_service_event() {
     local service_name="$2"
     local source="$3"
     local detail="$4"
-    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+    PGPASSWORD="$AIRIS_DB_PASSWORD" psql -h localhost -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -c \
         "INSERT INTO service_events (event_type, service_name, source, detail) VALUES ('$event_type', '$service_name', '$source', '$detail');" \
         >> "$LOG_FILE" 2>&1 || true
 }
@@ -96,8 +96,8 @@ preflight_checks() {
     touch "$LOCK_FILE"
 
     # Check database password
-    if [ -z "$IRIS_DB_PASSWORD" ]; then
-        log_error "IRIS_DB_PASSWORD not set"
+    if [ -z "$AIRIS_DB_PASSWORD" ]; then
+        log_error "AIRIS_DB_PASSWORD not set"
         exit 1
     fi
 

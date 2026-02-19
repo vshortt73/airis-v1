@@ -40,9 +40,9 @@ from core.embeddings import get_embedding_model
 os.environ["HF_HUB_OFFLINE"] = "1"
 
 DB_CFG = {
-    'dbname': 'irisdb',
-    'user': 'irisuser',
-    'password': os.environ.get('IRIS_DB_PASSWORD', ''),
+    'dbname': os.environ.get('AIRIS_DB_NAME', 'airisdb'),
+    'user': os.environ.get('AIRIS_DB_USER', 'airisuser'),
+    'password': os.environ.get('AIRIS_DB_PASSWORD', ''),
     'host': 'localhost',
     'port': 5432,
 }

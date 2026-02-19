@@ -1,5 +1,5 @@
 """
-Iris v3 - FastAPI Application
+Airis v1 - FastAPI Application
 Main application entry point
 """
 
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
         print(f"[main.py] ⚠ Could not sync context window from server: {e} (using DB value: {config.OLLAMA_CONTEXT_WINDOW})")
 
     # Detect current GPU service on Node2
-    if getattr(config, 'NODE2_ENABLED', True) and getattr(config, 'GPU_MANAGER_ENABLED', True):
+    if getattr(config, 'NODE2_ENABLED', False) and getattr(config, 'GPU_MANAGER_ENABLED', True):
         try:
             from core.gpu_manager import get_gpu_manager
             gpu = get_gpu_manager()
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     # Start face monitoring service
     try:
         from services import face_monitor
-        if getattr(config, 'FACE_MONITORING_ENABLED', True):
+        if getattr(config, 'FACE_MONITORING_ENABLED', False):
             interval = getattr(config, 'FACE_MONITORING_INTERVAL_SECONDS', 5)
             face_monitor.start_monitoring(interval_seconds=interval)
             print(f"[main.py] ✓ Face monitoring started (interval: {interval}s)")
@@ -113,9 +113,9 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Iris v3",
-    description="AI Assistant",
-    version="3.0.0",
+    title="Airis",
+    description="AI Companion — Designed Around Dignity",
+    version="1.0.0-alpha",
     lifespan=lifespan
 )
 
@@ -247,7 +247,7 @@ async def health():
         "max_conversation_turns": config.MAX_CONVERSATION_TURNS,
         "max_context_tokens": config.MAX_CONTEXT_TOKENS,
         "vision_enabled": config.VISION_ENABLED,
-        "node2_enabled": getattr(config, 'NODE2_ENABLED', True)
+        "node2_enabled": getattr(config, 'NODE2_ENABLED', False)
     }
 
 @app.get("/api/capabilities")
@@ -255,7 +255,7 @@ async def capabilities():
     """Feature flags for UI — which Node2-dependent controls are available"""
     from core.node2_check import is_node2_service_enabled
     return {
-        "node2_enabled": getattr(config, 'NODE2_ENABLED', True),
+        "node2_enabled": getattr(config, 'NODE2_ENABLED', False),
         "tts": is_node2_service_enabled("TTS_ENABLED"),
         "stt": is_node2_service_enabled("STT_ENABLED"),
         "video": is_node2_service_enabled("VIDEO_ENABLED"),
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     use_ssl = ssl_keyfile.exists() and ssl_certfile.exists()
 
     from app.version import __version__
-    print(f"[main.py] Starting Iris v{__version__}")
+    print(f"[main.py] Starting Airis v{__version__}")
     print(f"[main.py] Model: {config.OLLAMA_MODEL}")
     print(f"[main.py] Context Window: {config.OLLAMA_CONTEXT_WINDOW} tokens")
     print(f"[main.py] Session Timeout: {config.SESSION_TIMEOUT_MINUTES} minutes")

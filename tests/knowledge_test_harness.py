@@ -546,7 +546,7 @@ def main():
 
     # Get database credentials
     print("\nDatabase Configuration:")
-    db_password = os.environ.get('IRIS_DB_PASSWORD')
+    db_password = os.environ.get('AIRIS_DB_PASSWORD')
 
     if not db_password:
         db_password = input("  Password: ").strip()

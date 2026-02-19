@@ -18,10 +18,10 @@ from dream_seed_suggester import check_and_suggest_seed
 
 def get_db_connection():
     """Create database connection"""
-    # Try environment variable first, then config file, then IRIS_DB_PASSWORD from config
-    password = (os.environ.get('IRIS_DB_PASSWORD') or
+    # Try environment variable first, then config file, then AIRIS_DB_PASSWORD from config
+    password = (os.environ.get('AIRIS_DB_PASSWORD') or
                 getattr(config, 'DB_PASSWORD', None) or
-                getattr(config, 'IRIS_DB_PASSWORD', None))
+                getattr(config, 'AIRIS_DB_PASSWORD', None))
 
     conn_params = {
         'host': config.DB_HOST,

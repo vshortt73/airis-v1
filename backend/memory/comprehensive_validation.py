@@ -20,7 +20,7 @@ import psycopg2
 from psycopg2.extras import DictCursor
 import re
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
+DB_CFG = dict(dbname=os.environ.get('AIRIS_DB_NAME', 'airisdb'), user=os.environ.get('AIRIS_DB_USER', 'airisuser'), password=os.environ.get('AIRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def analyze_conversation_topic(session_id):
     """

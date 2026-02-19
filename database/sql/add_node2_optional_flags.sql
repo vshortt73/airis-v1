@@ -1,30 +1,30 @@
 -- Add Node2 optional feature flags
--- Allows running Iris without Node2 by setting NODE2_ENABLED=false
--- Run: psql -h localhost -U irisuser -d irisdb -f database/sql/add_node2_optional_flags.sql
+-- Airis: All Node2 features disabled by default (no local GPU assumed)
+-- Facility operators can enable as needed
 
 -- Master toggle
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart)
 VALUES
-('features', 'NODE2_ENABLED', 'true', 'bool', 'true',
+('features', 'NODE2_ENABLED', 'false', 'bool', 'false',
  'Master toggle for Node2 GPU server. When false, all Node2-dependent services are disabled.', true)
 ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description, last_modified = NOW();
 
--- Per-service flags for previously ungated Node2 services
+-- Per-service flags for Node2 services
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart)
 VALUES
-('features', 'STT_ENABLED', 'true', 'bool', 'true',
+('features', 'STT_ENABLED', 'false', 'bool', 'false',
  'Enable speech-to-text (Whisper on Node2). Requires NODE2_ENABLED.', false),
-('features', 'TTS_ENABLED', 'true', 'bool', 'true',
+('features', 'TTS_ENABLED', 'false', 'bool', 'false',
  'Enable text-to-speech (XTTS on Node2). Requires NODE2_ENABLED.', false),
-('features', 'VIDEO_ENABLED', 'true', 'bool', 'true',
+('features', 'VIDEO_ENABLED', 'false', 'bool', 'false',
  'Enable FLOAT video generation (Node2 GPU 0). Requires NODE2_ENABLED.', false),
-('features', 'GPU_MANAGER_ENABLED', 'true', 'bool', 'true',
+('features', 'GPU_MANAGER_ENABLED', 'false', 'bool', 'false',
  'Enable Node2 GPU manager for service coordination. Requires NODE2_ENABLED.', false),
-('features', 'FLORENCE2_ENABLED', 'true', 'bool', 'true',
+('features', 'FLORENCE2_ENABLED', 'false', 'bool', 'false',
  'Enable Florence2 vision model (Node2). Requires NODE2_ENABLED.', false),
-('features', 'PADDLEOCR_ENABLED', 'true', 'bool', 'true',
+('features', 'PADDLEOCR_ENABLED', 'false', 'bool', 'false',
  'Enable PaddleOCR service (Node2). Requires NODE2_ENABLED.', false),
-('features', 'DREAMS_ENABLED', 'true', 'bool', 'true',
+('features', 'DREAMS_ENABLED', 'false', 'bool', 'false',
  'Enable dream processing (Freud on Node2). Requires NODE2_ENABLED.', false)
 ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description, last_modified = NOW();
 

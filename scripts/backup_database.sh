@@ -3,8 +3,8 @@
 # Keeps last 30 days of backups
 
 BACKUP_DIR="/mnt/18tb/backup/iris_db"
-DB_NAME="irisdb"
-DB_USER="irisuser"
+DB_NAME="${AIRIS_DB_NAME:-airisdb}"
+DB_USER="${AIRIS_DB_USER:-airisuser}"
 DB_HOST="localhost"
 RETENTION_DAYS=30
 
@@ -13,13 +13,13 @@ mkdir -p "$BACKUP_DIR"
 
 # Generate filename with timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="$BACKUP_DIR/irisdb_$TIMESTAMP.dump"
+BACKUP_FILE="$BACKUP_DIR/airisdb_$TIMESTAMP.dump"
 
 # Export password (read from environment or use default location)
-export PGPASSWORD="${IRIS_DB_PASSWORD}"
+export PGPASSWORD="${AIRIS_DB_PASSWORD}"
 
 if [ -z "$PGPASSWORD" ]; then
-    echo "Error: IRIS_DB_PASSWORD not set"
+    echo "Error: AIRIS_DB_PASSWORD not set"
     exit 1
 fi
 
@@ -32,7 +32,7 @@ if [ $? -eq 0 ]; then
     echo "[$TIMESTAMP] Backup complete: $BACKUP_FILE ($FILESIZE)"
 
     # Remove backups older than retention period
-    DELETED=$(find "$BACKUP_DIR" -name "irisdb_*.dump" -mtime +$RETENTION_DAYS -delete -print | wc -l)
+    DELETED=$(find "$BACKUP_DIR" -name "airisdb_*.dump" -mtime +$RETENTION_DAYS -delete -print | wc -l)
     if [ "$DELETED" -gt 0 ]; then
         echo "[$TIMESTAMP] Removed $DELETED old backup(s)"
     fi

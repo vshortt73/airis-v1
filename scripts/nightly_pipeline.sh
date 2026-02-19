@@ -5,9 +5,9 @@
 # Pipeline: memory_creation → semantic_consolidation → drift_metrics
 # Each stage has a timeout. Failure in one stage does NOT prevent later stages.
 #
-# Cron: 0 3 * * * IRIS_DB_PASSWORD='...' /iris-v3/scripts/nightly_pipeline.sh
+# Cron: 0 3 * * * AIRIS_DB_PASSWORD='...' /iris-v3/scripts/nightly_pipeline.sh
 
-export IRIS_DB_PASSWORD='yourpassword'
+export AIRIS_DB_PASSWORD='yourpassword'
 export PGPASSWORD='yourpassword'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,14 +30,14 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
 log_error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" | tee -a "$LOG_FILE" >&2; }
 
 log_service_event() {
-    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+    PGPASSWORD="$AIRIS_DB_PASSWORD" psql -h localhost -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -c \
         "INSERT INTO service_events (event_type, service_name, source, detail)
          VALUES ('$1', '$2', '$3', '$4');" >> "$LOG_FILE" 2>&1 || true
 }
 
 insert_system_message() {
     local escaped="${1//\'/\'\'}"
-    PGPASSWORD="$IRIS_DB_PASSWORD" psql -h localhost -U irisuser -d irisdb -c \
+    PGPASSWORD="$AIRIS_DB_PASSWORD" psql -h localhost -U "${AIRIS_DB_USER:-airisuser}" -d "${AIRIS_DB_NAME:-airisdb}" -c \
         "INSERT INTO chat_history (role, message, c_timestamp)
          VALUES ('system', E'$escaped', NOW());" >> "$LOG_FILE" 2>&1 || true
 }

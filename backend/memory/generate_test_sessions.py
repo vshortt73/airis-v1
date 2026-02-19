@@ -15,7 +15,7 @@ from psycopg2.extras import DictCursor
 import json
 import random
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
+DB_CFG = dict(dbname=os.environ.get('AIRIS_DB_NAME', 'airisdb'), user=os.environ.get('AIRIS_DB_USER', 'airisuser'), password=os.environ.get('AIRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def get_sessions_stratified(total_sessions=10):
     """Get stratified sample of sessions"""

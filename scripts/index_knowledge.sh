@@ -4,12 +4,12 @@
 # Called by cron for scheduled indexing (nightly at 3 AM)
 # Pattern: Follows nightly_memory_creation.sh
 
-export IRIS_DB_PASSWORD='yourpassword'
+export AIRIS_DB_PASSWORD='yourpassword'
 export PGPASSWORD='yourpassword'
 
 # Database password — must be set in environment before running
-if [ -z "$IRIS_DB_PASSWORD" ]; then
-    echo "ERROR: IRIS_DB_PASSWORD not set. Export it before running this script."
+if [ -z "$AIRIS_DB_PASSWORD" ]; then
+    echo "ERROR: AIRIS_DB_PASSWORD not set. Export it before running this script."
     exit 1
 fi
 set -o pipefail
@@ -68,8 +68,8 @@ preflight_checks() {
     touch "$LOCK_FILE"
 
     # Check database password
-    if [ -z "$IRIS_DB_PASSWORD" ]; then
-        log_error "IRIS_DB_PASSWORD not set"
+    if [ -z "$AIRIS_DB_PASSWORD" ]; then
+        log_error "AIRIS_DB_PASSWORD not set"
         exit 1
     fi
 

@@ -8,7 +8,7 @@
 #   0 4 * * * /iris-v3/scripts/nightly_dream.sh >> /iris-v3/logs/dreams/cron.log 2>&1
 # ============================================================================
 
-export IRIS_DB_PASSWORD='yourpassword'
+export AIRIS_DB_PASSWORD='yourpassword'
 
 # ============================================================================
 # CONFIGURATION
@@ -102,8 +102,8 @@ export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 echo "✓ PYTHONPATH set" | tee -a "$LOG_FILE"
 
 # Check for database password
-if [ -z "$IRIS_DB_PASSWORD" ]; then
-    echo "⚠ Warning: IRIS_DB_PASSWORD not set in environment" | tee -a "$LOG_FILE"
+if [ -z "$AIRIS_DB_PASSWORD" ]; then
+    echo "⚠ Warning: AIRIS_DB_PASSWORD not set in environment" | tee -a "$LOG_FILE"
     echo "  Dream creation may fail if database requires authentication" | tee -a "$LOG_FILE"
 fi
 

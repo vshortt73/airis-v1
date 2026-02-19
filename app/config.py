@@ -1,5 +1,5 @@
 """
-Configuration for Iris v3
+Configuration for Airis v1
 
 !! CLAUDE: DATABASE IS SOURCE OF TRUTH !!
 
@@ -9,7 +9,7 @@ ALL runtime configuration loads from the system_config database table.
 If you need to add/modify configuration:
 1. Add to database: database/sql/populate_system_config_complete.sql
 2. Run the SQL
-3. Restart Iris
+3. Restart Airis
 
 The config_loader injects all database values into this module on startup.
 """
@@ -19,13 +19,13 @@ import os
 # ============================================
 # DATABASE CONNECTION (Bootstrap - Required)
 # ============================================
-# These are the ONLY hardcoded values needed - to connect to the database
-DB_HOST = "localhost"
-DB_PORT = 5432
-DB_NAME = "irisdb"
-DB_USER = "irisuser"
-# IMPORTANT: Use IRIS_DB_PASSWORD environment variable (required)
-DB_PASSWORD = os.environ.get('IRIS_DB_PASSWORD', '')
+# Every box gets its own DB name/credentials via environment variables.
+# Defaults are Airis-specific — never point at an Iris database.
+DB_HOST = os.environ.get('AIRIS_DB_HOST', 'localhost')
+DB_PORT = int(os.environ.get('AIRIS_DB_PORT', '5432'))
+DB_NAME = os.environ.get('AIRIS_DB_NAME', 'airisdb')
+DB_USER = os.environ.get('AIRIS_DB_USER', 'airisuser')
+DB_PASSWORD = os.environ.get('AIRIS_DB_PASSWORD', '')
 
 # ============================================
 # SERVER (Bootstrap - Required before DB load)

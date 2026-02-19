@@ -6,22 +6,26 @@ cd "$SCRIPT_DIR/.."
 # ============================================
 # PREFLIGHT: Check inference backend
 # ============================================
-echo "=== Iris Preflight Checks ==="
+echo "=== Airis Preflight Checks ==="
 echo ""
-export IRIS_DB_PASSWORD='yourpassword'
-export PGPASSWORD='yourpassword'
+
+# Database credentials — from environment
+DB_NAME="${AIRIS_DB_NAME:-airisdb}"
+DB_USER="${AIRIS_DB_USER:-airisuser}"
+DB_HOST="${AIRIS_DB_HOST:-localhost}"
+
 # Database password — must be set in environment before running
-if [ -z "$IRIS_DB_PASSWORD" ]; then
-    echo "ERROR: IRIS_DB_PASSWORD not set. Export it before running this script."
-    echo "  export IRIS_DB_PASSWORD='yourpassword'"
+if [ -z "$AIRIS_DB_PASSWORD" ]; then
+    echo "ERROR: AIRIS_DB_PASSWORD not set. Export it before running this script."
+    echo "  export AIRIS_DB_PASSWORD='yourpassword'"
     exit 1
 fi
-export PGPASSWORD="$IRIS_DB_PASSWORD"
+export PGPASSWORD="$AIRIS_DB_PASSWORD"
 
 
 
 # Detect backend from database (default: llamacpp)
-BACKEND=$(psql -h localhost -U irisuser -d irisdb -t -A -c \
+BACKEND=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -t -A -c \
     "SELECT value FROM system_config WHERE key = 'INFERENCE_BACKEND'" 2>/dev/null)
 BACKEND=${BACKEND:-llamacpp}
 echo "Inference backend: $BACKEND"
@@ -38,7 +42,7 @@ if [ "$BACKEND" = "sglang" ]; then
         echo ""
         echo "SGLang server is not running on port 11434."
         echo "Start it with:"
-        echo "  sudo systemctl start iris-sglang"
+        echo "  sudo systemctl start airis-sglang"
         echo "  # or: ./scripts/sglang_server_start.sh"
         echo ""
         exit 1
@@ -74,7 +78,7 @@ else
 fi
 
 echo ""
-echo "=== Starting Iris v3 ==="
+echo "=== Starting Airis ==="
 echo ""
 
 # ============================================

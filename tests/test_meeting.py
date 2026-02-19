@@ -10,7 +10,7 @@ Tests:
 6. Full pipeline: start → upload chunk → stop → process (if transcribe service is up)
 
 Usage:
-    export IRIS_DB_PASSWORD='your_password'
+    export AIRIS_DB_PASSWORD='your_password'
     python tests/test_meeting.py
     python tests/test_meeting.py --full   # includes transcription pipeline test
 """
@@ -28,9 +28,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, PROJECT_ROOT)
 
 # DB password: env var or .pgpass (psycopg2 reads ~/.pgpass automatically)
-if not os.environ.get('IRIS_DB_PASSWORD'):
+if not os.environ.get('AIRIS_DB_PASSWORD'):
     # Set a dummy so config.py doesn't complain, but psycopg2 will use .pgpass
-    os.environ['IRIS_DB_PASSWORD'] = ''
+    os.environ['AIRIS_DB_PASSWORD'] = ''
 
 import psycopg2
 from app import config
@@ -55,7 +55,7 @@ def report(name, success, detail="", skip=False):
 
 
 def get_db_connection():
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', None)
     conn_params = {
         'host': config.DB_HOST,
         'port': config.DB_PORT,
@@ -318,7 +318,7 @@ def test_gpu_manager():
     except AttributeError as e:
         # Config attributes missing — DB config didn't load
         report("GPU manager (config loaded)", False,
-               f"{e} — is IRIS_DB_PASSWORD set?")
+               f"{e} — is AIRIS_DB_PASSWORD set?")
     except Exception as e:
         report("GPU manager", False, str(e))
 

@@ -8,8 +8,8 @@ import psycopg2
 DB_CONFIG = {
     "host": "localhost",
     "port": 5432,
-    "database": "irisdb",
-    "user": "irisuser",
+    "database": os.environ.get('AIRIS_DB_NAME', 'airisdb'),
+    "user": os.environ.get('AIRIS_DB_USER', 'airisuser'),
     "password": 'yourpassword',
 }
 
@@ -55,7 +55,7 @@ def get_similar_ids(memory_id: int, limit: int = 10) -> list[tuple[int, float]]:
 
 if __name__ == "__main__":
     if not DB_CONFIG["password"]:
-        print("Set IRIS_DB_PASSWORD", file=sys.stderr)
+        print("Set AIRIS_DB_PASSWORD", file=sys.stderr)
         sys.exit(1)
 
     memory_id = input("Memory ID: ").strip()

@@ -10,7 +10,7 @@ import psycopg2
 import json
 import time
 
-DB_CFG = dict(dbname="irisdb", user="irisuser", password=os.environ.get('IRIS_DB_PASSWORD', ''), host="localhost", port=5432)
+DB_CFG = dict(dbname=os.environ.get('AIRIS_DB_NAME', 'airisdb'), user=os.environ.get('AIRIS_DB_USER', 'airisuser'), password=os.environ.get('AIRIS_DB_PASSWORD', ''), host="localhost", port=5432)
 
 def generate_topic_label(context, event, takeaway, model_name):
     """Generate topic label using specified model"""

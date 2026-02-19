@@ -35,7 +35,7 @@ class DatabaseConfig:
         """Get database connection using bootstrap config"""
         from app import config as bootstrap_config
 
-        password = os.environ.get('IRIS_DB_PASSWORD') or getattr(bootstrap_config, 'DB_PASSWORD', None)
+        password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(bootstrap_config, 'DB_PASSWORD', None)
         conn_params = {
             'host': bootstrap_config.DB_HOST,
             'port': bootstrap_config.DB_PORT,

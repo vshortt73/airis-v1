@@ -25,8 +25,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, PROJECT_ROOT)
 
 # Require DB password from environment
-if not os.environ.get('IRIS_DB_PASSWORD'):
-    print("WARNING: IRIS_DB_PASSWORD not set. Set it with: export IRIS_DB_PASSWORD='...'")
+if not os.environ.get('AIRIS_DB_PASSWORD'):
+    print("WARNING: AIRIS_DB_PASSWORD not set. Set it with: export AIRIS_DB_PASSWORD='...'")
     print("Database connection may fail if authentication is required.")
 
 from core.prompt_builder import UnifiedPromptBuilder, get_active_protocol

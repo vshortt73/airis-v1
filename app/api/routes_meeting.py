@@ -58,7 +58,7 @@ async def upload_chunk(
     import psycopg2
 
     # Verify meeting exists and is recording
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
     conn = psycopg2.connect(
         host=config.DB_HOST, port=config.DB_PORT,
         database=config.DB_NAME, user=config.DB_USER,
@@ -124,7 +124,7 @@ async def meeting_status(meeting_id: int):
     """Get recording/processing status for a meeting."""
     import psycopg2
 
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
     conn = psycopg2.connect(
         host=config.DB_HOST, port=config.DB_PORT,
         database=config.DB_NAME, user=config.DB_USER,
@@ -176,7 +176,7 @@ async def process_meeting(meeting_id: int, background_tasks: BackgroundTasks):
     _check_enabled()
 
     import psycopg2
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
     conn = psycopg2.connect(
         host=config.DB_HOST, port=config.DB_PORT,
         database=config.DB_NAME, user=config.DB_USER,
@@ -227,7 +227,7 @@ async def _run_transcription_pipeline(meeting_id: int):
     import psycopg2
     import httpx
 
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
 
     def get_conn():
         return psycopg2.connect(
@@ -414,7 +414,7 @@ async def export_meeting(meeting_id: int, format: str = "summary"):
     if format not in ("summary", "notes", "transcript"):
         format = "summary"
 
-    password = os.environ.get('IRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
+    password = os.environ.get('AIRIS_DB_PASSWORD') or getattr(config, 'DB_PASSWORD', '')
     conn = psycopg2.connect(
         host=config.DB_HOST, port=config.DB_PORT,
         database=config.DB_NAME, user=config.DB_USER,
