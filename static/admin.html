@@ -376,7 +376,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>🎛️ Iris Admin Console</h1>
+        <h1>🎛️ Iris Admin Console <span id="version-badge" style="font-size:0.4em;opacity:0.6"></span></h1>
         <div class="header-actions">
             <button class="btn btn-primary" onclick="refreshAll()">🔄 Refresh All</button>
             <button class="btn btn-danger" onclick="if(confirm('Restart Iris server?')) restartServer()">🔁 Restart Server</button>
@@ -2290,9 +2290,19 @@
             loadConfigCategory();
         }
 
+        // Fetch version from health endpoint
+        async function loadVersion() {
+            try {
+                const r = await fetch('/api/health');
+                const d = await r.json();
+                if (d.version) document.getElementById('version-badge').textContent = 'v' + d.version;
+            } catch(e) {}
+        }
+
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             refreshAll();
+            loadVersion();
             loadConfig();
             loadSTTConfig();
             checkSavedImage();

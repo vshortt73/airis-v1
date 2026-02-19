@@ -237,8 +237,10 @@ async def florence2_lab():
 @app.get("/api/health")
 async def health():
     """Health check endpoint"""
+    from app.version import __version__
     return {
         "status": "ok",
+        "version": __version__,
         "model": config.OLLAMA_MODEL,
         "context_window": config.OLLAMA_CONTEXT_WINDOW,
         "session_timeout_minutes": config.SESSION_TIMEOUT_MINUTES,
@@ -309,7 +311,8 @@ if __name__ == "__main__":
     # Check if SSL certificates exist
     use_ssl = ssl_keyfile.exists() and ssl_certfile.exists()
 
-    print(f"[main.py] Starting Iris v3")
+    from app.version import __version__
+    print(f"[main.py] Starting Iris v{__version__}")
     print(f"[main.py] Model: {config.OLLAMA_MODEL}")
     print(f"[main.py] Context Window: {config.OLLAMA_CONTEXT_WINDOW} tokens")
     print(f"[main.py] Session Timeout: {config.SESSION_TIMEOUT_MINUTES} minutes")
