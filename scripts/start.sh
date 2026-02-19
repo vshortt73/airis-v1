@@ -9,15 +9,21 @@ cd "$SCRIPT_DIR/.."
 echo "=== Airis Preflight Checks ==="
 echo ""
 
-# Database credentials — from environment
+# Load config from /etc/airis/env (written by bootstrap)
+ENV_FILE="/etc/airis/env"
+if [ -f "$ENV_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+fi
+
+# Database credentials
 DB_NAME="${AIRIS_DB_NAME:-airisdb}"
 DB_USER="${AIRIS_DB_USER:-airisuser}"
 DB_HOST="${AIRIS_DB_HOST:-localhost}"
 
-# Database password — must be set in environment before running
 if [ -z "$AIRIS_DB_PASSWORD" ]; then
-    echo "ERROR: AIRIS_DB_PASSWORD not set. Export it before running this script."
-    echo "  export AIRIS_DB_PASSWORD='yourpassword'"
+    echo "ERROR: AIRIS_DB_PASSWORD not set."
+    echo "  Run ./scripts/bootstrap_airisdb.sh first, or export AIRIS_DB_PASSWORD."
     exit 1
 fi
 export PGPASSWORD="$AIRIS_DB_PASSWORD"
