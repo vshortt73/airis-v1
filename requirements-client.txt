@@ -1,0 +1,106 @@
+# ============================================================================
+# Airis Client Box - Minimal Requirements
+# ============================================================================
+#
+# CPU-only machine that runs the FastAPI server, PostgreSQL client, MCP tools,
+# and embedding generation. Does NOT run inference, TTS, STT, vision models,
+# or any GPU-accelerated services. Inference is handled by a remote facility
+# server (sglang/llama.cpp) reached via HTTP.
+#
+# Install:
+#   pip install -r requirements-client.txt
+#
+# For torch CPU-only (saves ~2GB vs full CUDA build):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-client.txt
+#
+# Note: Install torch FIRST with the CPU index URL, then install this file.
+#       pip will skip torch if it's already installed at a compatible version.
+#
+# Generated from import analysis of: app/, core/, database/, inference/,
+# backend/knowledge/, backend/memory/, mcp_servers/, services/
+#
+# Known issue: app/api/routes_tts.py has top-level imports of whisperx_mapper
+# and wav2vec2_aligner which pull in whisperx and torchaudio. These modules
+# need conditional/lazy imports for client-box compatibility. Until then,
+# routes_tts lip-sync features will fail gracefully (TTS proxy still works).
+# ============================================================================
+
+# --- Web Framework ---
+fastapi>=0.115.0
+uvicorn>=0.30.0
+starlette>=0.38.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-multipart                # File/UploadFile support in FastAPI
+websockets                      # FastAPI WebSocket transport
+wsproto                         # uvicorn ws="wsproto"
+
+# --- HTTP Clients ---
+httpx>=0.27.0                   # Primary async HTTP client (inference, TTS proxy, etc.)
+aiohttp>=3.9.0                  # MCP info server, creative server, web_surfer
+requests>=2.31.0                # MCP info server, moltbook server
+
+# --- Database ---
+psycopg2-binary>=2.9.9          # PostgreSQL (used everywhere)
+
+# --- ML / Embeddings (CPU) ---
+# NOTE: Install torch CPU-only BEFORE this file (see header)
+torch>=2.2.0                    # Required by sentence-transformers
+sentence-transformers>=3.0.0    # core/embeddings.py (all-mpnet-base-v2)
+numpy>=1.26.0                   # Embeddings, memory retrieval, face recognition
+
+# --- Token Counting ---
+tiktoken>=0.5.0                 # core/token_counter.py (cl100k_base encoding)
+
+# --- MCP (Model Context Protocol) ---
+fastmcp>=2.10.0                 # MCP client transport + base server
+mcp>=1.0.0                      # MCP protocol (mcp.server.fastmcp.FastMCP)
+
+# --- Terminal / Logging ---
+colorama                        # Colored output in system_prompt, persistence, client, etc.
+
+# --- Web Scraping (MCP info server) ---
+beautifulsoup4                  # HTML parsing (info_server, web_surfer)
+readability-lxml                # Article extraction (info_server, web_surfer)
+lxml                            # XML/HTML parser (dependency of readability-lxml)
+feedparser                      # RSS feed parsing (info_server, web_surfer)
+
+# --- Image Processing ---
+opencv-python-headless          # cv2 - face recognition, directions processors
+Pillow                          # PIL - face recognition image handling
+
+# --- System Monitoring ---
+psutil                          # routes_admin, system MCP server
+
+# --- Text Processing ---
+emoji                           # routes_tts.py emoji stripping
+
+# --- Document Extraction (optional, conditional imports) ---
+pypdf                           # PDF text extraction (backend/knowledge/extractors.py)
+python-docx                     # DOCX extraction (backend/knowledge/extractors.py)
+odfpy                           # ODF extraction (backend/knowledge/extractors.py)
+
+# --- OCR (directions MCP server) ---
+pytesseract                     # OCR for elevator signs, deck labels
+
+# --- Face Recognition (optional, try/except import) ---
+# Uncomment if face recognition is needed on this client box.
+# insightface requires onnxruntime. Use onnxruntime (CPU) not onnxruntime-gpu.
+# insightface>=0.7.3
+# onnxruntime>=1.17.0
+
+# ============================================================================
+# EXCLUDED (not needed on client box):
+#
+# Inference engines:     sglang, llama-cpp-python, vllm, accelerate, outlines
+# GPU libraries:         flashinfer, sgl-kernel, triton, torchao, nvidia-*
+# TTS/STT:              whisperx, pyannote.*, speechbrain, torchaudio, phonemizer
+# Vision models:         easyocr, paddleocr, paddlepaddle, florence2, pixtral
+# Video generation:      FLOAT, diffusers, torchvision
+# Face alignment:        face-alignment
+# Compression:           compressed-tensors, quack-kernels
+# Heavy ML:              transformers, datasets, huggingface-hub (only needed
+#                        if sentence-transformers can't find a cached model --
+#                        it bundles its own HF hub dependency)
+# ============================================================================
