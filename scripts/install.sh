@@ -22,6 +22,10 @@ echo "── Installing system packages ──"
 sudo apt update -qq
 sudo apt install -y python3 python3-pip python3-venv postgresql postgresql-contrib git curl
 
+# Ensure PostgreSQL is running
+sudo systemctl enable --now postgresql
+echo "  ✓ PostgreSQL installed and running"
+
 # ── 2. pgvector ──
 echo ""
 echo "── Installing pgvector ──"
