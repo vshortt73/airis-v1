@@ -131,8 +131,18 @@ echo "============================================"
 echo ""
 
 # Verify connection
-if ! psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" -q 2>/dev/null; then
-    echo "ERROR: Cannot connect to $DB_NAME. Did you run the prerequisites?"
+echo -n "Connecting to $DB_NAME as $DB_USER... "
+if ! psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" -q 2>&1; then
+    echo ""
+    echo "ERROR: Cannot connect to $DB_NAME."
+    echo ""
+    echo "  Troubleshooting:"
+    echo "  1. Is PostgreSQL running?  sudo systemctl status postgresql"
+    echo "  2. Does the user exist?    sudo -u postgres psql -c \"\\du airisuser\""
+    echo "  3. Does the database exist? sudo -u postgres psql -l | grep airisdb"
+    echo "  4. Check pg_hba.conf allows password auth for TCP connections:"
+    echo "     sudo -u postgres psql -tAc \"SHOW hba_file\""
+    echo "     Look for: host all all 127.0.0.1/32 scram-sha-256"
     exit 1
 fi
 echo "✓ Connected to $DB_NAME"

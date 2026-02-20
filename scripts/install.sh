@@ -24,6 +24,34 @@ sudo apt install -y python3 python3-pip python3-venv postgresql postgresql-contr
 
 # Ensure PostgreSQL is running
 sudo systemctl enable --now postgresql
+
+# Wait for PostgreSQL to accept connections
+echo -n "  Waiting for PostgreSQL to be ready..."
+for i in $(seq 1 15); do
+    if sudo -u postgres psql -c "SELECT 1" -q 2>/dev/null; then
+        break
+    fi
+    sleep 1
+    echo -n "."
+done
+echo ""
+
+# Ensure pg_hba.conf allows password auth over TCP (required for airisuser)
+PG_HBA=$(sudo -u postgres psql -tAc "SHOW hba_file" 2>/dev/null)
+if [ -n "$PG_HBA" ]; then
+    # Check if localhost md5/scram-sha-256 line exists
+    if ! sudo grep -qE "^host\s+all\s+all\s+127\.0\.0\.1/32\s+(md5|scram-sha-256)" "$PG_HBA"; then
+        echo "  Configuring pg_hba.conf for password authentication..."
+        # Add password auth for TCP connections from localhost (before any reject rules)
+        sudo sed -i '/^# IPv4 local connections:/a host    all             all             127.0.0.1/32            scram-sha-256' "$PG_HBA"
+        sudo systemctl reload postgresql
+        sleep 1
+    fi
+    echo "  ✓ PostgreSQL configured for password auth"
+else
+    echo "  WARNING: Could not determine pg_hba.conf location"
+fi
+
 echo "  ✓ PostgreSQL installed and running"
 
 # ── 2. pgvector ──
