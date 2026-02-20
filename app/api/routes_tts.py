@@ -21,9 +21,22 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
-from app.api.phoneme_mapper import text_to_rhubarb_phonemes
-from app.api.whisperx_mapper import whisperx_text_to_phonemes
-from app.api.wav2vec2_aligner import align_audio_wav2vec2
+# Lip-sync modules require phonemizer/whisperx/wav2vec2 — optional on client boxes
+try:
+    from app.api.phoneme_mapper import text_to_rhubarb_phonemes
+except ImportError:
+    text_to_rhubarb_phonemes = None
+
+try:
+    from app.api.whisperx_mapper import whisperx_text_to_phonemes
+except ImportError:
+    whisperx_text_to_phonemes = None
+
+try:
+    from app.api.wav2vec2_aligner import align_audio_wav2vec2
+except ImportError:
+    align_audio_wav2vec2 = None
+
 from app.api.tts_normalizer import normalize_for_tts
 from core.node2_check import is_node2_service_enabled
 
