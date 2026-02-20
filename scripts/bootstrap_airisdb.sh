@@ -175,6 +175,15 @@ echo ""
 echo "── Phase 4: Configuration ──"
 run_sql "$SQL_DIR/populate_system_config_complete.sql" "system_config (base)"
 run_sql "$SQL_DIR/add_sglang_config.sql"              "sglang + CPU-only config"
+
+# Set inference URL from interactive setup
+echo "  Setting inference URL to $AIRIS_INFERENCE_URL"
+psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -q -c "
+    UPDATE system_config SET value = '$AIRIS_INFERENCE_URL' WHERE key = 'OLLAMA_BASE_URL';
+    UPDATE system_config SET value = '$AIRIS_INFERENCE_URL' WHERE key = 'SGLANG_BASE_URL';
+    UPDATE system_config SET value = '$AIRIS_PORT' WHERE key = 'PORT';
+"
+
 run_sql "$SQL_DIR/add_activation_config.sql"           "progressive activation thresholds"
 run_sql "$SQL_DIR/add_retrieval_v2_config.sql"         "retrieval v2"
 run_sql "$SQL_DIR/add_semantic_memory_config.sql"      "semantic memory"
