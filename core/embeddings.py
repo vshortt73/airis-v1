@@ -64,7 +64,7 @@ def get_embedding_model(force_cpu: bool = False):
                     _embedding_model = SentenceTransformer(
                         "all-mpnet-base-v2",
                         device=device,
-                        cache_folder=config.HF_CACHE_DIR
+                        cache_folder=getattr(config, 'HF_CACHE_DIR', None)
                     )
                     # Run a small test encode to verify CUDA actually works
                     _embedding_model.encode("test", convert_to_numpy=True)
@@ -77,7 +77,7 @@ def get_embedding_model(force_cpu: bool = False):
                         _embedding_model = SentenceTransformer(
                             "all-mpnet-base-v2",
                             device=device,
-                            cache_folder=config.HF_CACHE_DIR
+                            cache_folder=getattr(config, 'HF_CACHE_DIR', None)
                         )
                         print(f"[embeddings.py][get_embedding_model] ✓ Loaded all-mpnet-base-v2 model on CPU (fallback)", file=sys.stderr)
                     else:
