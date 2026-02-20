@@ -601,7 +601,7 @@ function handleWebSocketMessage(data) {
             currentContextLevel = data.context_level || 'FULL';
             console.log(`[Context Tier] ${currentContextLevel}`);
 
-            currentAssistantMessage = createMessage('assistant', 'Iris is thinking...', [], currentContextLevel);
+            currentAssistantMessage = createMessage('assistant', 'Thinking...', [], currentContextLevel);
             chatContainer.appendChild(currentAssistantMessage);
             scrollToBottom();
 
