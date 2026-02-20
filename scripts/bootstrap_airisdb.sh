@@ -98,6 +98,10 @@ sudo chown root:"$(id -gn)" "$ENV_FILE"
 sudo chmod 640 "$ENV_FILE"
 echo "  ✓ $ENV_FILE written (owner root, group $(id -gn), mode 640)"
 
+# Create required directories
+mkdir -p "$REPO_ROOT/attachments" "$REPO_ROOT/assets/temp" "$REPO_ROOT/logs"
+echo "  ✓ Runtime directories created"
+
 # Source it for the rest of this script
 export AIRIS_DB_PASSWORD
 export AIRIS_INFERENCE_URL
