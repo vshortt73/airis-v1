@@ -16,7 +16,7 @@
 # ============================================================================
 
 PROJECT_ROOT="/iris-v3"
-VENV_PATH="/venv/iris-v3"
+VENV_PATH="/venv/airis"
 DREAM_MODERATOR="$PROJECT_ROOT/backend/memory/dreams/dream_moderator.py"
 LOG_DIR="$PROJECT_ROOT/logs/dreams"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

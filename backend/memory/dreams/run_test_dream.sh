@@ -1,4 +1,4 @@
 #!/bin/bash
 # Quick test runner for dream system
-cd /iris-v3/backend/memory/dreams
-/venv/iris-v3/bin/python3 dream_moderator.py --dream-type creative_random "$@"
+cd /airis-v1/backend/memory/dreams
+/venv/airis/bin/python3 dream_moderator.py --dream-type creative_random "$@"

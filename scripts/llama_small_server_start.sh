@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source /venv/iris-v3/bin/activate
+source /venv/airis/bin/activate
 
 /programs/llama.cpp/build/bin/llama-server \
   -m /models/vision/qwen/Qwen2-VL-7B-Instruct-Q4_K_M.gguf\

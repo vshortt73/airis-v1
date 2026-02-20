@@ -273,7 +273,7 @@ ON CONFLICT (key) DO UPDATE SET
 -- Client box paths only. No inference engines, no GPU model paths, no Node2.
 INSERT INTO system_config (category, key, value, value_type, default_value, description, requires_restart) VALUES
 ('paths', 'PROJECT_ROOT', '/airis-v1', 'string', '/airis-v1', 'Project installation directory', true),
-('paths', 'VENV_PATH', '/venv/iris-v3', 'string', '/venv/iris-v3', 'Python virtual environment path', true),
+('paths', 'VENV_PATH', '/venv/airis', 'string', '/venv/airis', 'Python virtual environment path', true),
 ('paths', 'EMBEDDING_MODEL_PATH', '/models/llm_models/huggingface/models/all-mpnet-base-v2/', 'string', '/models/llm_models/huggingface/models/all-mpnet-base-v2/', 'Sentence transformer embedding model', true),
 ('paths', 'SSL_CERT_PATH', '/airis-v1/ssl/cert.pem', 'string', '/airis-v1/ssl/cert.pem', 'SSL certificate for HTTPS (if used)', true)
 ON CONFLICT (key) DO UPDATE SET

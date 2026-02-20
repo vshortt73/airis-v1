@@ -1,7 +1,7 @@
 #!/bin/bash
 # Freud server for dream system - gemma-3-4b on GPU 1 (port 11435)
 
-source /venv/iris-v3/bin/activate
+source /venv/airis/bin/activate
 
 export CUDA_VISIBLE_DEVICES=1
 

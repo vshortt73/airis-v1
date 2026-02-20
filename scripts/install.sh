@@ -39,7 +39,7 @@ sudo apt install -y "postgresql-${PG_VERSION}-pgvector" || {
 # ── 3. Python venv ──
 echo ""
 echo "── Setting up Python environment ──"
-VENV_PATH="/venv/iris-v3"
+VENV_PATH="/venv/airis"
 if [ ! -d "$VENV_PATH" ]; then
     sudo mkdir -p /venv
     sudo chown "$(whoami):$(id -gn)" /venv
@@ -76,7 +76,7 @@ echo "  ✓ Python packages installed"
 # ── 6. Database setup ──
 echo ""
 echo "── Setting up database ──"
-read -rsp "Choose a database password for airisuser: " DB_PASS
+read -rsp "Choose a database password for airisuser: " DB_PASS < /dev/tty
 echo ""
 
 # Check if user/db already exist
@@ -115,13 +115,27 @@ else
     sudo chown -R "$(whoami):$(id -gn)" /models
 fi
 
-# ── 8. Bootstrap ──
+# ── 8. Deployment config ──
+echo ""
+echo "── Deployment configuration ──"
+echo "The client box connects to a facility inference server (sglang)"
+echo "running on the network. Enter the URL for that server."
+echo ""
+read -rp "Inference server URL [http://localhost:11434]: " INFERENCE_URL < /dev/tty
+INFERENCE_URL="${INFERENCE_URL:-http://localhost:11434}"
+
+read -rp "Airis server port [9000]: " AIRIS_PORT < /dev/tty
+AIRIS_PORT="${AIRIS_PORT:-9000}"
+
+# ── 9. Bootstrap ──
 echo ""
 echo "── Running Airis bootstrap ──"
 export AIRIS_DB_PASSWORD="$DB_PASS"
+export AIRIS_INFERENCE_URL="$INFERENCE_URL"
+export AIRIS_PORT
 "$INSTALL_DIR/scripts/bootstrap_airisdb.sh"
 
-# ── 9. Install systemd service ──
+# ── 10. Install systemd service ──
 echo ""
 echo "── Installing systemd service ──"
 sudo cp "$INSTALL_DIR/scripts/airis.service" /etc/systemd/system/

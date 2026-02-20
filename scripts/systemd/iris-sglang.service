@@ -11,9 +11,9 @@ WorkingDirectory=/iris-v3
 
 # GPU 0 (RTX 5090)
 Environment="CUDA_VISIBLE_DEVICES=0"
-Environment="PATH=/venv/iris-v3/bin:/usr/local/cuda/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/venv/airis/bin:/usr/local/cuda/bin:/usr/local/bin:/usr/bin:/bin"
 
-ExecStart=/venv/iris-v3/bin/python -m sglang.launch_server \
+ExecStart=/venv/airis/bin/python -m sglang.launch_server \
     --model-path /localmodels/qwen/Qwen3-32B-Q4_K_M.gguf \
     --port 11434 \
     --host 0.0.0.0 \

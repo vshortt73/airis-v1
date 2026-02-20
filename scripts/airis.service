@@ -11,8 +11,8 @@ Environment=AIRIS_DB_NAME=airisdb
 Environment=AIRIS_DB_USER=airisuser
 Environment=AIRIS_DB_HOST=localhost
 Environment=PYTHONPATH=/airis-v1
-Environment=PATH=/venv/iris-v3/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/venv/iris-v3/bin/python app/main.py
+Environment=PATH=/venv/airis/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/venv/airis/bin/python app/main.py
 Restart=on-failure
 RestartSec=5
 

@@ -37,7 +37,7 @@ if [ -f "$ENV_FILE" ]; then
     echo "  Inference server: ${AIRIS_INFERENCE_URL:-not set}"
     echo "  Database password: $([ -n "$AIRIS_DB_PASSWORD" ] && echo "set" || echo "not set")"
     echo ""
-    read -rp "Use existing config? [Y/n] " USE_EXISTING
+    read -rp "Use existing config? [Y/n] " USE_EXISTING < /dev/tty
     if [[ "$USE_EXISTING" =~ ^[Nn] ]]; then
         unset AIRIS_DB_PASSWORD AIRIS_INFERENCE_URL
     fi
@@ -46,7 +46,7 @@ fi
 # Database password
 if [ -z "$AIRIS_DB_PASSWORD" ]; then
     echo ""
-    read -rsp "Database password for airisuser: " AIRIS_DB_PASSWORD
+    read -rsp "Database password for airisuser: " AIRIS_DB_PASSWORD < /dev/tty
     echo ""
     if [ -z "$AIRIS_DB_PASSWORD" ]; then
         echo "ERROR: Password cannot be empty."
@@ -60,13 +60,13 @@ if [ -z "$AIRIS_INFERENCE_URL" ]; then
     echo "The client box connects to a facility inference server (sglang)"
     echo "running on the network. Enter the URL for that server."
     echo ""
-    read -rp "Inference server URL [http://localhost:11434]: " AIRIS_INFERENCE_URL
+    read -rp "Inference server URL [http://localhost:11434]: " AIRIS_INFERENCE_URL < /dev/tty
     AIRIS_INFERENCE_URL="${AIRIS_INFERENCE_URL:-http://localhost:11434}"
 fi
 
 # Airis port
 if [ -z "$AIRIS_PORT" ]; then
-    read -rp "Airis server port [9000]: " AIRIS_PORT
+    read -rp "Airis server port [9000]: " AIRIS_PORT < /dev/tty
     AIRIS_PORT="${AIRIS_PORT:-9000}"
 fi
 

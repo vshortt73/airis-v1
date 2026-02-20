@@ -10,7 +10,7 @@ Group=captain
 WorkingDirectory=/iris-v3
 Environment=PYTHONPATH=/iris-v3
 Environment=IRIS_DB_PASSWORD=%REPLACE_WITH_PASSWORD%
-ExecStart=/venv/iris-v3/bin/python /iris-v3/services/drive_daemon.py
+ExecStart=/venv/airis/bin/python /iris-v3/services/drive_daemon.py
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
