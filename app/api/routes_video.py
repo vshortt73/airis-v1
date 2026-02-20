@@ -36,7 +36,7 @@ video_sessions: Dict[str, dict] = {}
 video_queues: Dict[str, List[dict]] = {}
 
 # Paths (derived from config.PROJECT_ROOT)
-_PROJECT = Path(config.PROJECT_ROOT)
+_PROJECT = Path(getattr(config, 'PROJECT_ROOT', str(PROJECT_ROOT)))
 TEMP_DIR = _PROJECT / "assets" / "temp"
 REP_DIR = _PROJECT / "static"
 VIDEO_DIR = TEMP_DIR / "videos"

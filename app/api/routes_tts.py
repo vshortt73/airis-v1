@@ -51,7 +51,7 @@ def _check_tts_enabled():
 # XTTS server configuration
 # Note: No trailing slash - XTTS redirects if present
 # Supports environment variable override for flexibility
-_xtts_base = os.environ.get('XTTS_SERVER_URL', config.XTTS_SERVER_URL)
+_xtts_base = os.environ.get('XTTS_SERVER_URL', getattr(config, 'XTTS_SERVER_URL', 'http://localhost:8700'))
 XTTS_SERVER_URL = f"{_xtts_base}/speak_stream_mp3"
 XTTS_WAV_URL = f"{_xtts_base}/speak_stream_wav"  # For Rhubarb (needs WAV)
 

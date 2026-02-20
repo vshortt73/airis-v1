@@ -17,7 +17,7 @@ import base64
 from typing import Dict, Any, Optional, List
 
 from app import config
-PADDLEOCR_REMOTE_URL = config.PADDLEOCR_SERVER_URL
+PADDLEOCR_REMOTE_URL = getattr(config, 'PADDLEOCR_SERVER_URL', 'http://localhost:5001')
 
 PADDLEOCR_TIMEOUT = 60.0  # seconds
 

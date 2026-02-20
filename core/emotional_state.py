@@ -31,8 +31,8 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Mistral endpoint (database source of truth)
-MISTRAL_URL = config.MISTRAL_URL
+# Mistral endpoint (database source of truth — not available on client boxes)
+MISTRAL_URL = getattr(config, 'MISTRAL_URL', '')
 
 # ============================================
 # EMOTIONAL STATES - The core feelings we track

@@ -20,8 +20,8 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import config
 
-# Mistral endpoint (database source of truth)
-MISTRAL_URL = config.MISTRAL_URL
+# Mistral endpoint (database source of truth — not available on client boxes)
+MISTRAL_URL = getattr(config, 'MISTRAL_URL', '')
 
 # Summary generation prompt
 SUMMARY_SYSTEM_PROMPT = """You are a concise summarizer. Summarize the given message in approximately 50 tokens.

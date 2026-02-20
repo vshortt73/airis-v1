@@ -31,10 +31,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # Configuration (database source of truth)
 from app import config as app_config
-FLORENCE2_REMOTE_URL = app_config.FLORENCE2_SERVER_URL
-FLORENCE2_MODE = app_config.FLORENCE2_MODE
-
-FLORENCE2_MODEL_PATH = app_config.FLORENCE2_MODEL_PATH
+FLORENCE2_REMOTE_URL = getattr(app_config, 'FLORENCE2_SERVER_URL', 'http://localhost:5000')
+FLORENCE2_MODE = getattr(app_config, 'FLORENCE2_MODE', 'remote')
+FLORENCE2_MODEL_PATH = getattr(app_config, 'FLORENCE2_MODEL_PATH', '')
 
 # Available tasks
 FLORENCE2_TASKS = {

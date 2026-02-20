@@ -38,44 +38,39 @@ class GPUState(Enum):
 
 
 def _build_gpu0_services() -> Dict[str, Dict[str, Any]]:
-    """Build service registry from config (database source of truth)"""
-    return {
-        "vision": {
+    """Build service registry from config (database source of truth).
+    Returns empty dict on client boxes where Node2 services don't exist."""
+    services = {}
+    try:
+        services["vision"] = {
             "unit": "iris-vision.service",
             "health_url": f"{config.VISION_OLLAMA_URL}/health",
-            "port": 11435,
-            "startup_delay": 8,
-            "description": "Vision model"
-        },
-        "float": {
+            "port": 11435, "startup_delay": 8, "description": "Vision model"
+        }
+        services["float"] = {
             "unit": "iris-float.service",
-            "health_url": f"{config.FLOAT_SERVER_URL}/",  # FLOAT serves HTML at root, no /health endpoint
-            "port": 8000,
-            "startup_delay": 12,
-            "description": "Video generation"
-        },
-        "freud": {
+            "health_url": f"{config.FLOAT_SERVER_URL}/",
+            "port": 8000, "startup_delay": 12, "description": "Video generation"
+        }
+        services["freud"] = {
             "unit": "iris-freud.service",
             "health_url": f"{config.FREUD_URL}/health",
-            "port": 11435,
-            "startup_delay": 8,
-            "description": "Dream processor"
-        },
-        "comfyui": {
+            "port": 11435, "startup_delay": 8, "description": "Dream processor"
+        }
+        services["comfyui"] = {
             "unit": "comfyui.service",
             "health_url": f"{config.COMFYUI_SERVER_URL}/system_stats",
-            "port": 8189,
-            "startup_delay": 30,
-            "description": "Image generation"
-        },
-        "transcribe": {
+            "port": 8189, "startup_delay": 30, "description": "Image generation"
+        }
+        services["transcribe"] = {
             "unit": "iris-transcribe.service",
             "health_url": f"http://{getattr(config, 'NODE2_HOST', 'node2')}:8500/health",
-            "port": 8500,
-            "startup_delay": 15,
-            "description": "Meeting transcription (WhisperX)"
+            "port": 8500, "startup_delay": 15, "description": "Meeting transcription (WhisperX)"
         }
-    }
+    except AttributeError:
+        # Client box — no Node2 services configured
+        pass
+    return services
 
 
 GPU0_SERVICES = _build_gpu0_services()

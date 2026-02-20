@@ -30,22 +30,24 @@ router = APIRouter()
 tool_manager = ToolManager()
 
 # Endpoint configuration
-LLAMA_CPP_URL = config.OLLAMA_BASE_URL  # Main llama.cpp on localhost:11434
-VISION_URL = config.VISION_OLLAMA_URL    # Vision llama.cpp on node2:11435
+LLAMA_CPP_URL = getattr(config, 'OLLAMA_BASE_URL', 'http://localhost:11434')
+VISION_URL = getattr(config, 'VISION_OLLAMA_URL', '')
 
 # Available inference servers for ephemeral chat
+_mistral_url = getattr(config, 'MISTRAL_URL', '')
 INFERENCE_SERVERS = {
     "main": {
         "name": "Main (qwen3:32b)",
-        "url": config.OLLAMA_BASE_URL,
+        "url": LLAMA_CPP_URL,
         "endpoint": "/v1/chat/completions"
     },
-    "node2_small": {
+}
+if _mistral_url:
+    INFERENCE_SERVERS["node2_small"] = {
         "name": "Node2 Small (mistral:7b)",
-        "url": config.MISTRAL_URL.rsplit('/v1/', 1)[0],
+        "url": _mistral_url.rsplit('/v1/', 1)[0],
         "endpoint": "/v1/chat/completions"
     }
-}
 
 
 class ChatMessage(BaseModel):

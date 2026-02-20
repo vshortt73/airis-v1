@@ -27,8 +27,8 @@ sys.path.insert(0, PROJECT_ROOT)
 from app import config
 from core.ui_notify import ui_msg
 
-# Mistral 7B endpoint for classification (database source of truth)
-MISTRAL_URL = config.MISTRAL_URL
+# Mistral 7B endpoint for classification (database source of truth — not available on client boxes)
+MISTRAL_URL = getattr(config, 'MISTRAL_URL', '')
 
 # ============================================
 # CONFIGURATION
