@@ -1,170 +1,130 @@
-# Iris v3 - Organized Architecture
+# Airis v1 — AI Companion for Assisted Living
 
-AI Assistant with time-based session management, token governance, and proper context handling.
+A relational AI companion built for the **Designed Around Dignity (DAD) Foundation**. One box, one person. The data on the box belongs to them.
 
-## Quick Start
+Airis is not an assistant — it's a companion. It remembers, it grows, and it makes people feel seen.
 
-### 1. Set Database Password (Required First!)
+## Install
 
-```bash
-# REQUIRED: Set your PostgreSQL password
-export IRIS_DB_PASSWORD='your_actual_password'
-
-# Make it permanent (add to ~/.bashrc or ~/.zshrc):
-echo "export IRIS_DB_PASSWORD='your_actual_password'" >> ~/.bashrc
-source ~/.bashrc
-```
-
-### 2. Install and Run
+On a fresh Ubuntu machine:
 
 ```bash
-cd /home/user/iris-v3
-
-# Install dependencies (if not already done)
-pip install -r requirements.txt
-
-# Start server
-./scripts/start.sh
+curl -sL https://raw.githubusercontent.com/vshortt73/airis-v1/main/scripts/install.sh | bash
 ```
 
-Open browser: `http://localhost:8000`
+The installer handles everything: system packages, PostgreSQL + pgvector, Python venv, dependencies, database bootstrap, and systemd service. It will ask for:
 
-## Features
+- **Database password** — for the `airisuser` PostgreSQL user
+- **Inference server URL** — the facility server running sglang (e.g., `http://192.168.1.50:11434`)
+- **Airis port** — default `9000`
 
-✅ **Time-Based Sessions** - 30-minute threshold, auto-detection
-✅ **Token Governance** - tiktoken counting, multi-level limits
-✅ **Context Inspection** - API endpoints to view what's sent to Ollama
-✅ **Ollama Compliance** - Proper tool message formatting
-✅ **Clean Architecture** - Organized modules, proper separation
-✅ **Vision System** - Dual Ollama setup with GPU isolation (llava on GPU 1)
+## After Install
+
+```bash
+# Start
+sudo systemctl start airis
+
+# Stop
+sudo systemctl stop airis
+
+# Logs
+sudo journalctl -u airis -f
+
+# Manual start (for debugging)
+/airis-v1/scripts/start.sh
+```
+
+Open browser: `http://localhost:9000`
 
 ## Architecture
 
 ```
-iris-v3-organized/
-├── app/                    # FastAPI application
-│   ├── config.py          # All settings
-│   ├── main.py            # App entry point
-│   └── api/               # API routes
-│       ├── routes_chat.py      # WebSocket chat
-│       ├── routes_session.py   # Session management
-│       └── routes_context.py   # Context inspection
-├── core/                   # Core functionality
-│   ├── conversation.py    # History management
-│   ├── system_prompt.py   # DB-driven prompts
-│   └── token_counter.py   # tiktoken integration
-├── database/               # Database operations
-│   └── persistence.py     # Sessions & messages
-├── ollama/                 # Ollama client
-│   └── client.py          # Streaming API
-├── static/                 # Web UI
-│   └── index.html
-├── tests/                  # Test scripts
-├── scripts/                # Utility scripts
-└── docs/                   # Documentation
+Client Box (no GPU)                    Facility Server (GPU)
+┌──────────────────────┐              ┌──────────────────────┐
+│  Airis (FastAPI)     │   network    │  sglang              │
+│  PostgreSQL + pgvec  │ ──────────── │  Qwen3-32B           │
+│  Embeddings (CPU)    │              │  (shared across boxes)│
+│  sentence-transformers│              └──────────────────────┘
+└──────────────────────┘
 ```
+
+- **Client box**: Runs the companion server, database, and CPU-based embeddings. No GPU required.
+- **Facility server**: Runs sglang with Qwen3-32B (or similar). Shared across all client boxes on the network. Stateless — resident data never leaves the client box.
+
+## Progressive Activation (Bloom Levels)
+
+The companion starts empty and grows with the relationship:
+
+| Level | Name | Unlocks |
+|-------|------|---------|
+| 0 | Seed | System instructions only (cold start) |
+| 1 | Facts | Short-term facts included in prompt |
+| 2 | Memory | Episodic memory retrieval activates |
+| 3 | Personality | Traits shape companion behavior |
+| 4 | Knowledge | Semantic memories (distilled insights) |
+| 5 | Full Bloom | Dreams, dream truths, inner drive |
+
+Thresholds are configurable in `system_config` (category `activation`).
 
 ## Configuration
 
-Edit `app/config.py`:
+All runtime config lives in the `system_config` database table. Key settings:
 
-```python
-# Session timeout
-SESSION_TIMEOUT_MINUTES = 30
+| Category | Key | Description |
+|----------|-----|-------------|
+| `llm` | `OLLAMA_BASE_URL` | Inference server URL (set during install) |
+| `server` | `PORT` | Airis server port |
+| `activation` | `MEMORY_THRESHOLD` | Memories needed for bloom level 2 |
+| `features` | `NODE2_ENABLED` | Enable/disable Node2 services (default: false) |
 
-# Context limits
-MAX_CONVERSATION_TURNS = 30
-MAX_CONTEXT_TOKENS = 12000
-MAX_TOTAL_MESSAGES = 100
-
-# Ollama
-OLLAMA_CONTEXT_WINDOW = 16384
-```
-
-## API Endpoints
-
-**Chat:**
-- `GET /` - Web interface
-- `WS /ws/chat` - WebSocket chat
-
-**Sessions:**
-- `GET /api/sessions/recent` - List recent sessions
-- `POST /api/sessions/new` - Create new session
-- `POST /api/sessions/load/{id}` - Load session
-
-**Context:**
-- `GET /api/conversation/context` - Full context with messages
-- `GET /api/conversation/context/summary` - Token stats only
-- `GET /api/conversation/info` - Basic info
-
-**Health:**
-- `GET /api/health` - System status
-
-## Testing
+Deployment-specific config is stored in `/etc/airis/env`:
 
 ```bash
-# Test database
-python tests/test_database.py
-
-# Test context inspection
-curl http://localhost:8000/api/conversation/context/summary | jq
+AIRIS_DB_PASSWORD=...
+AIRIS_INFERENCE_URL=http://facility-server:11434
+AIRIS_PORT=9000
 ```
 
-## Key Features Explained
+## Re-running Bootstrap
 
-### Time-Based Sessions
-- Gap < 30 min → Continue session
-- Gap ≥ 30 min → New session
-- Survives server restarts
+If you need to re-bootstrap the database (e.g., after a schema update):
 
-### Token Governance
-1. Load last 30 conversation turns
-2. Include all tool messages
-3. Truncate if > 12000 tokens
-4. Truncate if > 100 messages
-
-### Context Inspection
-View exactly what's sent to Ollama:
 ```bash
-curl http://localhost:8000/api/conversation/context | jq
+/airis-v1/scripts/bootstrap_airisdb.sh
 ```
 
-## Troubleshooting
+It will detect your existing `/etc/airis/env` and offer to reuse it.
 
-**Database connection failed:**
-```bash
-export IRIS_DB_PASSWORD='your_password'
-python tests/test_database.py
+## Key Directories
+
+```
+/airis-v1/              # Application code
+/venv/airis/            # Python virtual environment
+/etc/airis/env          # Deployment config (password, inference URL, port)
+/models/                # Embedding model (all-mpnet-base-v2)
 ```
 
-**Import errors:**
-```bash
-export PYTHONPATH="$(pwd):$PYTHONPATH"
-```
+## Embedding Model
 
-**Context issues:**
-```bash
-# Enable debug logging
-# In app/config.py: CONTEXT_DEBUG = True
-```
+The embedding model (`all-mpnet-base-v2`, ~420MB) runs on CPU. Options:
+
+1. **Copy from facility server**: `scp -r user@server:/models/llm_models/huggingface/models/all-mpnet-base-v2 /models/llm_models/huggingface/models/all-mpnet-base-v2`
+2. **Auto-download**: Airis downloads it from HuggingFace on first start (requires internet)
 
 ## Development
 
-Run directly:
 ```bash
+source /venv/airis/bin/activate
+export AIRIS_DB_PASSWORD='...'
 python app/main.py
 ```
 
-## Documentation
-
-See `docs/` directory for:
-- Detailed setup instructions
-- Architecture documentation  
-- API reference
-- Migration guides
-
 ## Version
 
-**Iris v3.0.0** - Organized Architecture Release
+**Airis v1.0.0-alpha** — DAD Foundation Client Box
 
-Built: December 2025
+Built on Iris v3 core. Forked February 2026.
+
+## License
+
+Designed Around Dignity (DAD) Foundation. All rights reserved.

@@ -1,54 +1,41 @@
 # Changelog
 
-All notable changes to Iris v3 are documented here.
+All notable changes to Airis v1 are documented here.
 
-Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: `3.MINOR.PATCH`.
-
----
-
-## [3.1.0] - 2026-02-18
-
-### Added
-- **Nightly pipeline orchestrator** (`scripts/nightly_pipeline.sh`) — Master script runs memory creation, semantic consolidation, and drift metrics sequentially with per-stage timeouts (45m/30m/15m). Failure in one stage does not block later stages. Lock file prevents concurrent runs. Logs service events for gap reports.
-
-### Fixed
-- **Semantic consolidation never scheduled** — Was missing from crontab entirely. Now runs as pipeline stage 2.
-- **Knowledge indexing broken** — Cron path typo (`/iris=v3/` → `/iris-v3/`), missing `IRIS_DB_PASSWORD`, wrong log directory.
-- **Drift metrics failing silently** — Now runs as pipeline stage 3 with 15-minute timeout.
-- **Semantic consolidation llama.cpp health check** — Single-shot check replaced with 10-retry loop (30s total) to survive restarts from preceding memory creation.
+Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: `1.MINOR.PATCH`.
 
 ---
 
-## [3.0.0] - 2026-02-18
+## [1.0.0-alpha] - 2026-02-19
 
-Stable baseline. Declares the current state of Iris v3 as the versioned starting point.
+First deployable release. Fresh Ubuntu to running companion in one command.
 
 ### Added
-- **Chat pipeline refactor** — Split monolithic routes_chat.py into 9 focused modules under `app/api/chat/` (connection, input, tools, TTS, video, observability, turn pipeline, system endpoints)
-- **MCP smart tool selection** — Keyword triggers and tool groups reduce token overhead sent to LLM; native MCP tool discovery via `list_tools`; DB-driven server configs
-- **New MCP servers** — Calendar (events CRUD + reminders), Meeting (recording + WhisperX transcription), Moltbook (social network integration)
-- **MCP server enhancements** — News headlines RSS tool, distributed system health check, directions tool split, knowledge_save tool
-- **Node2 feature flags** — Master `NODE2_ENABLED` switch + per-service flags gate all Node2-dependent functionality, enabling single-node deployment
-- **Semantic memory consolidation** — Nightly pipeline clusters episodic memories by embedding similarity, distills via LLM into `semantic_memories` table
-- **Memory retrieval v2** — Inline episodic retrieval (~200ms) with 3-factor scoring: topic similarity, emotional resonance, recency decay
-- **Gap report system** — "While you were away" XML injected on first turn after 30min+ gap, reporting memory processing, dreams, and service health
-- **Autonomous drive system** — Background daemon tracking 7 internal state variables with drift/decay/noise, persisted to PostgreSQL
-- **Observability system** — Per-turn metrics, drift analysis, and dashboard
-- **Repetition prevention** — LLM-powered structural detection via Mistral 7B + application-layer cross-turn echo gate
-- **Version tracking** — `VERSION` file as single source of truth, exposed in `/api/health`, startup banner, admin console
-- **Desktop tools** — GTK service monitor and drive state monitor
+- **One-command installer** (`scripts/install.sh`) — `curl | bash` installs system packages, PostgreSQL + pgvector, Python venv, CPU-only PyTorch, lean requirements, database bootstrap, embedding model setup, and systemd service
+- **Interactive bootstrap** (`scripts/bootstrap_airisdb.sh`) — Prompts for database password, inference server URL, and port. Writes `/etc/airis/env`. Detects and reuses existing config on re-run
+- **Progressive activation** (`core/progressive_activation.py`) — Bloom levels 0-5. Companion starts empty and grows as relationship data accumulates. Configurable thresholds in `system_config`
+- **Bloom tracking table** — Single-row `bloom_tracking` table records current level, conversation count, memory count
+- **Systemd service** (`scripts/airis.service`) — Production service with auto-restart, environment file sourcing
+- **Client box requirements** (`requirements-client.txt`) — 31 packages (down from 379). CPU-only torch, no GPU/vision/audio dependencies
+- **pg_hba.conf auto-configuration** — Installer ensures PostgreSQL allows password auth over TCP for fresh installs
+- **Warm gold + calm blue UI** — Distinct from Iris purple/teal color scheme
 
 ### Changed
-- **Deployability hardening** — Replaced hardcoded paths and credentials across 34+ files with env vars, `config.py`, and shared `scripts/paths.env`
-- **HTTPS dual-port** — SSL on port 8443 with HTTP 301 redirect from 8000
-- **Prompt format** — XML-tagged system prompt sections, concise memory format, third-person summaries
-- **Node2 resilience** — SSH retry with exponential backoff (3 attempts), circuit breaker (opens after 3 failures, 120s cooldown), state reconciliation on crash detection
-- **Dream script hardened** — Trap-based cleanup guarantees vision restore on any exit, SSH timeout flags, 3-attempt retry on restore
-- **Token counting** — Now counts `tool_calls`, `tool_call_id`, `tool_name` fields
-- **Frontend** — Meeting recorder UI, HLS video pop-out with session handoff, new idle/thinking animation videos, admin panel enhancements
+- **Database isolation** — `AIRIS_DB_*` env vars, defaults to `airisdb`/`airisuser` (completely separate from Iris)
+- **Venv renamed** — `/venv/iris-v3` to `/venv/airis` across all scripts, services, and SQL config
+- **Config externalization** — All DB connection params driven by environment variables. No hardcoded credentials
+- **Inference via network** — Client box has no local LLM. Connects to facility sglang server over network. URL configured during bootstrap
+- **Node2/GPU disabled by default** — `NODE2_ENABLED`, `GPU_MANAGER_ENABLED`, `TTS_ENABLED`, `STT_ENABLED`, `DREAMS_ENABLED`, `TRANSCRIBE_ENABLED` all default to `false`
+- **Module-scope config guards** — 9 files fixed with `getattr()` pattern to prevent import crashes when Node2 config attributes don't exist
+- **SQL grants use CURRENT_USER** — No more hardcoded `irisuser` in table grants
+- **Startup banner** — "Airis" branding, not "Iris"
+- **System instructions** — Rewritten as generic companion identity, not Iris personality
 
-### Fixed
-- Memory creation pipeline silent failure when LLM unavailable
-- Structural analysis formatting for Mistral, message deduplication
-- Repetitive motif loops via penalties, temperature adjustment, drive message cap
-- Context overflow protection
+### Removed
+- **Moltbook tool** — Iris-specific social feature, not applicable to companion deployment
+- **Hardcoded Iris paths** — `/iris-v3` references replaced with `/airis-v1` in all functional files
+- **Node2 path config** — No `LLAMA_SERVER_PATH`, `EMOTION_MODEL_PATH`, or other GPU/Node2 paths in default config
+
+---
+
+*Forked from Iris v3.1.0 (February 2026)*
